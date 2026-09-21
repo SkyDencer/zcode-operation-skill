@@ -1,0 +1,14 @@
+{
+  "name": "zcode-skill-router",
+  "version": "0.1.0",
+  "description": "Local skill retrieval and routing plugin for ZCode",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build-index": "node hooks/build-index.mjs",
+    "benchmark": "node tests/run-benchmark.mjs"
+  }
+}

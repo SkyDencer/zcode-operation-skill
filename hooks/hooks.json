@@ -1,0 +1,19 @@
+{
+  "description": "Skill Router hook — intercepts UserPromptSubmit, retrieves relevant skills via BM25, and injects context into the model.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": ".",
+        "hooks": [
+          {
+            "type": "process",
+            "command": "node",
+            "args": ["${ZCODE_PLUGIN_ROOT}/hooks/route.mjs"],
+            "timeoutMs": 5000,
+            "statusMessage": "Routing skills..."
+          }
+        ]
+      }
+    ]
+  }
+}

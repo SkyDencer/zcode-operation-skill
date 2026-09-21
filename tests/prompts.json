@@ -1,0 +1,22 @@
+[
+  {"id": 1,  "prompt": "How do I optimize eager loading in Laravel to avoid N+1 queries?"},
+  {"id": 2,  "prompt": "Create a Laravel migration for a users table with soft deletes and timestamps"},
+  {"id": 3,  "prompt": "Write a Laravel feature test that asserts a JSON API returns 200 status"},
+  {"id": 4,  "prompt": "Implement CSRF protection and XSS prevention in a Laravel controller"},
+  {"id": 5,  "prompt": "Build a Laravel query scope to filter active records ordered by created_at"},
+  {"id": 6,  "prompt": "Set up PHPUnit and Pest testing with database transactions for Laravel"},
+  {"id": 7,  "prompt": "Create a React functional component with useState and useEffect hooks"},
+  {"id": 8,  "prompt": "Resolve prop drilling by lifting state up to a Context provider in React"},
+  {"id": 9,  "prompt": "Build a Next.js checkout page using Server Components and Stripe integration"},
+  {"id": 10, "prompt": "Implement React Router with lazy loading and Suspense for code splitting"},
+  {"id": 11, "prompt": "Create a reusable custom hook for form validation with React Hook Form"},
+  {"id": 12, "prompt": "Debug why my API returns a 401 Unauthorized error on token authentication"},
+  {"id": 13, "prompt": "Analyze a JavaScript stack trace to find the root cause of an undefined error"},
+  {"id": 14, "prompt": "My React app has a memory leak — how do I detect and fix it?"},
+  {"id": 15, "prompt": "Debug CORS errors when making cross-origin requests to a backend API"},
+  {"id": 16, "prompt": "Design a responsive layout grid with CSS Grid and Flexbox for a dashboard"},
+  {"id": 17, "prompt": "Build a design system with Storybook, design tokens, and accessibility audits"},
+  {"id": 18, "prompt": "Apply WCAG 2.1 AA contrast ratios and keyboard navigation to a component library"},
+  {"id": 19, "prompt": "Optimize Core Web Vitals — reduce LCP and CLS on a Next.js landing page"},
+  {"id": 20, "prompt": "Implement bundle splitting and lazy loading to reduce initial JavaScript payload"}
+]

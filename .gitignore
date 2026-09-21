@@ -1,0 +1,23 @@
+node_modules/
+logs/*.jsonl
+data/skill-index.json
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
+.backup/
+.zcode/output.json
+
+# ZCode workflow internals (not part of the plugin)
+.zcode/workflow-drafts/
+.zcode/workflow-runs/
+.zcode/output.json
+
+# Benchmark output (runtime, not source)
+logs/benchmark-*.json
+
+# Local project utilities
+extract.js
+extract2.js

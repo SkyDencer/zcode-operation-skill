@@ -1,0 +1,14 @@
+{
+  "manifest_version": 1,
+  "name": "zcode-skill-router",
+  "version": "0.1.0",
+  "description": "Local skill retrieval and routing plugin for ZCode",
+  "author": { "name": "Agnes" },
+  "license": "MIT",
+  "skills": "data/mock-skills",
+  "entrypoint": "src/index.mjs",
+  "engines": {
+    "zcode": ">=3.14.1",
+    "node": ">=20"
+  }
+}
