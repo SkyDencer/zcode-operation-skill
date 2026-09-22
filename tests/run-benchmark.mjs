@@ -59,7 +59,8 @@ for (const p of prompts) {
   const topSkill = ranked.length > 0 ? ranked[0].skill.name : null;
   const top3Skills = ranked.slice(0, 3).map((r) => r.skill.name);
   const exp = expected.find((e) => e.id === p.id)?.expected;
-  const expName = typeof exp === 'string' ? exp : String(exp);
+  // When expected is null, topSkill must also be null for a match (no-skill prompt)
+  const expName = exp === null ? null : (typeof exp === 'string' ? exp : String(exp));
 
   if (topSkill === expName) top1Hits++;
   const expStr = String(exp);
