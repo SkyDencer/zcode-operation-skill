@@ -4,15 +4,20 @@
   "description": "Local skill retrieval and routing plugin for ZCode",
   "type": "module",
   "private": true,
+  "bin": {
+    "skill-router": "./bin/skill-router.mjs"
+  },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build-index": "node hooks/build-index.mjs",
     "benchmark": "node tests/run-benchmark.mjs",
-    "test": "node tests/run-benchmark.mjs && node tests/embeddings.test.mjs && node tests/hybrid.test.mjs && node tests/reranker.test.mjs && node tests/routing.test.mjs && node tests/hook-edge-cases.mjs",
+    "skill-router": "node bin/skill-router.mjs",
+    "test": "node tests/run-benchmark.mjs && node tests/embeddings.test.mjs && node tests/hybrid.test.mjs && node tests/reranker.test.mjs && node tests/routing.test.mjs && node tests/hook-edge-cases.mjs && node tests/cli/list.test.mjs && node tests/cli/validate.test.mjs",
     "test:unit": "node tests/embeddings.test.mjs && node tests/hybrid.test.mjs && node tests/reranker.test.mjs",
     "test:routing": "node tests/routing.test.mjs",
-    "test:hook": "node tests/hook-edge-cases.mjs"
+    "test:hook": "node tests/hook-edge-cases.mjs",
+    "test:cli": "node tests/cli/list.test.mjs && node tests/cli/validate.test.mjs"
   }
 }
