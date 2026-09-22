@@ -59,7 +59,9 @@ UserPromptSubmit Hook
 
 ## Features
 
-- **BM25 lexical retrieval** with configurable `k1=1.5`, `b=0.75` parameters.
+- **BM25 lexical retrieval** (default, recommended) with configurable `k1=1.5`, `b=0.75` parameters.
+- **Hybrid retrieval** (experimental) — fuses BM25 rankings with n-gram embeddings via Reciprocal Rank Fusion (`k=60`). Available via `--mode hybrid`; underperforms BM25 on the current 54-skill corpus but is retained for Phase 2 experimentation.
+- **Feature-based reranker** (opt-in, experimental) — reranks results using keyword, bigram, domain, and title features. Does not consistently improve Top-1 on the current corpus. Enable with `--rerank`.
 - **Flat-array index** built from `data/mock-skills/*/SKILL.md` frontmatter (name, description, keywords, domains).
 - **Confidence policy** with three bands (high / medium / low) applied to normalized scores.
 - **Zero dependencies** — pure ESM, no `npm install`.
@@ -67,20 +69,25 @@ UserPromptSubmit Hook
 - **Deterministic** — same input always produces the same ranking.
 - **RFC-like hook contract** — reads stdin JSON, writes `hookSpecificOutput` with `additionalContext` to `.zcode/output.json`.
 
-## Phase 0 Status
+## Phase 1 Benchmark
 
-Phase 0 (Spike — Feasibility Check) is complete. Benchmark results on 20 prompts against 10 mock skills:
+Phase 1 is complete. Benchmark results on 130 prompts against 54 skills:
 
-| Metric           | Value        | Target  | Pass? |
-|------------------|--------------|---------|-------|
-| Top-1 Accuracy   | 90% (18/20)  | >= 70%  | Yes   |
-| Recall@3         | 100% (20/20) | >= 90%  | Yes   |
-| Median Latency   | 3 ms         | < 50 ms | Yes   |
-| No-Skill Rate    | 0% (0/20)    | —       | —     |
+| Metric                        | Value                | Target  | Pass? |
+|-------------------------------|----------------------|---------|-------|
+| Top-1 Accuracy (BM25)         | 97.7% (127/130)      | —       | —     |
+| Recall@3 (BM25)               | 97.7% (127/130)      | —       | —     |
+| Median Latency (BM25)         | 3 ms                 | < 50 ms | Yes   |
+| Top-1 Accuracy (Hybrid)       | 61.5% (80/130)       | —       | —     |
+| Recall@3 (Hybrid)             | 83.1% (108/130)      | —       | —     |
+| Median Latency (Hybrid)       | 11 ms                | —       | —     |
+| Reranker improvement (BM25)   | None observed        | —       | —     |
 
-Full report: [docs/reports/phase-0-spike-20260920.md](./docs/reports/phase-0-spike-20260920.md)
+**Notes:**
+- Hybrid mode (BM25 + n-gram embeddings via RRF) is available for experimentation but underperforms BM25 on the current 54-skill corpus. Improving hybrid retrieval is on the Phase 2 roadmap.
+- The feature-based reranker is opt-in. On small corpora it does not consistently improve accuracy. Enable with `--rerank` to experiment.
 
-Two non-blocking lexical-collision failures were identified (prompts 10 and 11): polysemous keywords such as "lazy loading" matched the wrong top-1 skill, though the correct skill always appeared within Recall@3.
+Full report: [docs/reports/phase-1-final-report.md](./docs/reports/phase-1-final-report.md)
 
 ## Installation
 
@@ -123,12 +130,19 @@ npm run benchmark
 npm run build-index
 ```
 
-Reads all `data/mock-skills/*/SKILL.md` files, parses YAML-like frontmatter, and writes `data/skill-index.json`.
+Reads all `data/skills/*.md` and `data/mock-skills/*/SKILL.md` files, parses YAML-like frontmatter, and writes `data/skill-index.json` plus `data/skill-embeddings.json`.
 
 ### Running benchmarks
 
 ```bash
-npm run benchmark
+# BM25 mode (default, recommended)
+node tests/run-benchmark.mjs --mode bm25
+
+# Hybrid mode (BM25 + embeddings via RRF)
+node tests/run-benchmark.mjs --mode hybrid
+
+# BM25 mode with opt-in reranker
+node tests/run-benchmark.mjs --mode bm25 --rerank
 ```
 
 Evaluates Top-1 accuracy, Recall@3, median latency, and no-skill rate against `tests/prompts.json` and `tests/expected-routes.json`.
@@ -205,15 +219,16 @@ zcode-operation-skill/
 
 ## Roadmap
 
-| Phase | Title | Description | Status |
+| Phase | Title                        | Description                                                                                          | Status     |
 |---|---|---|---|
-| 0 | Spike — Feasibility Check | Confirm ZCode hook contract, verify BM25 viability | Done |
-| 1 | Skeleton & Infrastructure | Project scaffolding, module structure, Logger baseline, expanded mock fixtures | Planned |
-| 2 | Index Builder | Implement `src/index.mjs` with inverted index; wire `build-index.mjs` hook | Planned |
-| 3 | Retriever + Scorer | BM25 scoring in `src/retriever.mjs` and `src/scorer.mjs`; wired confidence policy | Planned |
-| 4 | Hook Integration | Implement `hooks/skill-router.mjs`; validate against ZCode 3.14.1 payload | Planned |
-| 5 | Benchmark Suite | `tests/run-benchmark.mjs` covering correctness, latency, and confidence-threshold behaviour | Planned |
-| 6 | Polish & Documentation | Edge-case hardening, error recovery, README update, decision-dictionary entries | Planned |
+| 0 | Spike — Feasibility Check | Confirm ZCode hook contract, verify BM25 viability on small corpus | Complete |
+| 1 | Skeleton & Infrastructure | Project scaffolding, module structure, Logger baseline, hybrid retriever, reranker, multi-domain routing, telemetry, 54-skill corpus | Complete |
+| 2 | Adaptive Learning | Learn from implicit feedback; adjust BM25 field weights and embedding vectors based on user corrections | In Progress |
+| 3 | Index Builder | Implement `src/index.mjs` with inverted index; wire `build-index.mjs` hook | Planned |
+| 4 | Retriever + Scorer | BM25 scoring in `src/retriever.mjs` and `src/scorer.mjs`; wired confidence policy | Planned |
+| 5 | Hook Integration | Implement `hooks/skill-router.mjs`; validate against ZCode 3.14.1 authoring context payload | Planned |
+| 6 | Benchmark Suite | `tests/run-benchmark.mjs` covering correctness, latency, and confidence-threshold behaviour | Planned |
+| 7 | Polish & Documentation | Edge-case hardening, error recovery, README update, decision-dictionary entries | Planned |
 
 See [docs/implementation-plan.md](./docs/implementation-plan.md) for full ordering rationale.
 

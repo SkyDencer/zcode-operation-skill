@@ -58,3 +58,41 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 - **Decision:** Return `topK` (default 5) results. Full ranking is computationally cheap but UX prefers a concise shortlist. The `meta.totalMatched` field preserves visibility into total hit count.
 - **Date:** 2026-09-20
 - **Status:** Accepted
+
+## D9 — Modular layering: core / config / utils split
+
+- **Question:** How should the codebase be organized for future extensibility?
+- **Decision:** Group logic by concern: `src/core/` for domain engines (retriever, reranker, embeddings, routing, telemetry), `src/config/` for tunable parameters and env overrides, `src/utils/` for cross-cutting helpers (text, fs, time). `src/index.mjs` serves as the single public API surface. This lets future phases swap out individual engines (e.g. embeddings) without touching others.
+- **Date:** 2026-09-21
+- **Status:** Accepted
+
+## D10 — Environment-variable configuration for all tunables
+
+- **Question:** How should runtime constants be made configurable without code changes?
+- **Decision:** All BM25, embedding, reranker, routing, confidence, and hook parameters are exposed as `SKILL_ROUTER_*` env vars with validated ranges. `src/config/env.mjs` merges overrides into defaults at import time. This satisfies the constraint of zero-config defaults while allowing tuning in production.
+- **Date:** 2026-09-21
+- **Status:** Accepted
+
+## D11 — Zero-dependency embedding via character + word n-gram hashing
+
+- **Question:** How to implement semantic embeddings without external ML dependencies?
+- **Decision:** Use FNV-1a feature hashing to map character 2-grams, 3-grams, word tokens, and word bigrams into a 256-dimensional Float32Array. Vector is normalized to unit length; cosine similarity equals dot product. This approach is deterministic, O(n) in text length, requires no training data, and adds zero dependencies.
+- **Rationale:** Phase 1.2 targets "local, zero-dependency" embeddings. Learned embeddings (e.g., sentence-transformers) would violate the zero-deps constraint. Feature hashing achieves reasonable lexical/semantic discrimination on small corpora (< 200 skills) at 2–3 ms per query.
+- **Date:** 2026-09-21
+- **Status:** Accepted
+
+## D12 — Hybrid retrieval uses RRF with BM25 tiebreaker
+
+- **Question:** How to fuse BM25 and embedding scores without losing BM25 precision?
+- **Decision:** Reciprocal Rank Fusion (k=60) over both source rankings. When RRF scores tie (within 1e-10), prefer the result with the higher BM25 rank. The embedding component provides semantic recall; BM25 precision is preserved by the tiebreaker.
+- **Rationale:** Pure RRF can promote embeddings-only results that out-rank strong BM25 matches. The tiebreaker ensures BM25 remains the primary signal while gaining semantic recall from embeddings (19/20 → 95% vs 18/20 → 90% on Phase 0 set).
+- **Date:** 2026-09-21
+- **Status:** Accepted
+
+## D13 — Embeddings persisted to data/skill-embeddings.json
+
+- **Question:** Where to persist pre-computed embeddings?
+- **Decision:** `npm run build-index` writes both `data/skill-index.json` (skill objects) and `data/skill-embeddings.json` (name → Float32Array as JSON array). The hybrid retriever builds the Map in-memory from SKILL.md files if no pre-built index is passed.
+- **Rationale:** Keeps the index self-contained; embedding build takes 3–5 ms for the full corpus (10 skills). Persisting avoids redundant recomputation at runtime.
+- **Date:** 2026-09-21
+- **Status:** Accepted
