@@ -1,100 +1,48 @@
-import { readdir, readFile, writeFile, stat } from 'fs/promises';
-import { join, resolve } from 'path';
+/**
+ * Build the skill index from SKILL.md manifests.
+ *
+ * Scans data/mock-skills/ (or any directory set via SKILL_ROUTER_SKILLS_DIR),
+ * parses frontmatter, builds BM25 index and embedding index, and writes
+ * both to data/skill-index.json and data/skill-embeddings.json.
+ */
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { loadSkills } from '../src/loader.mjs';
+import { buildEmbeddingIndex } from '../src/core/embeddings/engine.mjs';
+import { logBuild } from '../src/core/telemetry/logger.mjs';
+import { getConfig } from '../src/config/env.mjs';
 
-const MOCK_SKILLS_DIR = resolve('data/mock-skills');
+const config = getConfig();
+const skillsDir =
+  process.env.SKILL_ROUTER_SKILLS_DIR || resolve('data/skills');
 const INDEX_PATH = resolve('data/skill-index.json');
-
-/**
- * Parse YAML-like frontmatter from a Markdown string using simple regex.
- * Returns an object with the parsed fields.
- */
-function parseFrontmatter(content) {
-  const frontmatterRegex = /^---\s*\n([\s\S]+?)\n---\s*\n?/;
-  const match = content.match(frontmatterRegex);
-  if (!match) return {};
-
-  const body = match[1];
-  const result = {};
-
-  // Parse each key
-  const lines = body.split('\n');
-  let currentKey = null;
-  let currentList = [];
-
-  for (const line of lines) {
-    const listMatch = line.match(/^\s*-\s+(.+)$/);
-    if (listMatch && currentKey) {
-      currentList.push(listMatch[1].trim());
-      continue;
-    }
-    // Flush previous list
-    if (currentKey && currentList.length > 0) {
-      result[currentKey] = currentList;
-      currentList = [];
-    }
-    const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)$/);
-    if (kvMatch) {
-      const key = kvMatch[1];
-      const value = kvMatch[2].trim();
-      if (value === '') {
-        // Start of a list
-        currentKey = key;
-        currentList = [];
-      } else {
-        result[key] = value;
-        currentKey = null;
-      }
-    }
-  }
-  // Flush last list
-  if (currentKey && currentList.length > 0) {
-    result[currentKey] = currentList;
-  }
-
-  return result;
-}
-
-/**
- * Recursively walk a directory up to maxDepth levels, yielding file paths.
- */
-async function* walkDir(dir, maxDepth, currentDepth = 0) {
-  if (currentDepth > maxDepth) return;
-  const entries = await readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walkDir(full, maxDepth, currentDepth + 1);
-    } else if (entry.isFile()) {
-      yield full;
-    }
-  }
-}
+const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
 
 async function main() {
-  const skills = [];
+  const startTime = performance.now();
+  const skills = await loadSkills(skillsDir);
 
-  // Walk data/mock-skills/ at depth 2 looking for SKILL.md
-  for await (const filePath of walkDir(MOCK_SKILLS_DIR, 2)) {
-    if (filePath.endsWith('SKILL.md')) {
-      const content = await readFile(filePath, 'utf-8');
-      const fm = parseFrontmatter(content);
-
-      skills.push({
-        name: fm.name || 'unknown',
-        description: fm.description || '',
-        keywords: Array.isArray(fm.keywords) ? fm.keywords : [],
-        domains: Array.isArray(fm.domains) ? fm.domains : [],
-        path: filePath,
-        version: '0.1.0',
-      });
-    }
-  }
-
-  // Sort by name for deterministic output
-  skills.sort((a, b) => a.name.localeCompare(b.name));
-
+  // Build BM25 index (list of skill objects)
   await writeFile(INDEX_PATH, JSON.stringify(skills, null, 2), 'utf-8');
-  console.log(`Indexed ${skills.length} skills.`);
+
+  // Build and persist embedding index
+  const embeddingIndex = buildEmbeddingIndex(skills);
+  // Convert Map to plain object for JSON serialization
+  const embeddingsObject = {};
+  // Float32Array cannot be JSON-stringified directly, so we store as typed array
+  // We'll use a custom serializer: convert each Float32Array to a plain array
+  const embeddingsForJson = {};
+  for (const [name, vec] of embeddingIndex) {
+    embeddingsForJson[name] = Array.from(vec);
+  }
+  await writeFile(EMBEDDINGS_PATH, JSON.stringify(embeddingsForJson, null, 2), 'utf-8');
+
+  const durationMs = Math.round(performance.now() - startTime);
+  await logBuild({ totalDocs: skills.length, durationMs });
+
+  console.log(`Indexed ${skills.length} skills in ${durationMs} ms.`);
+  console.log(`  BM25 index:    ${INDEX_PATH}`);
+  console.log(`  Embeddings:    ${EMBEDDINGS_PATH}`);
 }
 
 main().catch((err) => {

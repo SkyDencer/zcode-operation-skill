@@ -1,12 +1,28 @@
-import { readFileSync, writeFileSync } from 'fs';
-import { join, resolve } from 'path';
-import { rankSkills, readSkillContent } from '../src/retriever.mjs';
-import { logDecision } from '../src/logger.mjs';
+/**
+ * ZCode route hook — intercepts UserPromptSubmit, retrieves relevant
+ * skills via BM25, and injects context into the model.
+ *
+ * Reads JSON from stdin, ranks skills, applies confidence policy,
+ * and writes the output plan to .zcode/output.json alongside
+ * an additionalContext block.
+ */
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { rankSkills, readSkillContent } from '../src/index.mjs';
+import { logRetrieve, logError } from '../src/core/telemetry/logger.mjs';
+import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
+import { getConfig } from '../src/config/env.mjs';
+import { planRoutes } from '../src/core/routing/planner.mjs';
+import { now } from '../src/utils/time.mjs';
 
 const INDEX_PATH = resolve('data/skill-index.json');
 
+const config = getConfig();
+const { timeoutMs, maxPromptLength } = config.hook;
+
 /**
  * Build the additionalContext string from ranked skills.
+ *
  * @param {Array<{name:string, content:string}>} skillsWithContent
  * @returns {string}
  */
@@ -25,7 +41,6 @@ function buildContext(skillsWithContent) {
 
 /**
  * Main entry point for the route hook.
- * Reads JSON from stdin, ranks skills, applies confidence policy, writes output.
  */
 async function main() {
   let input = '';
@@ -37,6 +52,7 @@ async function main() {
   }
   input = Buffer.concat(chunks).toString('utf-8');
 
+  // Input validation
   if (!input.trim()) {
     process.exit(0);
   }
@@ -45,12 +61,23 @@ async function main() {
   try {
     payload = JSON.parse(input);
   } catch {
+    // Malformed JSON — fail open
     process.exit(0);
   }
 
   const { prompt, cwd } = payload;
 
-  if (!prompt || String(prompt).trim() === '') {
+  // Missing fields → safe defaults
+  const safePrompt = typeof prompt === 'string' ? prompt : '';
+  const safeCwd = typeof cwd === 'string' ? cwd : process.cwd();
+
+  // Truncate oversized prompts
+  const trimmedPrompt =
+    safePrompt.length > maxPromptLength
+      ? safePrompt.slice(0, maxPromptLength)
+      : safePrompt;
+
+  if (trimmedPrompt.trim() === '') {
     process.exit(0);
   }
 
@@ -62,65 +89,44 @@ async function main() {
     index = JSON.parse(raw);
   } catch {
     // Index not found — fail open
+    increment('errors.index_missing');
+    await logError({ query: trimmedPrompt, error: 'index not found' });
     process.exit(0);
   }
 
-  const ranked = rankSkills(prompt, index);
-
-  if (ranked.length === 0) {
-    // No matches at all
-    const latency = Math.round(performance.now() - startTime);
-    await logDecision({
-      timestamp: new Date().toISOString(),
-      prompt,
-      candidates: [],
-      selected: null,
-      mode: 'none',
-      latency_ms: latency,
-    });
+  // Timeout guard: wrap retrieval in Promise.race
+  let plan;
+  try {
+    plan = await Promise.race([
+      planRoutes(trimmedPrompt, index),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
+      ),
+    ]);
+  } catch (err) {
+    increment('errors.rerouting');
+    await logError({ query: trimmedPrompt, error: err.message });
     process.exit(0);
   }
 
-  const topScore = ranked[0].score;
-  let mode, selected, skillList;
-
-  if (topScore >= 0.85) {
-    mode = 'direct';
-    selected = ranked[0];
-    skillList = ranked.slice(0, 1);
-  } else if (topScore >= 0.60) {
-    mode = 'top-k';
-    selected = ranked[0];
-    skillList = ranked.slice(0, 3);
-  } else {
-    mode = 'none';
-    selected = null;
-    skillList = [];
-  }
-
+  const { ranked, mode, domains, primary } = plan;
   const latency = Math.round(performance.now() - startTime);
+  recordTiming('retrieve.latency', latency);
+  increment('retrieve.count');
 
-  await logDecision({
-    timestamp: new Date().toISOString(),
-    prompt,
-    candidates: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
-    selected: selected ? { name: selected.skill.name, score: selected.score } : null,
-    mode,
-    latency_ms: latency,
+  await logRetrieve({
+    query: trimmedPrompt,
+    resultCount: ranked.length,
+    durationMs: latency,
   });
 
-  if (mode === 'none' || skillList.length === 0) {
-    const output = {
-      hookSpecificOutput: {
-        hookEventName: 'UserPromptSubmit',
-        additionalContext: '',
-      },
-    };
-    writeFileSync('D:/www/local/operation-skill/.zcode/output.json', JSON.stringify(output), 'utf-8');
+  if (ranked.length === 0) {
     process.exit(0);
   }
 
-  const skillsWithContent = await readSkillContent(skillList);
+  increment(`mode.${mode}`);
+
+  const skillsWithContent = await readSkillContent(ranked);
   const additionalContext = buildContext(skillsWithContent);
 
   const output = {
@@ -128,23 +134,30 @@ async function main() {
       hookEventName: 'UserPromptSubmit',
       additionalContext,
     },
+    RoutePlan: {
+      mode,
+      domains,
+      primary,
+      candidates: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
+      latencyMs: latency,
+    },
   };
 
-  // ZCode reads from a file in the workflow directory for output
-  const outputPath = join(cwd || process.cwd(), '.zcode', 'output.json');
+  // Write output alongside additionalContext
+  const outputPath = join(safeCwd, '.zcode', 'output.json');
   try {
-    const fs = await import('fs/promises');
-    await fs.mkdir(join(process.cwd(), '.zcode'), { recursive: true });
+    const fs = await import('node:fs/promises');
+    await fs.mkdir(join(safeCwd, '.zcode'), { recursive: true });
     await fs.writeFile(outputPath, JSON.stringify(output), 'utf-8');
   } catch {
-    // Fallback: also write to stdout-compatible location
     writeFileSync('.zcode/output.json', JSON.stringify(output), 'utf-8');
   }
 
   process.exit(0);
 }
 
-// FAIL OPEN: catch everything
-main().catch(() => {
+// Error boundary: any uncaught error → exit 0, log to stderr
+main().catch((err) => {
+  console.error('[skill-router] unhandled error:', err.message);
   process.exit(0);
 });
