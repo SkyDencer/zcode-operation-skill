@@ -3,7 +3,35 @@
  *
  * All tunable constants live here so they can be overridden via
  * environment variables (see src/config/env.mjs).
+ *
+ * Confidence thresholds are loaded from data/thresholds.json when present
+ * (produced by src/tuning/optimizer.mjs), otherwise the hardcoded defaults
+ * below are used.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+/**
+ * Load optimized thresholds from data/thresholds.json if it exists.
+ * Falls back to undefined when the file is absent or malformed.
+ *
+ * @returns {{high:number, medium:number}|undefined}
+ */
+function loadThresholds() {
+  try {
+    const path = resolve('data/thresholds.json');
+    const raw = readFileSync(path, 'utf-8');
+    const data = JSON.parse(raw);
+    if (typeof data.high === 'number' && typeof data.medium === 'number') {
+      return { high: data.high, medium: data.medium };
+    }
+  } catch {
+    // File missing or malformed — use hardcoded defaults
+  }
+  return undefined;
+}
+
+const _thresholds = loadThresholds();
 
 /**
  * Return the default configuration object.
@@ -40,8 +68,8 @@ export function getDefaults() {
       multiDomainThreshold: 0.50,
     },
     confidence: {
-      highThreshold: 0.85,
-      mediumThreshold: 0.60,
+      highThreshold: _thresholds?.high ?? 0.85,
+      mediumThreshold: _thresholds?.medium ?? 0.60,
     },
     hook: {
       timeoutMs: 200,

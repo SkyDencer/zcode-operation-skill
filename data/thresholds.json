@@ -1,0 +1,12 @@
+{
+  "high": 0.85,
+  "medium": 0.6,
+  "noSkill": 11,
+  "optimizedAt": "2026-09-22T11:17:48.145Z",
+  "benchmark": {
+    "top1": 0.9,
+    "fallbackRate": 0.08461538461538462,
+    "gridEvaluated": 45,
+    "elapsedMs": 12311
+  }
+}
