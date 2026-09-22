@@ -1,0 +1,30 @@
+{
+  "flatReal": {
+    "top1Accuracy": 0.8692,
+    "top1Hits": 113,
+    "total": 130,
+    "medianLatencyMs": 2.5,
+    "p95LatencyMs": 3.92
+  },
+  "hierarchicalReal": {
+    "top1Accuracy": 0.3769,
+    "top1Hits": 49,
+    "total": 130,
+    "medianLatencyMs": 3.4,
+    "p95LatencyMs": 4.23
+  },
+  "synthetic200": {
+    "top1Accuracy": 0.0231,
+    "top1Hits": 3,
+    "total": 130,
+    "skills": 207,
+    "medianLatencyMs": 7.13,
+    "p95LatencyMs": 8.91
+  },
+  "testSuite": {
+    "totalPassed": 565,
+    "totalFailed": 3,
+    "total": 568,
+    "skipped": 0
+  }
+}
