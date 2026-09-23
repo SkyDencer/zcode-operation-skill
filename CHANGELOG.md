@@ -12,9 +12,15 @@ All notable changes to this project will be documented in this file.
 - **Doctor CLI** (`src/cli/doctor.mjs`) — 8-section diagnostic report: environment, ZCode integration, corpus, thresholds, sync state, benchmark baseline, environment overrides, config defaults. Read-only -- never modifies files.
 - **Routing selector** (`src/routing/selector.mjs`) — `selectRouter(corpusSize, options)` selects flat or hierarchical routing. Default is always flat based on Phase 3 scale benchmark findings. Hierarchical available via `--experimental` flag.
 - **Scale benchmark infrastructure** (`tests/scale/`) — Deterministic synthetic corpus generator (Mulberry32 seed=42, 8 domains, 70/20/10 quality mix) and benchmark runner for N=50/100/200/300/500.
+- **Explicit $-mention detection** (`src/core/routing/explicit.mjs`) — `detectExplicitSkill()` scans prompts for `$`-prefixed tokens, resolves via `ROUTER_ALIASES` (in `src/config/aliases.mjs`), returns `{ skill, matchedText, cleanedPrompt }` or null.
+- **Two-mode routing** — Hook now detects explicit mentions before retrieval. Explicit path: `routeWithExplicit()` scopes BM25 to the router's domain. Implicit path: pure BM25 on leaf-only index (router skills excluded). `src/core/routing/hybrid.mjs` updated with `routeWithExplicit`.
+- **SLM opt-in** (`src/core/slm/`) — Client, parser, prompt-builder, errors, and index modules for local SLM integration. Disabled by default (`slm.enabled: false`). Enabled via `SKILL_ROUTER_SLM_ENABLED=true`.
+- **Deploy subsystem** (`src/deploy/{planner,writer,verifier}.mjs`, `src/cli/deploy.mjs`) — Deploy router skills from `router-skills/` to the ZCode mirror. SHA-256 hash comparison, snapshot-before-write, automatic rollback on error, post-deploy verification. CLI flags: `--dry-run`, `--rollback`, `--verify`, `--quiet`, `--zcode-dir`, `--project-dir`.
 - **Phase 3 scale benchmark report** at `docs/reports/phase-3-scale-benchmark.md`.
 - **Phase 3 index collision report** at `docs/reports/phase-3-index-collisions.md`.
 - **Phase 3 baseline report** at `docs/reports/phase-3-baseline.md`.
+- **Phase 2 SLM benchmark report** at `docs/reports/phase-2-slm-benchmark.md`.
+- **Phase 3 two-mode benchmark report** at `docs/reports/phase-3-two-mode-benchmark.md`.
 
 ### Changed
 - `hooks/route.mjs` — Uses `selectRouter()` from `src/routing/selector.mjs` instead of auto-enabling hierarchical. Flat is now the default path at all corpus sizes.
@@ -38,12 +44,22 @@ All notable changes to this project will be documented in this file.
 | Top-1 (hierarchical, synthetic 500) | 39.4% | Same accuracy, 1.13x slower |
 | Fallback rate | 8.46% (11/130) | Under 15% constraint |
 | Cache hit rate | <1% | Single-run benchmark; low-repeat prompts |
+| Two-mode detection accuracy | 100% (15/15 explicit) | Phase 3 two-mode benchmark |
+| Two-mode implicit Top-1 | 100% (25/25) | Pure BM25 on leaf corpus |
+| Two-mode latency p50 | 2ms explicit, 3ms implicit | Both well under hook timeout |
+| SLM-Only Top-1 | 20.00% (30 prompts) | Qwen2.5-0.5B underperforms BM25 |
+| SLM-Only Set Recall | 0.0972 | vs BM25 0.7000 |
+| Hybrid Top-1 | 46.67% | Parity with BM25; Set Recall 0.5750 |
+| Hybrid latency p50 | ~1484 ms | Exceeds hook timeout |
 
 ### Key Findings (Phase 3)
 - **Flat routing is faster than hierarchical at ALL corpus sizes.** Phase 3 scale benchmark confirmed: flat is 2x faster at N=50, narrowing to 1.13x at N=500. Accuracy is tied or slightly better for flat.
 - **Hierarchical routing is deprecated as default.** It remains available via `--experimental` flag.
 - **Sync subsystem works correctly.** SHA-256 based comparison accurately detects drift. Mirror protection prevents corruption of user-managed skills.
 - **Two-source index resolves collisions deterministically.** Project always wins over zcode-user.
+- **Two-mode routing achieves 100% accuracy.** Explicit `$mention` detection correctly dispatches to router domains; implicit BM25 on leaf corpus maintains full accuracy.
+- **SLM does not outperform BM25** with the current 0.5B model. Disabled by default; opt-in for experimentation only.
+- **Deploy subsystem provides safe router updates.** Snapshot-before-write with automatic rollback; post-deploy verification.
 
 ### Known Limitations
 - Synonym expansion degrades Top-1 on the current 54-skill corpus; keep off by default.

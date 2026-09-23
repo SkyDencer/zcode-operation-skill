@@ -13,11 +13,13 @@
   "scripts": {
     "build-index": "node hooks/build-index.mjs",
     "benchmark": "node tests/run-benchmark.mjs",
+    "benchmark:slm": "node tests/slm-benchmark/runner.mjs",
     "skill-router": "node bin/skill-router.mjs",
     "test": "node tests/run-benchmark.mjs && node tests/embeddings.test.mjs && node tests/hybrid.test.mjs && node tests/reranker.test.mjs && node tests/routing.test.mjs && node tests/hook-edge-cases.mjs && node tests/cli/list.test.mjs && node tests/cli/validate.test.mjs && node tests/cli/verify.test.mjs && node tests/cli/doctor.test.mjs && node tests/analytics/reader.test.mjs && node tests/analytics/analyzer.test.mjs && node tests/retrieval/synonyms.test.mjs && node tests/cache/lru.test.mjs && node tests/cache/query-cache.test.mjs && node tests/import/scanner.test.mjs && node tests/import/importer.test.mjs && node tests/quality/validator.test.mjs && node tests/tuning/optimizer.test.mjs && node tests/budget/truncator.test.mjs && node tests/budget/manager.test.mjs && node tests/sync/planner.test.mjs && node tests/sync/writer.test.mjs && node tests/sync/disabler.test.mjs && node tests/index/dedupe.test.mjs && node tests/routing/selector.test.mjs && node tests/install.test.mjs && node tests/e2e/full-pipeline.mjs && node tests/e2e/idempotency.mjs && node tests/e2e/orphan-cleanup.mjs",
     "test:unit": "node tests/embeddings.test.mjs && node tests/hybrid.test.mjs && node tests/reranker.test.mjs",
     "test:routing": "node tests/routing.test.mjs",
     "test:hook": "node tests/hook-edge-cases.mjs",
-    "test:cli": "node tests/cli/list.test.mjs && node tests/cli/validate.test.mjs && node tests/cli/verify.test.mjs && node tests/cli/doctor.test.mjs"
+    "test:cli": "node tests/cli/list.test.mjs && node tests/cli/validate.test.mjs && node tests/cli/verify.test.mjs && node tests/cli/doctor.test.mjs",
+    "benchmark:two-mode": "node tests/two-mode-benchmark/runner.mjs"
   }
 }

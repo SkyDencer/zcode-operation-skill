@@ -38,13 +38,15 @@ See `AGENTS.md` for the universal four-criteria DoD. Each phase additionally req
 |-------|--------|-------|
 | 0 | Complete | Hook contract confirmed, BM25 viability proven (90% Top-1 on 20 prompts) |
 | 1 | Complete | Hybrid retrieval, reranker, routing, telemetry, 54 skills, 130 prompts, 165 tests |
-| 2 | Complete | Hierarchical routing, quality validator, CLI, threshold tuning, cache, budget, analytics, import |
-| 3 | Complete | Sync, disable, two-source index, verify, doctor, flat routing default, scale benchmark |
-| 4 | Planned | Log rotation, disk monitoring, cache eviction |
-| 5 | Planned | Implicit feedback collection, field weight adjustment |
-| 6 | Planned | Pre-trained embedding model integration |
+| 2 | Complete | Hierarchical routing, quality validator, CLI, threshold tuning, synonym expansion, query cache, budget, analytics, import, SLM integration |
+| 3 | Complete | Sync, disable, two-source index, verify, doctor, flat routing default, scale benchmark, two-mode routing, deploy subsystem |
+| 4 | Planned | Log rotation, disk monitoring, cache eviction. Suggestions: implement 30-day log rotation with size-based cleanup; integrate stale cache eviction triggered by index rebuilds; add disk-space monitoring hooks. |
+| 5 | Planned | Implicit feedback collection, field weight adjustment. Suggestions: collect dismissed/selected skill signals from hook output; use feedback to tune BM25 field weights via gradient-free optimization. |
+| 6 | Planned | Pre-trained embedding model integration. Suggestions: evaluate ONNX transformer models (e.g., all-MiniLM-L6-v2) for semantic skill matching; replace FNV-1a with pre-trained embeddings in hybrid mode; benchmark against BM25 baseline. |
 | 7 | Planned | Hardening, error recovery, documentation polish |
 
 ## Current Focus
 
 Phase 3 is complete. The project is ready for human review of Phase 3 changes, followed by planning for Phase 4 (log rotation and cleanup) or Phase 5 (feedback loop), depending on whether production usage data is available.
+
+Phase 3 added two-mode routing (explicit `$mention` detection + implicit BM25), SLM opt-in infrastructure, and a deploy subsystem for router skill management. All Phase 3 benchmarks pass: two-mode accuracy 100%, BM25 baseline unchanged at 96.9% Top-1.

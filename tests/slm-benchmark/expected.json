@@ -1,0 +1,152 @@
+{
+  "promp-001": {
+    "skills": ["backend-eloquent"],
+    "acceptable": ["backend-eloquent", "backend-cache"],
+    "notes": "N+1 query is the canonical Eloquent ORM problem. Cache is acceptable as a secondary optimization answer."
+  },
+  "promp-002": {
+    "skills": ["backend-sanctum"],
+    "acceptable": ["backend-sanctum"],
+    "notes": "Explicitly names Sanctum — single clear match."
+  },
+  "promp-003": {
+    "skills": ["backend-validation"],
+    "acceptable": ["backend-validation"],
+    "notes": "Form Request validator is explicitly a backend-validation topic."
+  },
+  "promp-004": {
+    "skills": ["backend-queues"],
+    "acceptable": ["backend-queues"],
+    "notes": "Queue workers, job dispatching, retry logic — directly matches backend-queues description."
+  },
+  "promp-005": {
+    "skills": ["frontend-forms"],
+    "acceptable": ["frontend-forms", "frontend-hooks-basics"],
+    "notes": "Primary intent is form handling with Zod; custom hook is the implementation vehicle. Both skills are reasonable."
+  },
+  "promp-006": {
+    "skills": ["frontend-api-routes"],
+    "acceptable": ["frontend-api-routes"],
+    "notes": "Next.js API Route with CORS — directly matches frontend-api-routes description."
+  },
+  "promp-007": {
+    "skills": ["testing-pest-php"],
+    "acceptable": ["testing-pest-php"],
+    "notes": "Explicitly names Pest PHP — single clear match."
+  },
+  "promp-008": {
+    "skills": ["design-accessibility"],
+    "acceptable": ["design-accessibility"],
+    "notes": "WCAG 2.1 AA, ARIA, keyboard navigation — directly matches design-accessibility description."
+  },
+  "promp-009": {
+    "skills": [],
+    "acceptable": ["design-typography", "design-spacing", "design-color-theory", "design-responsive-design"],
+    "notes": "Ambiguous visual request — any of the design skills could reasonably apply. Expected: empty (no single ideal skill)."
+  },
+  "promp-010": {
+    "skills": [],
+    "acceptable": ["backend-eloquent", "backend-cache", "backend-queues", "backend-pagination"],
+    "notes": "Performance improvement is ambiguous — multiple backend skills could address different aspects. Expected: empty."
+  },
+  "promp-011": {
+    "skills": [],
+    "acceptable": ["backend-errors", "backend-middleware", "debugging-debugging"],
+    "notes": "Error handling scope undefined — could be response formatting, middleware, or debugging methodology. Expected: empty."
+  },
+  "promp-012": {
+    "skills": [],
+    "acceptable": ["frontend-testing", "testing-vitest", "testing-tdd-basics", "testing-integration-testing"],
+    "notes": "Testing scope undefined — could be React, Vitest, TDD, or integration. Expected: empty."
+  },
+  "promp-013": {
+    "skills": [],
+    "acceptable": ["backend-eloquent", "backend-migrations", "meta-refactoring"],
+    "notes": "Database layer refactor is ambiguous — ORM patterns, migrations, or general refactoring all apply. Expected: empty."
+  },
+  "promp-014": {
+    "skills": [],
+    "acceptable": ["design-responsive-design", "design-spacing", "frontend-app-router"],
+    "notes": "Responsive layout could be design theory or framework implementation. Expected: empty."
+  },
+  "promp-015": {
+    "skills": ["backend-sanctum", "frontend-forms"],
+    "acceptable": ["backend-sanctum", "backend-validation", "frontend-forms", "frontend-api-routes"],
+    "notes": "Multi-domain: Laravel auth (sanctum) + Next.js checkout (forms). Acceptable set includes validation and API routes as related backend/frontend skills."
+  },
+  "promp-016": {
+    "skills": ["frontend-patterns", "frontend-testing", "meta-documentation"],
+    "acceptable": ["frontend-patterns", "frontend-testing", "meta-documentation"],
+    "notes": "Component library requires patterns, tests, and docs. Three skills minimum."
+  },
+  "promp-017": {
+    "skills": ["testing-playwright"],
+    "acceptable": ["testing-playwright", "testing-tdd-basics"],
+    "notes": "Primary intent is Playwright E2E. CI integration is secondary; TDD basics could apply to test structure."
+  },
+  "promp-018": {
+    "skills": ["frontend-hooks-basics", "meta-refactoring"],
+    "acceptable": ["frontend-hooks-basics", "meta-refactoring", "meta-code-review"],
+    "notes": "Hooks migration + refactoring are the two core activities. Code review is acceptable as a quality gate."
+  },
+  "promp-019": {
+    "skills": ["backend-graphql-basics", "backend-errors", "backend-pagination", "backend-rate-limiting"],
+    "acceptable": ["backend-graphql-basics", "backend-errors", "backend-pagination", "backend-rate-limiting", "backend-rest-conventions"],
+    "notes": "Four explicit requirements map to four backend skills. REST conventions is acceptable as a related API design skill."
+  },
+  "promp-020": {
+    "skills": ["backend-sanctum", "debugging-debugging"],
+    "acceptable": ["backend-sanctum", "debugging-debugging", "backend-middleware"],
+    "notes": "401 after deploy points to Sanctum config; debugging methodology is needed to trace the issue. Middleware is acceptable as auth intermediary."
+  },
+  "promp-021": {
+    "skills": ["backend-queues", "backend-eloquent", "debugging-debugging"],
+    "acceptable": ["backend-queues", "backend-eloquent", "debugging-debugging"],
+    "notes": "Queue + DB + debugging triad. All three are necessary for a complete answer."
+  },
+  "promp-022": {
+    "skills": ["frontend-performance", "frontend-hooks-basics", "debugging-debugging"],
+    "acceptable": ["frontend-performance", "frontend-hooks-basics", "debugging-debugging", "frontend-suspense"],
+    "notes": "Infinite re-render involves performance (memoization), hooks (dependency arrays), and debugging (trace). Suspense is acceptable edge case."
+  },
+  "promp-023": {
+    "skills": ["testing-integration-testing", "debugging-debugging"],
+    "acceptable": ["testing-integration-testing", "debugging-debugging", "backend-seeding"],
+    "notes": "CI vs local test divergence is an integration testing + debugging problem. Seeding is acceptable as data setup skill."
+  },
+  "promp-024": {
+    "skills": ["backend-sanctum", "backend-middleware"],
+    "acceptable": ["backend-sanctum", "backend-middleware", "backend-errors"],
+    "notes": "Very short — 'fix auth' could mean Sanctum setup or middleware configuration. Both are valid."
+  },
+  "promp-025": {
+    "skills": ["meta-architecture", "backend-queues", "frontend-app-router", "testing-playwright"],
+    "acceptable": ["meta-architecture", "backend-queues", "frontend-app-router", "testing-playwright", "backend-sanctum", "backend-validation"],
+    "notes": "Very long prompt with many topics. Primary intent is architecture (meta-architecture); supporting skills span queues, Next.js, and Playwright."
+  },
+  "promp-026": {
+    "skills": ["backend-validation", "backend-sanctum"],
+    "acceptable": ["backend-validation", "backend-sanctum", "backend-errors"],
+    "notes": "Code contains raw validate() instead of Form Request (backend-validation) and returns JSON directly (backend-errors). Auth (sanctum) is implied."
+  },
+  "promp-027": {
+    "skills": ["backend-sanctum", "testing-pest-php"],
+    "acceptable": ["backend-sanctum", "testing-pest-php"],
+    "notes": "Spanish/English mix asking for Sanctum setup + Pest test verification. Both skills clearly named."
+  },
+  "promp-028": {
+    "skills": [],
+    "acceptable": [],
+    "notes": "Weather query — no programming skill applies."
+  },
+  "promp-029": {
+    "skills": [],
+    "acceptable": [],
+    "notes": "Joke request — no programming skill applies."
+  },
+  "promp-030": {
+    "skills": [],
+    "acceptable": [],
+    "notes": "Quantum physics — no programming skill applies."
+  }
+}

@@ -238,6 +238,48 @@ node bin/skill-router.mjs sync --disable skill-a --enable skill-b --dry-run
 
 ---
 
+### `deploy`
+
+Deploy router skills from `router-skills/` to the ZCode mirror. Compares source hashes against the mirror, adds or updates routers, and applies leaf disables from the registry. Snapshots state before any writes; supports rollback on failure.
+
+```bash
+# Preview changes without applying
+node bin/skill-router.mjs deploy --dry-run
+
+# Deploy routers and apply leaf disables
+node bin/skill-router.mjs deploy
+
+# Deploy and run post-deploy verification
+node bin/skill-router.mjs deploy --verify
+
+# Roll back from a snapshot file
+node bin/skill-router.mjs deploy --rollback ./path/to/deploy-backup-2026-09-23T10:00:00.json
+
+# Custom directories
+node bin/skill-router.mjs deploy --zcode-dir ~/.zcode/skills --project-dir /path/to/project
+```
+
+**Flags:**
+- `--dry-run` — Plan and display what would change without writing anything.
+- `--rollback <file>` — Restore the mirror from a previous deploy snapshot.
+- `--verify` — Run post-deploy health checks after applying changes.
+- `--quiet` — Suppress intermediate console output.
+- `--zcode-dir <dir>` — Override the ZCode mirror directory.
+- `--project-dir <dir>` — Override the project root directory.
+
+**Behavior:**
+1. Scans `router-skills/` for router directories, computes SHA-256 hashes.
+2. Scans the ZCode mirror for existing managed routers (those with `.skill-router-meta.json`).
+3. Classifies each router as `add`, `update`, or `unchanged`.
+4. Reads `.skill-router-disabled.json` to determine which leaf skills to disable.
+5. Creates a snapshot of the current mirror state before any writes.
+6. Copies/overwrites router SKILL.md files and writes fresh meta files.
+7. Disables leaves via the shadow mechanism (preserves real directories).
+8. On error, attempts automatic rollback from the snapshot.
+9. With `--verify`, runs health checks on routers and leaves.
+
+---
+
 ### `sources`
 
 List current sources and skill counts per source. Shows name collisions when the same skill name appears in multiple sources.
@@ -355,6 +397,7 @@ node bin/skill-router.mjs help
 | `--enable <name>` | Enable a previously disabled skill (sync) |
 | `--disable-mechanism <mirror|shadow>` | Choose disable strategy (sync, default: mirror) |
 | `--since <n>` | Look back N days for analytics (analytics) |
+| `--rollback <file>` | Roll back deploy from snapshot (deploy) |
 
 ## Skills Directory Structure
 

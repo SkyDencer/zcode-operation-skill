@@ -5,13 +5,14 @@
  * parses frontmatter, builds BM25 index and embedding index, and writes
  * both to data/skill-index.json and data/skill-embeddings.json.
  *
- * Default source: data/skills/ (project)
- * Optional second source: data/skills/<zcode-skills-dir> (zcode-user)
+ * Default sources: data/skills/ (project) and router-skills/ (router dispatchers).
+ * Optional additional source: data/skills/<zcode-skills-dir> (zcode-user).
  *
  * Environment variables:
  *   SKILL_ROUTER_SOURCES  Colon-separated paths (e.g. "data/skills:data/skills/zcode")
  *
  * Each index entry carries a `source` field: "project" | "zcode-user".
+ * Router skills (from router-skills/) are tagged with source: "project".
  */
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -36,12 +37,19 @@ const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
 function parseSources() {
   const raw = process.env.SKILL_ROUTER_SOURCES;
   if (!raw) {
-    return [{ path: resolve('data/skills'), source: 'project' }];
+    // Default: project skills + router skills
+    return [
+      { path: resolve('data/skills'), source: 'project' },
+      { path: resolve('router-skills'), source: 'project' },
+    ];
   }
 
   const parts = raw.split(':').map((p) => p.trim()).filter(Boolean);
   if (parts.length === 0) {
-    return [{ path: resolve('data/skills'), source: 'project' }];
+    return [
+      { path: resolve('data/skills'), source: 'project' },
+      { path: resolve('router-skills'), source: 'project' },
+    ];
   }
 
   const sources = parts.map((p) => ({

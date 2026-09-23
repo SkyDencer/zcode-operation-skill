@@ -175,3 +175,11 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 - **Rationale:** Phase 3 scale benchmark (docs/reports/phase-3-scale-benchmark.md) showed flat BM25 is faster at every corpus size (2ms vs 4ms at N=50, 15ms vs 17ms at N=500), with equal or slightly better Top-1 accuracy at all scales. The previously assumed inflection point at N=100 (auto-enable hierarchical) was not supported by data. The `--hierarchical` CLI flag still works for explicit opt-in.
 - **Date:** 2026-09-23
 - **Status:** Accepted
+
+## D25 — SLM is disabled by default
+
+- **Question:** Should the hybrid SLM+BM25 routing path be active by default?
+- **Decision:** No. `slm.enabled` defaults to `false` in `src/config/defaults.mjs`. SLM routing is opt-in via `SKILL_ROUTER_SLM_ENABLED=true`.
+- **Rationale:** Phase 2 benchmark results (docs/reports/phase-2-slm-benchmark.md) showed Qwen2.5-0.5B underperforms BM25 on this corpus. SLM-Only Top-1 = 20.00% vs BM25-Only Top-1 = 46.67%; Set Recall = 0.0972 vs 0.7000. Hybrid mode matches BM25 on Top-1 but degrades Set Recall (0.5750 vs 0.7000) and adds ~1.5 s latency per prompt — exceeding the hook timeout budget of 200 ms. The 0.5B model is too small for reliable multi-skill selection. Larger models (1.5B+) should be evaluated before enabling SLM. The `tests/slm-benchmark/runner.mjs --slm` flag forces SLM-enabled mode for comparison.
+- **Date:** 2026-09-23
+- **Status:** Accepted

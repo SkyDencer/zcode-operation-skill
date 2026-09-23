@@ -82,6 +82,16 @@ export function getDefaults() {
       maxChars: 24000,
       minPerSkill: 500,
     },
+    slm: {
+      enabled: false,
+      topCandidates: 20,
+      maxSelected: 7,
+      bm25MinThreshold: 0.35,
+      slmMinConfidence: 0.5,
+      slmTimeoutMs: 2000,
+      endpoint: 'http://127.0.0.1:8080',
+      model: 'qwen2.5',
+    },
   };
 }
 
@@ -129,6 +139,13 @@ export function mergeWithEnv(defaults) {
   override('hook.maxOutputLength', 'SKILL_ROUTER_MAX_OUTPUT_LENGTH');
   override('budget.maxChars', 'SKILL_ROUTER_BUDGET_MAX_CHARS');
   override('budget.minPerSkill', 'SKILL_ROUTER_BUDGET_MIN_PER_SKILL');
+
+  // Boolean env override for SLM enablement
+  const slmEnabledRaw = process.env.SKILL_ROUTER_SLM_ENABLED;
+  if (slmEnabledRaw !== undefined && slmEnabledRaw.trim() !== '') {
+    const val = slmEnabledRaw.trim().toLowerCase();
+    cfg.slm.enabled = val !== 'false' && val !== '0' && val !== '';
+  }
 
   return cfg;
 }

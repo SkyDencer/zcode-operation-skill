@@ -21,6 +21,7 @@ Subcommands:
   analytics  Show usage analytics from routing logs
   import     Bulk import skills from a directory
   sync       Sync project skills to the ZCode mirror
+  deploy     Deploy router skills to the ZCode mirror
   sources    List current sources and skill counts
   verify     Health check: sync drift, orphans, index integrity, thresholds
   doctor     Diagnostic report: environment, corpus, benchmarks, overrides

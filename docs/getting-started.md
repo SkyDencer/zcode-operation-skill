@@ -134,6 +134,21 @@ node bin/skill-router.mjs sync --enable backend-laravel-eloquent
 node bin/skill-router.mjs sources
 ```
 
+## Step 5: Deploy Router Skills
+
+Router skills are dispatcher skills in `router-skills/` that route explicit `$`-mentions to the correct domain. Deploy them to the ZCode mirror:
+
+```bash
+# Preview what would be deployed
+node bin/skill-router.mjs deploy --dry-run
+
+# Deploy routers and apply leaf disables
+node bin/skill-router.mjs deploy
+
+# Deploy and verify health
+node bin/skill-router.mjs deploy --verify
+```
+
 ## Step 6: Add a New Skill
 
 Create a new skill by adding a SKILL.md file:
@@ -251,7 +266,46 @@ Reindex with multiple sources:
 node bin/skill-router.mjs reindex --sources all
 ```
 
-## Next Steps
+## Two-Mode Routing
+
+The router supports two modes based on whether the prompt contains a `$`-mention:
+
+**Explicit mode** — The prompt contains a `$`-prefixed alias like `$next`, `$laravel`, `$react`, `$design`, `$test`, or `$meta`. The router resolves the alias to a router skill, strips the mention, and scopes BM25 retrieval to that domain only.
+
+```
+$next set up ISR for a blog post        → routes to router-next, scores frontend skills
+$laravel write a migration              → routes to router-laravel, scores backend skills
+$react hooks for state                  → routes to router-react, scores frontend skills
+```
+
+**Implicit mode** — No `$` mention. Pure BM25 runs over the leaf-skill corpus (router skills are excluded from lexical ranking).
+
+```
+"optimize eager loading in Laravel"     → BM25 ranks backend skills lexically
+"React hooks best practices"            → BM25 ranks frontend skills lexically
+"how to write tests for API endpoints"  → BM25 ranks testing skills lexically
+```
+
+Alias resolution is case-insensitive and follows this priority:
+1. Full router name (`$router-next` → `router-next`)
+2. Short alias via `src/config/aliases.mjs` (`$next` → `router-next`)
+3. Unknown aliases are silently ignored (falls through to implicit mode)
+
+## SLM Experimentation
+
+SLM routing is disabled by default. To experiment with SLM:
+
+```bash
+SKILL_ROUTER_SLM_ENABLED=true node hooks/route.mjs
+```
+
+Or run the SLM benchmark:
+
+```bash
+node tests/slm-benchmark/runner.mjs --mode hybrid --slm
+```
+
+See [docs/reports/phase-2-slm-benchmark.md](./docs/reports/phase-2-slm-benchmark.md) for benchmark results.
 
 - Read [docs/ai-context.md](./docs/ai-context.md) for the full technical architecture.
 - Read [docs/cli-reference.md](./docs/cli-reference.md) for every CLI subcommand.

@@ -41,9 +41,10 @@ The script will:
 2. Confirm it is running from the repository root
 3. Build the skill index (`hooks/build-index.mjs`)
 4. Preview the sync plan (`sync --dry-run`)
-5. Sync skills to your ZCode mirror (`~/.zcode/skills`)
-6. Run a health check (`verify`)
-7. Print next steps
+5. Deploy router skills to your ZCode mirror (`deploy --dry-run`)
+6. Sync leaf skills to your ZCode mirror (`~/.zcode/skills`)
+7. Run a health check (`verify`)
+8. Print next steps
 
 To preview without making changes:
 
@@ -155,6 +156,7 @@ The project ships a full management CLI at `bin/skill-router.mjs`:
 | `stats` | Show corpus statistics |
 | `import` | Bulk import skills from a directory |
 | `sync` | Sync project skills to ZCode mirror (`--dry-run`, `--disable`, `--enable`) |
+| `deploy` | Deploy router skills to ZCode mirror (`--dry-run`, `--rollback`, `--verify`) |
 | `sources` | List current sources and skill counts |
 | `verify` | Health check: sync drift, orphans, index integrity |
 | `doctor` | Diagnostic report for the installation |
@@ -167,12 +169,90 @@ node bin/skill-router.mjs list
 node bin/skill-router.mjs validate
 node bin/skill-router.mjs reindex
 node bin/skill-router.mjs sync --dry-run
+node bin/skill-router.mjs deploy --dry-run
 node bin/skill-router.mjs verify
 node bin/skill-router.mjs doctor
 node bin/skill-router.mjs benchmark --mode bm25
 ```
 
 See [docs/cli-reference.md](./docs/cli-reference.md) for full subcommand documentation.
+
+## Two-Mode Routing
+
+The router supports two complementary routing modes:
+
+- **Explicit mode** (`$mention`) — When the prompt contains a `$`-prefixed alias such as `$next`, `$laravel`, `$react`, `$design`, `$test`, or `$meta`, the router resolves it to a router skill and scopes BM25 retrieval to that router's domain only. The `$mention` is stripped from the prompt before ranking.
+- **Implicit mode** (no `$`) — When no `$` mention is present, the router runs pure BM25 over the leaf-skill corpus (excluding router skills from lexical ranking). This is the default path for ordinary authoring prompts.
+
+Router skills live in `router-skills/` and are indexable dispatchers; leaf skills live in `data/skills/` and contain the actual workflow instructions. The hook detects explicit mentions before retrieval (`hooks/route.mjs:125`) and routes each path independently.
+
+### Example Prompts
+
+```
+# Explicit: dispatches to router-laravel, BM25 scoped to backend skills
+"$laravel write a migration for user preferences"
+
+# Explicit: dispatches to router-next, BM25 scoped to frontend skills
+"$next set up ISR for a blog post"
+
+# Implicit: pure BM25 over all leaf skills
+"optimize eager loading in Laravel"
+
+# Implicit: pure BM25 over all leaf skills
+"how to use React hooks for state management"
+```
+
+Alias resolution order: full router name (`$router-next`) > short alias (`$next`) > silently ignored if unknown. Alias lookup is case-insensitive.
+
+See [router-skills/README.md](./router-skills/README.md) for the full router catalog and [src/config/aliases.mjs](./src/config/aliases.mjs) for the alias table.
+
+## Deploying Router Skills
+
+Router skills are managed separately from leaf skills and deployed to the ZCode mirror via the `deploy` subcommand:
+
+```bash
+# Preview what would be deployed
+node bin/skill-router.mjs deploy --dry-run
+
+# Deploy router skills and apply leaf disables
+node bin/skill-router.mjs deploy
+
+# Deploy and verify health
+node bin/skill-router.mjs deploy --verify
+
+# Roll back from a snapshot
+node bin/skill-router.mjs deploy --rollback ./path/to/snapshot.json
+```
+
+Deploy plans compare `router-skills/` source against the ZCode mirror using SHA-256 hashes. Routers are added or updated; leaf skills listed in `.skill-router-disabled.json` are disabled via the shadow mechanism. A snapshot is saved before any writes, enabling rollback on failure.
+
+## SLM Status
+
+Small-language-model (SLM) routing is **disabled by default** (`slm.enabled: false`). The system runs pure BM25 unless SLM is explicitly enabled via `SKILL_ROUTER_SLM_ENABLED=true`.
+
+Phase 2 benchmark results on 30 prompts show that Qwen2.5-0.5B does **not** outperform BM25 on this corpus:
+
+| Mode | Top-1 | Set Recall | Latency p50 |
+|------|-------|------------|-------------|
+| BM25-Only | 46.67% | 0.7000 | ~3 ms |
+| SLM-Only | 20.00% | 0.0972 | ~182 ms |
+| Hybrid | 46.67% | 0.5750 | ~1484 ms |
+
+Hybrid achieves parity with BM25 on Top-1 but degrades on Set Recall and adds ~1.5 s latency per prompt, which exceeds the hook timeout budget.
+
+To enable SLM for experimentation:
+
+```bash
+SKILL_ROUTER_SLM_ENABLED=true node hooks/route.mjs
+```
+
+Or in the benchmark runner:
+
+```bash
+node tests/slm-benchmark/runner.mjs --mode hybrid --slm
+```
+
+**Note:** Larger models (1.5B+) may perform better. The 0.5B model is insufficient for meaningful semantic reranking on this skill corpus. See [docs/reports/phase-2-slm-benchmark.md](./docs/reports/phase-2-slm-benchmark.md) for full results.
 
 ## Limitations
 
@@ -191,7 +271,7 @@ zcode-operation-skill/
 ├── .zcode-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── bin/
-│   └── skill-router.mjs      # CLI entry point (14 subcommands)
+│   └── skill-router.mjs      # CLI entry point (15 subcommands)
 ├── hooks/
 │   ├── hooks.json            # Hook registration
 │   ├── route.mjs             # Main hook: stdin -> route -> output
@@ -203,13 +283,15 @@ zcode-operation-skill/
 │   ├── logger.mjs            # Structured JSONL logger
 │   ├── config/
 │   │   ├── defaults.mjs      # All tunable parameters
-│   │   └── env.mjs           # SKILL_ROUTER_* env override merge
+│   │   ├── env.mjs           # SKILL_ROUTER_* env override merge
+│   │   └── aliases.mjs       # $mention alias → router skill name mapping
 │   ├── core/
 │   │   ├── retriever/
 │   │   │   ├── bm25.mjs      # rankSkills() with field-weighted BM25
-│   │   │   └── hybrid.mjs    # BM25 + embeddings via RRF fusion
+│   │   │   └── hybrid.mjs    # BM25 + embeddings via RRF fusion; routeWithExplicit
 │   │   ├── routing/
 │   │   │   ├── hierarchical.mjs  # 3-stage domain-first retrieval (experimental)
+│   │   │   ├── explicit.mjs        # detectExplicitSkill() — $-mention detection
 │   │   │   ├── domain-registry.mjs # Domain metadata CRUD + matching
 │   │   │   ├── planner.mjs         # Single/multi/fallback planning
 │   │   │   └── selector.mjs        # Flat vs hierarchical selector (flat default)
@@ -227,6 +309,12 @@ zcode-operation-skill/
 │   │   │   └── features.mjs    # keyword, bigram, domain, title features
 │   │   ├── embeddings/
 │   │   │   └── engine.mjs      # Zero-deps FNV-1a n-gram embeddings
+│   │   ├── slm/
+│   │   │   ├── client.mjs      # HTTP client for local SLM server
+│   │   │   ├── parser.mjs      # Parse SLM response into ranked skills
+│   │   │   ├── prompt-builder.mjs  # Build prompts for SLM classification
+│   │   │   ├── errors.mjs      # SLM error types
+│   │   │   └── index.mjs       # Re-exports
 │   │   └── telemetry/
 │   │       ├── logger.mjs      # JSONL logging (hash-only queries)
 │   │       ├── metrics.mjs     # Ring-buffer p50/p95/p99 metrics
@@ -252,6 +340,10 @@ zcode-operation-skill/
 │   │   └── disabler.mjs        # disableSkill()/enableSkill(), disabled registry
 │   ├── index/
 │   │   └── dedupe.mjs          # resolveCollisions(): project wins over zcode-user
+│   ├── deploy/
+│   │   ├── planner.mjs         # planDeploy(): compare router-skills/ vs mirror
+│   │   ├── writer.mjs          # applyDeploy(): copy routers, snapshot, rollback
+│   │   └── verifier.mjs        # verifyDeploy(): post-deploy health checks
 │   └── cli/
 │       ├── list.mjs            # List skills by domain with quality
 │       ├── add.mjs             # Add a single skill
@@ -262,6 +354,7 @@ zcode-operation-skill/
 │       ├── stats.mjs           # Corpus statistics
 │       ├── import.mjs          # Bulk import skills
 │       ├── sync.mjs            # Sync to ZCode mirror
+│       ├── deploy.mjs          # Deploy router skills to ZCode mirror
 │       ├── sources.mjs         # List sources and collisions
 │       ├── verify.mjs          # Health checks (5 checks)
 │       ├── doctor.mjs          # Diagnostic report
@@ -278,11 +371,14 @@ zcode-operation-skill/
 │   ├── thresholds.json         # Optimized confidence thresholds
 │   ├── skill-router-disabled.json   # Disabled skills registry (generated)
 │   └── skill-router-sync-state.json # Last sync state (generated)
+├── router-skills/              # Router dispatcher skills (auto-scanned by build-index)
 ├── tests/
 │   ├── run-benchmark.mjs       # Benchmark runner
 │   ├── prompts.json            # 130 test prompts
 │   ├── expected-routes.json    # Expected top-1 skill per prompt
 │   ├── scale/                  # Synthetic corpus generator + runner
+│   ├── two-mode-benchmark/     # Two-mode routing benchmark
+│   ├── slm-benchmark/          # SLM benchmark runner
 │   └── {module}.test.mjs       # Per-module unit tests
 ├── logs/                       # Runtime JSONL logs
 ├── docs/
@@ -290,8 +386,8 @@ zcode-operation-skill/
 │   ├── ai-context.md           # Technical architecture
 │   ├── architecture.md         # Full module reference
 │   ├── implementation-plan.md  # Phase table and ordering rationale
-│   ├── current-state.md        # Entry log and active phase tracker
-│   ├── decision-dictionary.md  # Recorded decisions (D1-D24)
+│   ├── current-state.md        # Entry log and active phase status
+│   ├── decision-dictionary.md  # Recorded decisions (D1-D25)
 │   ├── cli-reference.md        # CLI subcommand reference
 │   ├── getting-started.md      # 5-minute tour for new users
 │   ├── skill-authoring.md      # How to write high-quality skills
@@ -311,7 +407,7 @@ zcode-operation-skill/
 | [docs/architecture.md](./docs/architecture.md) | Full module reference including all Phase 3 additions |
 | [docs/implementation-plan.md](./docs/implementation-plan.md) | Phase table with ordering rationale |
 | [docs/current-state.md](./docs/current-state.md) | Entry log and active phase status |
-| [docs/decision-dictionary.md](./docs/decision-dictionary.md) | Recorded decisions (D1-D24) |
+| [docs/decision-dictionary.md](./docs/decision-dictionary.md) | Recorded decisions (D1-D25) |
 | [docs/cli-reference.md](./docs/cli-reference.md) | Every CLI subcommand documented with examples |
 | [docs/getting-started.md](./docs/getting-started.md) | 5-minute tour for new users |
 | [docs/skill-authoring.md](./docs/skill-authoring.md) | How to write high-quality SKILL.md files |
@@ -327,7 +423,7 @@ zcode-operation-skill/
 | 0 | Spike - Feasibility Check | Confirm ZCode hook contract, verify BM25 viability on small corpus | Complete |
 | 1 | Skeleton & Infrastructure | Project scaffolding, module structure, Logger baseline, hybrid retriever, reranker, multi-domain routing, telemetry, 54-skill corpus | Complete |
 | 2 | Scale & Tooling | Hierarchical routing, quality validator, CLI management tool, adaptive threshold tuning, synonym expansion, query cache, context budget manager, usage analytics, external skill import, scale benchmarks | Complete |
-| 3 | Sync & Infrastructure | ZCode skill sync, disable mechanism, two-source index, verify/doctor CLI, routing selector (flat default), scale benchmark validation | Complete |
+| 3 | Sync & Infrastructure | ZCode skill sync, disable mechanism, two-source index, verify/doctor CLI, routing selector (flat default), scale benchmark validation, two-mode routing ($mention detection), router skill deploy subsystem | Complete |
 | 4 | Log Rotation & Cleanup | Implement 30-day log rotation, disk-space monitoring, stale cache eviction | Planned |
 | 5 | Feedback Loop | Collect implicit user corrections (skill dismissed / manually selected) and use them to adjust field weights | Planned |
 | 6 | Semantic Embedding Upgrade | Replace FNV-1a n-gram embeddings with a pre-trained local model (e.g., ONNX transformer) for meaningful semantic signals | Planned |

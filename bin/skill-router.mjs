@@ -15,6 +15,7 @@
  *   stats      Show corpus statistics
  *   import     Bulk import skills (placeholder)
  *   sync       Sync project skills to the ZCode mirror
+ *   deploy     Deploy router skills to the ZCode mirror
  *   verify     Health check: sync drift, orphans, index integrity, thresholds
  *   doctor     Diagnostic report: environment, corpus, benchmarks, overrides
  *   help       Show this help message

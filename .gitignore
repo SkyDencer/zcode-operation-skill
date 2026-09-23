@@ -1,5 +1,8 @@
 node_modules/
 logs/*.jsonl
+logs/*.json
+data/skill-index.json
+nul
 data/skill-index.json
 .env
 .env.*

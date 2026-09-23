@@ -1,10 +1,11 @@
 /**
  * ZCode route hook — intercepts UserPromptSubmit, retrieves relevant
- * skills via BM25, and injects context into the model.
+ * skills via hybrid SLM+BM25 routing, and injects context into the model.
  *
- * Reads JSON from stdin, ranks skills, applies confidence policy,
- * and writes the output plan to .zcode/output.json alongside
- * an additionalContext block.
+ * Reads JSON from stdin, detects explicit `$`-mentions (e.g. `$next`,
+ * `$laravel`) before retrieval, scopes BM25 to the matched router's
+ * domain when found, otherwise falls back to routeHybrid(). Writes the
+ * output plan to .zcode/output.json alongside an additionalContext block.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -13,12 +14,11 @@ import { rankSkills, readSkillContent } from '../src/index.mjs';
 import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
 import { getConfig } from '../src/config/env.mjs';
-import { planRoutes } from '../src/core/routing/planner.mjs';
-import { routeHierarchical } from '../src/core/routing/hierarchical.mjs';
+import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
+import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
 import { now } from '../src/utils/time.mjs';
 import { QueryCache } from '../src/core/cache/query-cache.mjs';
-import { selectRouter } from '../src/routing/selector.mjs';
 
 const HOOK_DIR = resolve(fileURLToPath(import.meta.url), '..');
 const INDEX_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.json');
@@ -27,25 +27,36 @@ const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
 
-// CLI flag: --hierarchical forces hierarchical mode
-const useHierarchical = process.argv.includes('--hierarchical');
-
 /**
  * Build the additionalContext string from ranked skills.
  *
+ * Includes a Mode line that distinguishes explicit ([$mention]) from
+ * implicit (BM25/SLM) routing, plus routerMatched info for telemetry.
+ *
  * @param {Array<{name:string, content:string}>} skillsWithContent
+ * @param {{tier:string, confidence:number, skills:Array<{name:string}>, explicit?:boolean, routerMatched?:string|null, mode?:string}} decision
  * @returns {string}
  */
-function buildContext(skillsWithContent) {
+function buildContext(skillsWithContent, decision) {
   if (skillsWithContent.length === 0) return '';
-  const lines = ['== SKILL CONTEXT ==', ''];
+  const isExplicit = !!decision.explicit;
+  const routerTag = decision.routerMatched ?? 'none';
+  const modeLabel = isExplicit ? `explicit (${routerTag})` : 'implicit';
+  const lines = [
+    '[SKILL ROUTER]',
+    `Mode: ${isExplicit ? 'explicit' : 'implicit'}`,
+    `Router: ${routerTag}`,
+    `Tier: ${decision.tier}`,
+    `Selected: ${decision.skills.map((s) => s.name).join(', ')}`,
+    `Confidence: ${decision.confidence}`,
+    '',
+  ];
   for (const s of skillsWithContent) {
-    lines.push(`# ${s.name}`);
+    lines.push(`--- SKILL: ${s.name} ---`);
     lines.push('');
     lines.push(s.content.trim());
     lines.push('');
   }
-  lines.push('== END SKILL CONTEXT ==');
   return lines.join('\n');
 }
 
@@ -104,56 +115,78 @@ async function main() {
     process.exit(0);
   }
 
-  // Timeout guard: wrap retrieval in Promise.race
-  // Build query cache keyed by index fingerprint
-  const cache = new QueryCache({ index, maxSize: 64, ttlMs: 300000 });
-  let plan;
-  let routerMode;
-  try {
-    // Select routing strategy based on corpus size and options
-    const routerMode = selectRouter(index.length, {
-      mode: useHierarchical ? 'hierarchical' : undefined,
-      experimental: process.argv.includes('--experimental'),
-    });
+  // Build name→index-entry map for path lookup
+  const indexByName = new Map();
+  for (const entry of index) {
+    indexByName.set(entry.name, entry);
+  }
 
-    if (routerMode === 'hierarchical') {
-      plan = await cache.getOrSet(trimmedPrompt, async (query, idx) => {
-        return await Promise.race([
-          routeHierarchical(query, idx),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
-          ),
-        ]);
-      });
-    } else {
-      plan = await cache.getOrSet(trimmedPrompt, async (query, idx) => {
-        return await Promise.race([
-          planRoutes(query, idx),
-          new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
-          ),
-        ]);
-      });
-    }
+  // Detect explicit $-mention BEFORE retrieval
+  const explicitMatch = detectExplicitSkill(trimmedPrompt, index);
+  const hasExplicit = explicitMatch !== null;
+  const explicitSkill = hasExplicit ? explicitMatch.skill : null;
+  // Use cleaned prompt for routing when explicit match found
+  const routingPrompt = hasExplicit ? explicitMatch.cleanedPrompt : trimmedPrompt;
+
+  // Build a leaf-only index for implicit BM25 routing.
+  // Router skills (router-*) are dispatchers, not content skills — they must
+  // not compete in lexical ranking. They remain available for explicit detection
+  // via detectExplicitSkill above.
+  const leafIndex = index.filter((s) => !s.name.startsWith('router-'));
+
+  // Timeout guard: wrap retrieval in Promise.race
+  const cache = new QueryCache({ index: leafIndex, maxSize: 64, ttlMs: 300000 });
+  let decision;
+  try {
+    decision = await cache.getOrSet(routingPrompt + (hasExplicit ? `|$${explicitSkill}` : ''), async (query, idx) => {
+      if (hasExplicit) {
+        // Explicit routing: scope BM25 to the router's domain
+        return routeWithExplicit(query, index, explicitSkill);
+      }
+      // Implicit routing: full hybrid pipeline on leaf skills only
+      const slmEnabled = config.slm?.enabled !== false;
+      if (!slmEnabled) {
+        const ranked = rankSkills(query, idx);
+        const tier = ranked.length > 0 ? 'bm25' : 'none';
+        const confidence = ranked.length > 0 ? ranked[0].score : 0;
+        return {
+          skills: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
+          tier,
+          confidence,
+          candidates: ranked.slice(0, config.slm?.topCandidates ?? 20).map((r) => ({
+            name: r.skill.name,
+            description: r.skill.description,
+            bm25Score: r.score,
+          })),
+          latencyMs: { total: 0, bm25: 0, slmEnabled: false },
+        };
+      }
+      return await Promise.race([
+        routeHybrid(query, idx),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
+        ),
+      ]);
+    });
   } catch (err) {
     increment('errors.rerouting');
     await logError({ query: trimmedPrompt, error: err.message });
     process.exit(0);
   }
 
-  // Normalize plan shape: hierarchical uses 'skills' + 'primaryDomain',
-  // planner uses 'ranked' + 'primary'. Unify to 'ranked' + 'primary'.
-  const ranked = plan.skills ?? plan.ranked;
-  const primary = plan.primaryDomain ?? plan.primary;
-  const mode = plan.mode;
-  const domains = plan.domains;
+  const rankedNames = decision.skills ?? [];
+  const tier = decision.tier;
+  const confidence = decision.confidence;
+  const candidates = decision.candidates ?? [];
+  const bm25Latency = decision.latencyMs?.bm25 ?? 0;
+  const slmLatency = decision.latencyMs?.slm;
   const latency = Math.round(performance.now() - startTime);
   recordTiming('retrieve.latency', latency);
   increment('retrieve.count');
 
   await logRetrieve({
     query: trimmedPrompt,
-    resultCount: ranked.length,
+    resultCount: rankedNames.length,
     durationMs: latency,
   });
 
@@ -171,19 +204,31 @@ async function main() {
     });
   }
 
-  if (ranked.length === 0) {
-    process.exit(0);
-  }
-
-  increment(`mode.${mode}`);
-
-  // Log routing strategy selection for telemetry
+  // Log routing-specific telemetry including explicit/implicit mode
   await logRecord({
     event: 'route',
     query: trimmedPrompt,
-    corpusSize: index.length,
-    routerMode,
+    tier,
+    candidates: candidates.map((c) => c.name),
+    slmLatency,
+    bm25Latency,
+    explicit: decision.explicit ?? false,
+    routerMatched: decision.routerMatched ?? null,
+    mode: decision.mode ?? tier,
+    slmEnabled: config.slm?.enabled ?? false,
   });
+
+  if (rankedNames.length === 0) {
+    process.exit(0);
+  }
+
+  increment(`mode.${tier}`);
+
+  // Augment ranked names with full index entries (for path resolution)
+  const ranked = rankedNames.map((s) => ({
+    skill: indexByName.get(s.name) ?? { name: s.name, path: '' },
+    score: s.score,
+  }));
 
   const skillsWithContent = await readSkillContent(ranked);
 
@@ -204,7 +249,7 @@ async function main() {
     budgetMaxChars,
   });
 
-  const additionalContext = buildContext(selected);
+  const additionalContext = buildContext(selected, decision);
 
   const output = {
     hookSpecificOutput: {
@@ -212,10 +257,10 @@ async function main() {
       additionalContext,
     },
     RoutePlan: {
-      mode,
-      domains,
-      primary,
-      candidates: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
+      mode: decision.mode ?? tier,
+      domains: [],
+      primary: null,
+      candidates: candidates.map((c) => ({ name: c.name, score: c.bm25Score })),
       latencyMs: latency,
     },
   };

@@ -1,0 +1,182 @@
+[
+  {
+    "id": "promp-001",
+    "prompt": "Fix the N+1 query problem in the Order model — I'm seeing hundreds of queries when loading orders with their relationships.",
+    "category": "single-domain-clear",
+    "notes": "Directly references Eloquent ORM relationship loading, the canonical N+1 problem in Laravel."
+  },
+  {
+    "id": "promp-002",
+    "prompt": "Set up Sanctum authentication so my Vue SPA can make authenticated API requests with CSRF protection.",
+    "category": "single-domain-clear",
+    "notes": "Specifically mentions Sanctum, Vue SPA, and CSRF — maps to backend-sanctum."
+  },
+  {
+    "id": "promp-003",
+    "prompt": "Create a custom Laravel Form Request validator that checks if a username is already taken before saving.",
+    "category": "single-domain-clear",
+    "notes": "Form Request validation with custom rule — maps to backend-validation."
+  },
+  {
+    "id": "promp-004",
+    "prompt": "Dispatch jobs to a Laravel queue worker and configure retry logic for failed database imports.",
+    "category": "single-domain-clear",
+    "notes": "Queue workers, job dispatching, retry logic — maps to backend-queues."
+  },
+  {
+    "id": "promp-005",
+    "prompt": "Write a custom React hook that manages form state and validates inputs using Zod schemas.",
+    "category": "single-domain-clear",
+    "notes": "Custom hooks + form state — maps to frontend-hooks-basics (hook rules/best practices) and frontend-forms (Zod validation). Primary: frontend-forms."
+  },
+  {
+    "id": "promp-006",
+    "prompt": "Build a Next.js API Route that proxies requests to an external payment service with CORS configured.",
+    "category": "single-domain-clear",
+    "notes": "Next.js API Routes with CORS — maps to frontend-api-routes."
+  },
+  {
+    "id": "promp-007",
+    "prompt": "Write Pest PHP feature tests that assert database state after creating a new user record.",
+    "category": "single-domain-clear",
+    "notes": "Pest PHP framework, feature tests, database assertions — maps to testing-pest-php."
+  },
+  {
+    "id": "promp-008",
+    "prompt": "Add ARIA attributes and keyboard navigation support to meet WCAG 2.1 AA compliance on our form components.",
+    "category": "single-domain-clear",
+    "notes": "WCAG 2.1 AA, ARIA, keyboard navigation — maps to design-accessibility."
+  },
+  {
+    "id": "promp-009",
+    "prompt": "Make this landing page look better — the fonts feel off and the spacing is inconsistent.",
+    "category": "single-domain-ambiguous",
+    "notes": "Vague visual complaint; could match typography, spacing, or color-theory. No single correct answer."
+  },
+  {
+    "id": "promp-010",
+    "prompt": "Improve the performance of our Laravel application — pages are loading slowly.",
+    "category": "single-domain-ambiguous",
+    "notes": "Performance could mean caching, query optimization (eloquent), queue offloading, or pagination. Multiple valid skills apply."
+  },
+  {
+    "id": "promp-011",
+    "prompt": "We need better error handling across the API layer.",
+    "category": "single-domain-ambiguous",
+    "notes": "Could match backend-errors (response formatting), backend-middleware (error middleware), or meta-debugging (systematic approach). Ambiguous scope."
+  },
+  {
+    "id": "promp-012",
+    "prompt": "Add more tests to the project — we're missing coverage on the important parts.",
+    "category": "single-domain-ambiguous",
+    "notes": "Could match frontend-testing (React), testing-vitest (Vite projects), testing-tdd-basics (TDD methodology), or testing-integration-testing. Scope undefined."
+  },
+  {
+    "id": "promp-013",
+    "prompt": "Refactor the database layer to be more maintainable.",
+    "category": "single-domain-ambiguous",
+    "notes": "Could match backend-eloquent (ORM patterns), backend-migrations (schema management), or meta-refactoring (techniques). Domain is clear but specific skill is not."
+  },
+  {
+    "id": "promp-014",
+    "prompt": "Build a responsive layout for the admin dashboard that works on mobile and desktop.",
+    "category": "single-domain-ambiguous",
+    "notes": "Responsive layout could match design-responsive-design, design-spacing, or frontend-app-router (layout components). Several valid skills."
+  },
+  {
+    "id": "promp-015",
+    "prompt": "Add Stripe payment processing to the Laravel backend and build a checkout UI in Next.js with form validation.",
+    "category": "multi-domain",
+    "notes": "Cross-framework: Laravel backend (backend-sanctum for auth, backend-validation for input) + Next.js frontend (frontend-forms, frontend-api-routes for checkout). Multi-domain by design."
+  },
+  {
+    "id": "promp-016",
+    "prompt": "Create a React component library with Storybook stories, unit tests, and a README explaining usage.",
+    "category": "multi-domain",
+    "notes": "Component patterns (frontend-patterns) + testing (frontend-testing) + documentation (meta-documentation). Three domains required."
+  },
+  {
+    "id": "promp-017",
+    "prompt": "Set up Playwright end-to-end tests for the login flow and integrate them into the CI pipeline.",
+    "category": "multi-domain",
+    "notes": "Playwright E2E (testing-playwright) + CI configuration touches meta-documentation (contributor guides) and testing-tdd-basics (test patterns). Primarily testing-playwright with meta skills."
+  },
+  {
+    "id": "promp-018",
+    "prompt": "Migrate the codebase from class components to functional hooks and add TypeScript types throughout.",
+    "category": "multi-domain",
+    "notes": "React hooks migration (frontend-hooks-basics) + refactoring techniques (meta-refactoring) + code review for type safety (meta-code-review). Multi-domain refactor."
+  },
+  {
+    "id": "promp-019",
+    "prompt": "Design a GraphQL API schema with proper error handling, pagination, and rate limiting for a public endpoint.",
+    "category": "multi-domain",
+    "notes": "GraphQL schema (backend-graphql-basics) + error responses (backend-errors) + pagination (backend-pagination) + rate limiting (backend-rate-limiting). Four backend skills."
+  },
+  {
+    "id": "promp-020",
+    "prompt": "Why does user login return a 401 Unauthorized after deploying to production, even though it works locally?",
+    "category": "debugging",
+    "notes": "Auth failure post-deploy — likely Sanctum CSRF/CORS config (backend-sanctum) plus systematic debugging (debugging-debugging)."
+  },
+  {
+    "id": "promp-021",
+    "prompt": "Queue jobs are dispatching successfully but the database records aren't being created. How do I debug this?",
+    "category": "debugging",
+    "notes": "Queue processing + DB writes failing — backend-queues for job logic, backend-eloquent for DB operations, debugging-debugging for root cause analysis."
+  },
+  {
+    "id": "promp-022",
+    "prompt": "The React app is re-rendering infinitely on page load causing a stack overflow. Help me trace the cause.",
+    "category": "debugging",
+    "notes": "Infinite re-render — frontend-performance (memoization), frontend-hooks-basics (useEffect dependencies), debugging-debugging (stack trace analysis)."
+  },
+  {
+    "id": "promp-023",
+    "prompt": "Tests pass locally but fail in CI with different database states. What could cause this inconsistency?",
+    "category": "debugging",
+    "notes": "Test environment inconsistency — testing-integration-testing (test databases), debugging-debugging (systematic diagnosis), backend-seeding (data setup)."
+  },
+  {
+    "id": "promp-024",
+    "prompt": "fix auth",
+    "category": "edge-case",
+    "notes": "Very short prompt — only 2 words. Should still match relevant auth skills."
+  },
+  {
+    "id": "promp-025",
+    "prompt": "I need you to help me architect a complete microservices-based e-commerce platform that includes a product catalog service built with Node.js and Express, an order processing service using Laravel with queue workers for async fulfillment, a payment gateway integration with Stripe, a user authentication system with JWT tokens stored in Redis, a recommendation engine using collaborative filtering, a real-time notification system using WebSockets, an admin dashboard built with Next.js and React with role-based access control, full CI/CD pipeline with GitHub Actions running Playwright E2E tests on every PR, container orchestration with Docker Compose for local development and Kubernetes for production, comprehensive logging with structured JSON output, distributed tracing with OpenTelemetry, database migrations managed through Laravel schema builder with rollback support, caching layer with Redis for session storage and query result caching, rate limiting on all public APIs using token bucket algorithm, API versioning strategy using URL path versioning, RESTful conventions following HATEOAS principles, GraphQL federation for the product catalog, event-driven architecture using Laravel events and listeners for order status changes, database seeding with Faker for test data, model factories for isolated test environments, background task scheduling for nightly report generation, middleware for request filtering and authentication, service container bindings for dependency injection, pagination for large product lists using cursor-based approach, error handling middleware with problem details format, HTTP client for outbound webhooks, queue retry logic with exponential backoff, and a monitoring dashboard. Please provide a detailed technical architecture document covering all these components and how they interact.",
+    "category": "edge-case",
+    "notes": "Very long prompt — ~600 words, multiple topics. Tests whether the router can extract the primary intent or correctly returns multiple skills."
+  },
+  {
+    "id": "promp-026",
+    "prompt": "Here's my controller code:\n```php\npublic function store(Request $request)\n{\n    $validated = $request->validate([\n        'email' => 'required|email|unique:users',\n        'password' => 'required|min:8',\n    ]);\n    $user = User::create($validated);\n    return response()->json($user, 201);\n}\n```\nWhat's wrong with this and how should I fix it following Laravel best practices?",
+    "category": "edge-case",
+    "notes": "Code-heavy prompt with PHP/Laravel snippet. Tests ability to parse code context. Expected: backend-validation (Form Request pattern), backend-sanctum (auth), backend-errors (response format)."
+  },
+  {
+    "id": "promp-027",
+    "prompt": "¿Puedes ayudarme a configurar Sanctum para autenticación en mi aplicación Laravel? También necesito que los tests de Pest verifiquen que el token se genera correctamente.",
+    "category": "edge-case",
+    "notes": "Mixed English/Spanish prompt. Tests multilingual handling. Expected: backend-sanctum + testing-pest-php."
+  },
+  {
+    "id": "promp-028",
+    "prompt": "What's the weather like in Tokyo today?",
+    "category": "negative",
+    "notes": "General knowledge question about weather — no programming skill applies."
+  },
+  {
+    "id": "promp-029",
+    "prompt": "Tell me a joke about programmers who love coffee.",
+    "category": "negative",
+    "notes": "Humor request — no programming skill applies."
+  },
+  {
+    "id": "promp-030",
+    "prompt": "Explain quantum entanglement and its implications for quantum computing in detail, covering Bell's theorem, decoherence, and the no-cloning theorem.",
+    "category": "negative",
+    "notes": "Academic physics explanation — no programming skill applies."
+  }
+]

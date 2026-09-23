@@ -43,22 +43,25 @@ calls, and no persistent state beyond the JSON skill index.
 │  │   parser)    │  │  tokenize(), │  │  env.mjs             │  │
 │  │              │  │  computeIdf()│  │  (loads thresholds.  │  │
 │  │              │  │  bm25())     │  │   json if present)   │  │
-│  │              │  └──────────────┘  └──────────────────────┘  │
+│  │              │  └──────────────┘  │  aliases.mjs         │  │
+│  │              │                    │  (alias→router map)  │  │
+│  │              │  ┌──────────────┐  └──────────────────────┘  │
 │  └──────────────┘                                               │
 │                                                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
-│  │  Retriever   │  │  Selector    │  │  Synonym Expander    │  │
-│  │  bm25.mjs    │  │  selector.   │  │  expander.mjs        │  │
-│  │              │  │  mjs         │  │  synonyms.mjs        │  │
-│  │  rankSkills()│  │              │  │                      │  │
-│  │  readSkill() │  │  selectRouter│  │  buildSynonymMap()   │  │
-│  │              │  │  (flat/hier) │  │  expandQuery()       │  │
-│  │  Supports:   │  │              │  │  toWeightedTokenArr()│  │
-│  │  field-weight│  │  Default:    │  │                      │  │
-│  │  + synonym   │  │  always flat │  │  Sources: curated    │  │
-│  │  expansion   │  │  (bench-    │  │  JSON + co-occurrence│  │
-│  │              │  │   marked    │  │                      │  │
-│  └──────────────┘  └──────────────┘  └──────────────────────┘  │
+│  │  Retriever   │  │  Selector    │  │  Explicit Router     │  │
+│  │  bm25.mjs    │  │  selector.   │  │  explicit.mjs        │  │
+│  │              │  │  mjs         │  │                      │  │
+│  │  rankSkills()│  │  selectRouter│  │  detectExplicitSkill │  │
+│  │  readSkill() │  │  (flat/hier) │  │  ROUTER_ALIASES      │  │
+│  │              │  │              │  │  ROUTER_DOMAINS      │  │
+│  │  Supports:   │  │  Default:    │  │                      │  │
+│  │  field-weight│  │  always flat │  │  Scans for $-mentions│  │
+│  │  + synonym   │  │  (bench-     │  │  Resolves to router  │  │
+│  │  expansion   │  │   marked    │  │  skill name          │  │
+│  │              │  │  flat is     │  │  Strips mention from │  │
+│  └──────────────┘  └──────────────┘  │  cleaned prompt      │  │
+│                                      └──────────────────────┘  │
 │                                                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
 │  │  Query Cache │  │  Budget Mgr  │  │  Quality Validator   │  │
@@ -156,14 +159,12 @@ calls, and no persistent state beyond the JSON skill index.
 - Validates input: empty input, malformed JSON, missing fields all fail open (exit 0).
 - Truncates prompts exceeding `maxPromptLength` (default 10240 chars).
 - Loads `data/skill-index.json`; fails open if missing.
+- **Explicit detection** — calls `detectExplicitSkill(prompt, index)` before retrieval. If a `$`-mention is found, the prompt is stripped and routed via `routeWithExplicit()` which scopes BM25 to the router's domain. See `src/core/routing/explicit.mjs` and `src/config/aliases.mjs`.
+- **Implicit routing** — when no explicit match, builds a leaf-only index (filters out `router-*` entries) and runs pure BM25 (`rankSkills`) unless SLM is enabled via `SKILL_ROUTER_SLM_ENABLED=true`.
 - Creates a `QueryCache` keyed by index fingerprint + query hash.
-- Selects routing strategy via `selectRouter(corpusSize, options)` from `src/routing/selector.mjs`.
-  - Default: **flat** BM25 (Phase 3 scale benchmark showed flat is faster and equally/more accurate at all scales).
-  - `--experimental` flag enables deprecated hierarchical path.
-- Calls the selected router through the cache, with a timeout guard (`Promise.race` at `timeoutMs`).
 - Reads full SKILL.md content for top-ranked skills via `readSkillContent()`.
 - Fits selected skills into the context budget via `fitWithinBudget()`.
-- Logs retrieve, cache, and budget events to JSONL.
+- Logs retrieve, cache, budget, and route events to JSONL (including mode, tier, slmEnabled, routerMatched).
 - Writes `output.json` with `hookSpecificOutput.additionalContext` and `RoutePlan`.
 
 ### Index Builder (`hooks/build-index.mjs`)
@@ -213,6 +214,44 @@ calls, and no persistent state beyond the JSON skill index.
   - Flat has equal or slightly better Top-1 accuracy.
   - Hierarchical has equal or higher fallback rates.
 - Hierarchical remains available via `--experimental` flag.
+
+### Explicit Router Detection (`src/core/routing/explicit.mjs`)
+
+- `detectExplicitSkill(prompt, knownSkills)` — scans for `$`-prefixed tokens in the prompt.
+- Resolution order: full router name (`$router-next`) > short alias (`$next`) via `ROUTER_ALIASES` > reject if not found.
+- Case-insensitive matching on the alias portion.
+- Returns `{ skill, matchedText, cleanedPrompt }` or `null` when no match.
+- `ROUTER_DOMAINS` maps each router skill to the leaf-skill domains it dispatches to.
+- Used by `routeWithExplicit()` in `src/core/routing/hybrid.mjs` to scope BM25 retrieval.
+
+### Router Alias Config (`src/config/aliases.mjs`)
+
+- `ROUTER_ALIASES` — mapping of short aliases to full router skill names:
+  - `next` → `router-next`, `react` → `router-react`, `laravel` → `router-laravel`
+  - `design` → `router-design`, `test` → `router-test`, `meta` → `router-meta`
+- Only aliases whose target router exists in the deployed corpus are valid.
+- Unknown aliases are silently ignored by `detectExplicitSkill`.
+
+### Hybrid Router with Explicit Support (`src/core/routing/hybrid.mjs`)
+
+- `routeHybrid(query, index)` — full hybrid pipeline (BM25 + SLM fallback) for implicit routing.
+- `routeWithExplicit(query, index, routerSkill)` — explicit path: scopes BM25 to the router's domain using `ROUTER_DOMAINS`, then ranks leaf skills within that domain.
+- When SLM is disabled (default), implicit routing uses pure BM25 on the leaf-only index.
+
+### SLM Client (`src/core/slm/`)
+
+- **client.mjs** — HTTP client for local SLM server (e.g. llama-server on :8080). Sends prompts, receives ranked skill suggestions.
+- **parser.mjs** — Parses SLM response JSON into structured `{ skill, confidence }` entries.
+- **prompt-builder.mjs** — Builds classification prompts for the SLM: lists all known skills with descriptions, asks the model to pick the most relevant one.
+- **errors.mjs** — Custom error types for SLM failures (timeout, parse error, network).
+- **index.mjs** — Re-exports the public API.
+- SLM is opt-in via `SKILL_ROUTER_SLM_ENABLED=true`; disabled by default because Phase 2 benchmarks showed Qwen2.5-0.5B underperforms BM25.
+
+### Deploy Subsystem (`src/deploy/`)
+
+- **planner.mjs** — `planDeploy(projectDir, zcodeDir)`: compares `router-skills/` source against the ZCode mirror using SHA-256 hashes. Classifies routers as add/update/unchanged. Reads the disabled registry to classify leaf skills needing disable.
+- **writer.mjs** — `applyDeploy(plan, projectDir, zcodeDir, options)`: copies router SKILL.md files to the mirror, writes `.skill-router-meta.json`, disables leaves via shadow mechanism. Creates a timestamped snapshot before any writes; attempts rollback on error.
+- **verifier.mjs** — `verifyDeploy(projectDir, zcodeDir)`: post-deploy health check. Verifies all expected routers are present with valid meta, all disabled leaves are actually disabled, no orphan router dirs exist.
 
 ### Hierarchical Router (`src/core/routing/hierarchical.mjs`)
 

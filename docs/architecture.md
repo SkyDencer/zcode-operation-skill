@@ -12,39 +12,36 @@ ZCode UserPromptSubmit
         ▼
 ┌──────────────────────────────────────────────────┐
 │  hooks/route.mjs │  Input validation, timeout guard, error boundary    │
+│                  │  Detects explicit $-mentions (detectExplicitSkill)  │
 │                  │  Builds QueryCache, selects routing strategy        │
 │                  │  Fits selected skills within context budget         │
 └────────────────┬───────────────────────────────┘
                  │ JSON payload (prompt, cwd)
                  ▼
-┌──────────────────────────────────────────────────┐
-│  QueryCache.getOrSet()                           │
-│  Key: sha256(normalizedQuery) + indexFingerprint │
-│  TTL: 5 min  │  Max size: 64 entries            │
-└────────────────┬───────────────────────────────┘
-                 │ cache miss -> routing
-                 ▼
-┌──────────────────────────────────────────────────────────────────┐
-│  Router Selector (flat by default, --experimental for hierarch.) │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Flat (default, recommended)                             │    │
-│  │  planRoutes() -> single BM25 pass -> single/multi/       │    │
-│  │  fallback                                                │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  Hierarchical (experimental, deprecated as default)      │    │
-│  │  Stage 1: matchDomainsToQuery() -> top-3 candidate domains│    │
-│  │  Stage 2: BM25 within each candidate domain only         │    │
-│  │  Stage 3: mergeAndRerank() with domain-confidence bonus  │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│                                                                  │
-│  Both paths call rankSkills() from src/core/retriever/bm25.mjs  │
-│  with optional synonym expansion (expander.mjs)                 │
-└────────────────┬───────────────────────────────┘
-                 │
-                 ▼
+         ┌───────┴───────┐
+         │  explicit?    │
+         └───────┬───────┘
+        yes /   │   \  no
+         │      │      │
+         ▼      │       ▼
+┌───────────────────┐ │  ┌──────────────────────────────────────────┐
+│  Explicit Path    │ │  │  Implicit Path                           │
+│                   │ │  │                                          │
+│  detectExplicit-  │ │  │  Build leaf-only index (exclude router-*)│
+│  skill(prompt)    │ │  │  QueryCache.getOrSet()                   │
+│  resolves $mention│ │  │  │                                       │
+│  to router skill  │ │  │  ▼                                       │
+│  strips mention   │ │  │  SLM enabled?                            │
+│  from prompt      │ │  │  │                                       │
+│                   │ │  │  ├─ yes → routeHybrid(query, leafIndex) │
+│  routeWithExplicit│ │  │  └─ no  → rankSkills(query, leafIndex)  │
+│  (scoped BM25 to  │ │  │         (pure BM25, no SLM overhead)    │
+│  router domain)   │ │  │                                          │
+└───────────────────┘ │  └──────────────────────────────────────────┘
+         │            │            │
+         └────────────┴────────────┘
+                      │
+                      ▼
 ┌──────────────────────────────────────────────────────────┐
 │  readSkillContent() -> full SKILL.md text (capped at 4000 │
 │  chars per skill)                                        │
@@ -60,6 +57,8 @@ ZCode UserPromptSubmit
 ┌──────────────────────────────────────────────────────────┐
 │  telemetry logger (JSONL logs) + ring-buffer metrics    │
 │  Never logs raw query text - only SHA-256 hashes        │
+│  Logs: mode (explicit/implicit), tier, slmEnabled,      │
+│  routerMatched, latencyMs                               │
 └────────────────┬───────────────────────────────┘
                  │
                  ▼
@@ -420,6 +419,64 @@ Full report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-sc
 10. **Sync protects user-managed skills** -- Only mirror directories with `.skill-router-meta.json` are modified. Hand-edited or user-created skills are left untouched.
 11. **Disable mechanism is filesystem-based** -- ZCode has no native per-skill disable API. Mirror removal or shadow SKILL.md is the best available approach.
 12. **Two-source index uses project priority** -- When the same skill name appears in project and zcode-user sources, the project version always wins.
+13. **SLM is disabled by default** -- Phase 2 benchmarks proved Qwen2.5-0.5B underperforms BM25 on the 54-skill corpus (Top-1: 20% vs 46.67%; Set Recall: 0.0972 vs 0.7000). Hybrid mode degrades Set Recall. SLM is opt-in via `SKILL_ROUTER_SLM_ENABLED=true` for experimental use.
+
+## Router Skills vs Leaf Skills
+
+The skill corpus is split into two categories, each with a distinct role:
+
+| Aspect | Router Skill | Leaf Skill |
+|--------|-------------|------------|
+| Location | `router-skills/router-{name}/SKILL.md` | `data/skills/{domain}/{skill-name}/SKILL.md` |
+| Purpose | Dispatch to the right leaf skill domain | Contain actual workflow instructions |
+| Size | ~50–80 lines | ~50–200+ lines |
+| Frontmatter | `name`, `description`, `allowed-tools` | `name`, `description`, `keywords`, `domains` |
+| Content | Routing table + trigger conditions | Step-by-step instructions, examples |
+| In implicit BM25 | Excluded (filtered out as `router-*`) | Included |
+| In explicit routing | Resolved via `$mention` detection | Retrieved after router dispatch |
+
+**Key principle:** Routers read leaf skills; leaf skills never reference routers. This creates a clean one-way dependency graph.
+
+The explicit detection engine (`src/core/routing/explicit.mjs`) scans prompts for `$`-prefixed tokens. Aliases are defined in `src/config/aliases.mjs`:
+
+| Alias | Router Skill | Domain |
+|-------|-------------|--------|
+| `$next` | `router-next` | frontend |
+| `$react` | `router-react` | frontend |
+| `$laravel` | `router-laravel` | backend |
+| `$design` | `router-design` | design |
+| `$test` | `router-test` | testing |
+| `$meta` | `router-meta` | meta |
+
+The `ROUTER_DOMAINS` map in `explicit.mjs` provides the domain scoping used by `routeWithExplicit()` in `src/core/routing/hybrid.mjs`.
+
+## When to Enable SLM
+
+SLM routing is disabled by default (`slm.enabled: false`). Enable it only for experimentation or when using a larger model.
+
+Phase 2 benchmark numbers (30-prompt dataset):
+
+| Mode | Top-1 | Set Recall | p50 Latency |
+|------|-------|------------|-------------|
+| BM25-Only | 46.67% | 0.7000 | ~3 ms |
+| SLM-Only | 20.00% | 0.0972 | ~182 ms |
+| Hybrid (BM25→SLM) | 46.67% | 0.5750 | ~1484 ms |
+
+**Do NOT enable SLM in production** with the current 0.5B model. It adds ~1.5 s latency per prompt and does not improve retrieval quality.
+
+To enable SLM for experimentation:
+
+```bash
+SKILL_ROUTER_SLM_ENABLED=true node hooks/route.mjs
+```
+
+Benchmark runner with SLM forced:
+
+```bash
+node tests/slm-benchmark/runner.mjs --mode hybrid --slm
+```
+
+A larger model (1.5B+) or a pre-trained embedding model (Phase 6) would be prerequisites for SLM to become worthwhile.
 
 ## Phase 1 Findings: What Worked and What Did Not
 
