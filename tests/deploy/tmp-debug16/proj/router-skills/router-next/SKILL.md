@@ -1,2 +1,0 @@
-# Next Router
-Content A

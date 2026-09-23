@@ -1,2 +1,0 @@
-# Next Router
-Project content
