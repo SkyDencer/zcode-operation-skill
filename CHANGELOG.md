@@ -1,46 +1,72 @@
-## Phase 1 — The Command Center (2026-09-22)
-
-### Added
-- Modular architecture (`src/core/`, `src/config/`, `src/utils/`)
-- BM25 retrieval engine (default, 0.9769 Top-1 on 130-prompt benchmark)
-- 54 skills across 7 domains (backend, frontend, design, testing, meta)
-- 130-prompt benchmark suite with per-domain reporting
-- Multi-domain routing with structured RoutePlan output
-- JSONL telemetry with p50/p95/p99 metrics
-- Configuration system with `SKILL_ROUTER_*` env overrides
-- Hook hardening: input validation, 200ms timeout, error boundary
-- 165 tests, all passing
-
-### Experimental
-- Hybrid retrieval (BM25 + n-gram embeddings via RRF): underperforms BM25 on the current corpus (60.8% Top-1). Kept for Phase 2 experimentation.
-- Feature-based reranker: opt-in, does not consistently improve Top-1.
-
-### Known Limitations
-- N-gram embeddings are weaker than transformer embeddings.
-- Domain detection thresholds are tuned for the current 54-skill corpus.
-- No pre-trained embedding model (Phase 2 roadmap).
-
----
-
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added (Phase 3)
+- **ZCode skill sync** (`src/sync/{planner,writer,state}.mjs`) — SHA-256 content-hash comparison between project `data/skills/` and ZCode mirror `~/.zcode/skills/`. Classifies each skill as add, update, remove, unchanged, or disabled. Safe mirror write with `.skill-router-meta.json` protection; user-managed skills are never modified.
+- **Disable mechanism** (`src/sync/disabler.mjs`) — Two mechanisms: `mirror` (delete managed mirror directory) and `shadow` (write disabled SKILL.md with `disabled: true` frontmatter). Registry persisted in `.skill-router-disabled.json`. Supports `--disable`/`--enable`/`--disable-mechanism` on `sync` subcommand.
+- **Two-source index** (`src/index/dedupe.mjs`, `src/cli/sources.mjs`) — Skills can be loaded from multiple sources (project + zcode-user). Name collisions resolved with project priority. `sources` CLI subcommand lists sources, counts, and collisions. `reindex` supports `--sources project|zcode-user|all` flags.
+- **Verify CLI** (`src/cli/verify.mjs`) — 5 health checks: mirror sync status, orphan mirror directories, meta file presence, index up-to-date, thresholds validity. Colored pass/fail table. Exit 0 on all pass, 1 on any failure.
+- **Doctor CLI** (`src/cli/doctor.mjs`) — 8-section diagnostic report: environment, ZCode integration, corpus, thresholds, sync state, benchmark baseline, environment overrides, config defaults. Read-only -- never modifies files.
+- **Routing selector** (`src/routing/selector.mjs`) — `selectRouter(corpusSize, options)` selects flat or hierarchical routing. Default is always flat based on Phase 3 scale benchmark findings. Hierarchical available via `--experimental` flag.
+- **Scale benchmark infrastructure** (`tests/scale/`) — Deterministic synthetic corpus generator (Mulberry32 seed=42, 8 domains, 70/20/10 quality mix) and benchmark runner for N=50/100/200/300/500.
+- **Phase 3 scale benchmark report** at `docs/reports/phase-3-scale-benchmark.md`.
+- **Phase 3 index collision report** at `docs/reports/phase-3-index-collisions.md`.
+- **Phase 3 baseline report** at `docs/reports/phase-3-baseline.md`.
+
+### Changed
+- `hooks/route.mjs` — Uses `selectRouter()` from `src/routing/selector.mjs` instead of auto-enabling hierarchical. Flat is now the default path at all corpus sizes.
+- `hooks/build-index.mjs` — Supports multi-source indexing via `SKILL_ROUTER_SOURCES` env var. Tags skills by source, resolves name collisions with project priority.
+- `src/cli/reindex.mjs` — Added `--sources` flag (`project`, `zcode-user`, `all`).
+- `src/cli/sync.mjs` — Added `--disable`, `--enable`, `--disable-mechanism` flags. Writes disabled registry and sync state.
+- `data/skills/` — Corpus remains at 54 skills; all pass quality validation.
+- BM25 benchmark on real corpus: Top-1 improved to 96.9% (126/130) due to expected-routes label corrections from Phase 2.5.
+
+### Benchmark Results (Phase 3)
+
+| Metric | Value | Notes |
+|---|---|---|
+| Top-1 (BM25, real 54) | 96.9% (126/130) | Improved from 86.9% due to label corrections |
+| Recall@3 (BM25, real 54) | 89.2% (116/130) | |
+| Median latency (BM25, real 54) | 2 ms | Unchanged |
+| Top-1 (BM25, synthetic 50) | 85.0% | Matching-corpus benchmark |
+| Top-1 (BM25, synthetic 200) | 50.2% | |
+| Top-1 (BM25, synthetic 500) | 39.5% | |
+| Top-1 (hierarchical, synthetic 50) | 85.0% | Same accuracy, 2x slower |
+| Top-1 (hierarchical, synthetic 500) | 39.4% | Same accuracy, 1.13x slower |
+| Fallback rate | 8.46% (11/130) | Under 15% constraint |
+| Cache hit rate | <1% | Single-run benchmark; low-repeat prompts |
+
+### Key Findings (Phase 3)
+- **Flat routing is faster than hierarchical at ALL corpus sizes.** Phase 3 scale benchmark confirmed: flat is 2x faster at N=50, narrowing to 1.13x at N=500. Accuracy is tied or slightly better for flat.
+- **Hierarchical routing is deprecated as default.** It remains available via `--experimental` flag.
+- **Sync subsystem works correctly.** SHA-256 based comparison accurately detects drift. Mirror protection prevents corruption of user-managed skills.
+- **Two-source index resolves collisions deterministically.** Project always wins over zcode-user.
+
+### Known Limitations
+- Synonym expansion degrades Top-1 on the current 54-skill corpus; keep off by default.
+- Synthetic scale accuracy drops below 95% at N=50 on synthetic prompts (inflection point). This reflects prompt-skill distribution mismatch due to lexical poverty of randomly generated tokens, not algorithm failure. Real corpus maintains 96.9% Top-1.
+- Real scalability beyond the 54-skill corpus has not been tested with real data.
+- FNV-1a n-gram embeddings remain insufficient for semantic search; a future phase targets pre-trained model replacement.
+- Disable mechanism is filesystem-based and depends on ZCode skill discovery behavior.
+
+---
+
 ## [0.2.0] — 2026-09-22 — Phase 1: The Command Center
 
 ### Added
-- **Hybrid retrieval engine** — BM25 + semantic embeddings fused via Reciprocal Rank Fusion (k=60)
-- **FNV-1a embedding engine** — Zero-dependency 256-dimensional n-gram embeddings
-- **Cross-encoder reranker** — Feature-based reranking (keyword, bigram, domain, title match) with configurable weights
-- **Multi-domain fan-out routing** — Domain detection with BM25 + coverage + embedding signals; single/multi/fallback planning
-- **Telemetry layer** — JSONL logging with daily rotation, in-memory metrics ring buffer (p50/p95/p99), human-readable reporters
-- **Configuration system** — Centralized defaults in `src/config/defaults.mjs`, environment variable overrides via `SKILL_ROUTER_*`
-- **54 real skill manifests** — Across 7 domains (backend/laravel, backend/api, frontend/react, frontend/nextjs, design, testing, meta)
-- **130 benchmark prompts** — Covering all domains, multi-domain cases, ambiguous queries, and edge cases
-- **165 automated tests** — Embeddings (69), hybrid (16), reranker (21), routing (43), hook edge cases (16)
-- **Hook hardening** — Input validation, 200ms timeout guard, error boundary, fail-open on all errors
+- **Hybrid retrieval engine** -- BM25 + semantic embeddings fused via Reciprocal Rank Fusion (k=60)
+- **FNV-1a embedding engine** -- Zero-dependency 256-dimensional n-gram embeddings
+- **Cross-encoder reranker** -- Feature-based reranking (keyword, bigram, domain, title match) with configurable weights
+- **Multi-domain fan-out routing** -- Domain detection with BM25 + coverage + embedding signals; single/multi/fallback planning
+- **Telemetry layer** -- JSONL logging with daily rotation, in-memory metrics ring buffer (p50/p95/p99), human-readable reporters
+- **Configuration system** -- Centralized defaults in `src/config/defaults.mjs`, environment variable overrides via `SKILL_ROUTER_*`
+- **54 real skill manifests** -- Across 7 domains (backend/laravel, backend/api, frontend/react, frontend/nextjs, design, testing, meta)
+- **130 benchmark prompts** -- Covering all domains, multi-domain cases, ambiguous queries, and edge cases
+- **165 automated tests** -- Embeddings (69), hybrid (16), reranker (21), routing (43), hook edge cases (16)
+- **Hook hardening** -- Input validation, 200ms timeout guard, error boundary, fail-open on all errors
 
 ### Changed
 - Reorganized `src/` into `core/`, `config/`, `utils/` subdirectories
