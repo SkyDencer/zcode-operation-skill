@@ -9,6 +9,7 @@
 import { execSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const HOOK_PATH = resolve('hooks/route.mjs');
 const TEST_DIR = resolve('.test-hook-temp');
@@ -167,6 +168,36 @@ check('special JSON chars in prompt exits 0', () => {
 check('single char prompt exits 0', () => {
   const r = runHook(JSON.stringify({ prompt: 'x', cwd: TEST_DIR }));
   assert(r.exitCode === 0, 'single char → exit 0');
+});
+
+// 17. Hook is cwd-independent — runs from tmpdir (no index) with safeCwd pointing
+//     to TEST_DIR; should exit 0 and write output.json at safeCwd/.zcode/.
+check('hook is cwd-independent', () => {
+  const runFromTmpdir = (input) => {
+    try {
+      execSync(`node "${HOOK_PATH}"`, {
+        input,
+        cwd: tmpdir(),
+        timeout: 5000,
+        stdio: ['pipe', 'ignore', 'pipe'],
+      });
+      return { exitCode: 0, stdout: '', stderr: '' };
+    } catch (err) {
+      return {
+        exitCode: err.status ?? 1,
+        stdout: err.stdout ?? '',
+        stderr: err.stderr ?? '',
+      };
+    }
+  };
+  // Index is at hooks/../data/skill-index.json (resolved via import.meta.url),
+  // so it should be found regardless of process.cwd() which is tmpdir().
+  const r = runFromTmpdir(JSON.stringify({ prompt: 'Laravel eager loading optimization', cwd: TEST_DIR }));
+  assert(r.exitCode === 0, 'hook from tmpdir exits 0');
+  const outputPath = join(TEST_DIR, '.zcode', 'output.json');
+  assert(existsSync(outputPath), 'output.json created at safeCwd path');
+  const output = JSON.parse(readFileSync(outputPath, 'utf-8'));
+  assert('hookSpecificOutput' in output, 'output.json has hookSpecificOutput');
 });
 
 // Cleanup

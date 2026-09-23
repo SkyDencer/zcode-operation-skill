@@ -8,17 +8,27 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { rankSkills, readSkillContent } from '../src/index.mjs';
-import { logRetrieve, logError } from '../src/core/telemetry/logger.mjs';
+import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { planRoutes } from '../src/core/routing/planner.mjs';
+import { routeHierarchical } from '../src/core/routing/hierarchical.mjs';
+import { fitWithinBudget } from '../src/core/budget/manager.mjs';
 import { now } from '../src/utils/time.mjs';
+import { QueryCache } from '../src/core/cache/query-cache.mjs';
+import { selectRouter } from '../src/routing/selector.mjs';
 
-const INDEX_PATH = resolve('data/skill-index.json');
+const HOOK_DIR = resolve(fileURLToPath(import.meta.url), '..');
+const INDEX_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.json');
 
 const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
+const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
+
+// CLI flag: --hierarchical forces hierarchical mode
+const useHierarchical = process.argv.includes('--hierarchical');
 
 /**
  * Build the additionalContext string from ranked skills.
@@ -95,21 +105,48 @@ async function main() {
   }
 
   // Timeout guard: wrap retrieval in Promise.race
+  // Build query cache keyed by index fingerprint
+  const cache = new QueryCache({ index, maxSize: 64, ttlMs: 300000 });
   let plan;
+  let routerMode;
   try {
-    plan = await Promise.race([
-      planRoutes(trimmedPrompt, index),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
-      ),
-    ]);
+    // Select routing strategy based on corpus size and options
+    const routerMode = selectRouter(index.length, {
+      mode: useHierarchical ? 'hierarchical' : undefined,
+      experimental: process.argv.includes('--experimental'),
+    });
+
+    if (routerMode === 'hierarchical') {
+      plan = await cache.getOrSet(trimmedPrompt, async (query, idx) => {
+        return await Promise.race([
+          routeHierarchical(query, idx),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
+          ),
+        ]);
+      });
+    } else {
+      plan = await cache.getOrSet(trimmedPrompt, async (query, idx) => {
+        return await Promise.race([
+          planRoutes(query, idx),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('routing timeout')), timeoutMs)
+          ),
+        ]);
+      });
+    }
   } catch (err) {
     increment('errors.rerouting');
     await logError({ query: trimmedPrompt, error: err.message });
     process.exit(0);
   }
 
-  const { ranked, mode, domains, primary } = plan;
+  // Normalize plan shape: hierarchical uses 'skills' + 'primaryDomain',
+  // planner uses 'ranked' + 'primary'. Unify to 'ranked' + 'primary'.
+  const ranked = plan.skills ?? plan.ranked;
+  const primary = plan.primaryDomain ?? plan.primary;
+  const mode = plan.mode;
+  const domains = plan.domains;
   const latency = Math.round(performance.now() - startTime);
   recordTiming('retrieve.latency', latency);
   increment('retrieve.count');
@@ -120,14 +157,54 @@ async function main() {
     durationMs: latency,
   });
 
+  // Log cache stats when available
+  if (cache) {
+    const cs = cache.getStats();
+    await logRecord({
+      event: 'cache',
+      query: trimmedPrompt,
+      cacheHits: cs.hits,
+      cacheMisses: cs.misses,
+      cacheTotal: cs.total,
+      cacheHitRate: cs.hitRate,
+      cacheSize: cache.size,
+    });
+  }
+
   if (ranked.length === 0) {
     process.exit(0);
   }
 
   increment(`mode.${mode}`);
 
+  // Log routing strategy selection for telemetry
+  await logRecord({
+    event: 'route',
+    query: trimmedPrompt,
+    corpusSize: index.length,
+    routerMode,
+  });
+
   const skillsWithContent = await readSkillContent(ranked);
-  const additionalContext = buildContext(skillsWithContent);
+
+  // Fit into context budget with paragraph-safe truncation
+  const { selected, totalChars } = fitWithinBudget(skillsWithContent, {
+    maxChars: budgetMaxChars,
+    minPerSkill: budgetMinPerSkill,
+  });
+
+  // Log actual injected context size for telemetry
+  await logRecord({
+    event: 'budget',
+    query: trimmedPrompt,
+    totalSkills: skillsWithContent.length,
+    selectedCount: selected.length,
+    rawTotalChars: skillsWithContent.reduce((s, sk) => s + sk.content.length, 0),
+    injectedChars: totalChars,
+    budgetMaxChars,
+  });
+
+  const additionalContext = buildContext(selected);
 
   const output = {
     hookSpecificOutput: {
@@ -149,8 +226,8 @@ async function main() {
     const fs = await import('node:fs/promises');
     await fs.mkdir(join(safeCwd, '.zcode'), { recursive: true });
     await fs.writeFile(outputPath, JSON.stringify(output), 'utf-8');
-  } catch {
-    writeFileSync('.zcode/output.json', JSON.stringify(output), 'utf-8');
+  } catch (err) {
+    writeFileSync(join(safeCwd, '.zcode', 'output.json'), JSON.stringify(output), 'utf-8');
   }
 
   process.exit(0);
@@ -158,6 +235,6 @@ async function main() {
 
 // Error boundary: any uncaught error → exit 0, log to stderr
 main().catch((err) => {
-  console.error('[skill-router] unhandled error:', err.message);
+  if (process.env.SKILL_ROUTER_DEBUG) console.error('[skill-router] unhandled error:', err.message);
   process.exit(0);
 });
