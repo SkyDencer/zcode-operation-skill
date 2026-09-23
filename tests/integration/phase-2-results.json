@@ -1,30 +1,24 @@
 {
   "flatReal": {
-    "top1Accuracy": 0.8692,
-    "top1Hits": 113,
+    "top1Accuracy": 0.9077,
+    "top1Hits": 118,
     "total": 130,
-    "medianLatencyMs": 2.5,
-    "p95LatencyMs": 3.92
+    "medianLatencyMs": 2.17,
+    "p95LatencyMs": 3.18
   },
   "hierarchicalReal": {
-    "top1Accuracy": 0.3769,
-    "top1Hits": 49,
+    "top1Accuracy": 0.8923,
+    "top1Hits": 116,
     "total": 130,
-    "medianLatencyMs": 3.4,
-    "p95LatencyMs": 4.23
+    "medianLatencyMs": 4.17,
+    "p95LatencyMs": 4.58
   },
   "synthetic200": {
     "top1Accuracy": 0.0231,
     "top1Hits": 3,
     "total": 130,
     "skills": 207,
-    "medianLatencyMs": 7.13,
-    "p95LatencyMs": 8.91
-  },
-  "testSuite": {
-    "totalPassed": 565,
-    "totalFailed": 3,
-    "total": 568,
-    "skipped": 0
+    "medianLatencyMs": 6.53,
+    "p95LatencyMs": 7.76
   }
 }

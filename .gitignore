@@ -23,3 +23,15 @@ extract.js
 extract2.js
 
 data/skill-embeddings.json
+
+# Generated / runtime files
+.skill-router-sync-state.json
+data/skill-embeddings.json
+data/skills-synthetic/
+data/skills-synthetic-*/
+data/domains/
+# Debug artifacts
+debug-*.mjs
+tests/e2e/tmp-*
+tests/e2e/debug-*
+tests/scale/gen-debug*.mjs

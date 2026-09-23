@@ -83,8 +83,9 @@ export function reportTuning(result, options = {}) {
   // ── Grid summary ──────────────────────────────────────────────────────────
   lines.push('### Grid Search Summary');
   lines.push('');
-  const highCount = Math.floor((0.95 - 0.70) / 0.05) + 1;
-  const mediumCount = Math.floor((0.75 - 0.40) / 0.05) + 1;
+  // Compute counts using integer arithmetic to avoid floating-point drift
+  const highCount = Math.round((0.95 - 0.70) / 0.05) + 1;
+  const mediumCount = Math.round((0.75 - 0.40) / 0.05) + 1;
   lines.push(`- **High range:** [0.70, 0.95] step 0.05 (${highCount} values)`);
   lines.push(`- **Medium range:** [0.40, 0.75] step 0.05 (${mediumCount} values)`);
   lines.push(`- **Valid combinations (medium < high):** ${result.gridEvaluated}`);
@@ -97,7 +98,7 @@ export function reportTuning(result, options = {}) {
 
 // ── CLI entry point ──────────────────────────────────────────────────────────
 
-if (resolve(process.argv[1]) === resolve(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.url.split('/').slice(3).join('/'))) {
   const BASE = resolve('.');
   const PROMPTS_PATH = resolve(BASE, 'tests/prompts.json');
   const EXPECTED_PATH = resolve(BASE, 'tests/expected-routes.json');

@@ -39,5 +39,9 @@ export { tokenize, normalizeText, filterStopwords, bigrams } from './utils/text.
 export { readFileJson, writeFileJson, walkDir, resolvePath } from './utils/fs.mjs';
 export { now, measure, percentile } from './utils/time.mjs';
 
+// Cache
+export { LRUCache } from './core/cache/lru.mjs';
+export { QueryCache, computeIndexFingerprint } from './core/cache/query-cache.mjs';
+
 // Loader
 export { parseFrontmatter, loadSkills } from './loader.mjs';

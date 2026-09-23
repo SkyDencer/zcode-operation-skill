@@ -56,3 +56,10 @@ A phase is complete only when ALL four criteria are met:
 | `data/mock-skills/*.json` | Fixture skill manifests |
 | `docs/*.md` | Project documentation |
 | `.zcode-plugin/plugin.json` | Plugin manifest |
+
+
+## Environment Gotcha
+
+On this Windows machine, npm is not on the subprocess PATH. Always invoke
+scripts with node <file> or node bin/skill-router.mjs <subcommand>.
+Do not use npm test, npm run, or npx in automation scripts.

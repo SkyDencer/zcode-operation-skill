@@ -89,10 +89,89 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 - **Date:** 2026-09-21
 - **Status:** Accepted
 
-## D13 — Embeddings persisted to data/skill-embeddings.json
+## D14 — Optional synonym expansion via --expand flag
 
-- **Question:** Where to persist pre-computed embeddings?
-- **Decision:** `npm run build-index` writes both `data/skill-index.json` (skill objects) and `data/skill-embeddings.json` (name → Float32Array as JSON array). The hybrid retriever builds the Map in-memory from SKILL.md files if no pre-built index is passed.
-- **Rationale:** Keeps the index self-contained; embedding build takes 3–5 ms for the full corpus (10 skills). Persisting avoids redundant recomputation at runtime.
-- **Date:** 2026-09-21
+- **Question:** Should query expansion improve lexical recall by adding synonyms?
+- **Decision:** Add optional synonym expansion via `--expand on|off` flag in the benchmark. Expansion is opt-in and defaults to off (no change to baseline BM25 behavior). The expander (`src/core/retrieval/expander.mjs`) applies IDF filtering (MIN_IDF_THRESHOLD=0.8), a cap of MAX_EXPANDED_TOKENS=3, and replicates original tokens 3x vs expanded tokens 1x in the BM25 query array.
+- **Rationale:** Synonym expansion was evaluated against the 130-prompt real corpus. BM25 baseline remains 90% Top-1 with --expand off. With --expand on, Top-1 drops to 80% because low-IDF synonyms add noise that dilutes discriminative signal. The feature is preserved as an opt-in experiment; future work can tune thresholds or use edit-distance matching for more precise expansions. Curated synonym pairs live in `data/synonyms-curated.json` (54 entries across domain terms, abbreviations, and framework aliases).
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D15 — Query cache keyed by index fingerprint
+
+- **Question:** How to cache route plans without serving stale results after an index rebuild?
+- **Decision:** Cache key = `{sha256(normalizedQuery)}:{indexFingerprint}` where the fingerprint is an FNV-1a 64-bit hash of the sorted skill name list. Any `build-index` call recomputes the fingerprint, causing `QueryCache.rebuild()` to invalidate all entries. TTL is 5 minutes as a secondary invalidation mechanism.
+- **Rationale:** Simple string-keyed caching would serve stale results indefinitely after a rebuild. Fingerprint-based keying ensures correctness without requiring explicit cache-clear hooks. The 5-minute TTL handles the edge case where the index file is rebuilt while the process is still running but the fingerprint hasn't changed (e.g., same skills reordered).
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D16 — Paragraph-safe context truncation
+
+- **Question:** How to truncate skill content to fit a character budget without breaking readability?
+- **Decision:** Use `truncateAtParagraph()` which splits on double-newline boundaries (`\n\n`). Never splits mid-paragraph. The budget manager (`fitWithinBudget`) distributes the total budget equally across selected skills with a per-skill floor of 500 characters. If the budget is tight, skills below the floor are kept at minimum and larger skills absorb the excess.
+- **Rationale:** Hard character truncation mid-word produces garbled markdown that confuses the model. Paragraph-safe truncation preserves structural integrity of headings, code blocks, and prose. Equal distribution with a floor ensures every skill gets at least a usable minimum.
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D17 — Analytics preserve privacy via SHA-256 hashing
+
+- **Question:** Should raw prompts be stored in analytics logs?
+- **Decision:** No. Raw prompts are hashed with SHA-256 before being stored or displayed in analytics reports. The hash is collision-resistant and irreversible, making it impossible to reconstruct the original prompt from the logged data. Top-10 most frequent prompt hashes are shown; no raw text appears anywhere.
+- **Rationale:** Prompts may contain sensitive project information (API keys, proprietary logic, personal data). Hashing eliminates this risk while preserving the ability to detect recurring query patterns. This aligns with the project's zero-secrets principle and makes the plugin safe for public repos.
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D18 — Adaptive thresholds loaded from data/thresholds.json
+
+- **Question:** Should confidence thresholds be hardcoded or data-driven?
+- **Decision:** Load thresholds from `data/thresholds.json` (produced by `src/tuning/optimizer.mjs`) at module load time in `src/config/defaults.mjs`. Fall back to hardcoded defaults (high=0.85, medium=0.60) if the file is absent or malformed. The optimizer runs a grid search over 45 (high, medium) pairs on the benchmark corpus and writes the optimal pair to the file.
+- **Rationale:** Hardcoded thresholds work well for the initial corpus but will drift as skills are added or removed. Data-driven thresholds adapt to the current corpus distribution. The fallback ensures the system never starts with invalid thresholds even if the optimizer hasn't been run yet.
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D19 — Domain registry auto-populated from skill corpus
+
+- **Question:** Who maintains `data/domains/<name>/meta.json` files?
+- **Decision:** `hooks/build-index.mjs` auto-populates domain metadata from the skill corpus during every index build. For each domain found in skills, it merges existing metadata with aggregates from the corpus (union of all keyword sets, combined descriptions, skill counts). If no `meta.json` exists, it creates one. Users can manually edit domain metadata; changes are preserved on rebuild unless a new skill changes the aggregated values.
+- **Rationale:** Manual domain management is error-prone and doesn't scale. Auto-population ensures the hierarchical router always has current metadata without requiring users to maintain it separately. Manual edits are preserved, giving users control over domain descriptions and keyword priorities.
+- **Date:** 2026-09-22
+- **Status:** Accepted
+
+## D20 — Quality validation enforced at import and build time
+
+- **Question:** Should invalid skills be accepted into the corpus?
+- **Decision:** No. The `import` CLI command runs `validateSkill()` on every candidate before copying it to `data/skills/`. Invalid skills are rejected with a detailed report. The `validate` CLI command can be run at any time to audit the entire corpus. Skills that fail validation are not indexed and do not appear in retrieval results. A fix script (`scripts/fix-skill-quality.mjs`) is provided to automatically correct common issues (name prefix, content padding).
+- **Rationale:** Poor-quality skills degrade retrieval accuracy by introducing noise into the index. Enforcing validation at import time prevents bad data from entering the corpus. The fix script reduces the burden on skill authors by automating common corrections.
+- **Date:** 2026-09-22
+- **Status:** Accepted
+## D21 — Windows npm PATH constraint
+
+- **Date:** 2026-09-22
+- **Context:** On this Windows machine, npm is not on the subprocess PATH. Automation scripts that spawn child processes cannot rely on npm test, npm run, or npx.
+- **Decision:** All automation must use node <file> directly. Created scripts/run-all-tests.mjs as a replacement for npm test. Documented in AGENTS.md.
+- **Rationale:** The ZCode plugin environment runs Node.js scripts directly; npm is a wrapper that depends on PATH resolution which behaves differently on Windows in subprocess contexts.
+- **Status:** Active
+
+## D23 — Skill disable via mirror directory removal (best-guess)
+
+- **Question:** How should users disable individual skills in the ZCode mirror?
+- **Decision:** Since ZCode has no documented per-skill disable API, implement a filesystem-based workaround: `disableSkill()` removes the managed mirror directory (or writes a shadow `SKILL.md` with `disabled: true` frontmatter). The skill disappears from ZCode's discovery because the `SKILL.md` is gone. Re-enable by re-copying from the project source. Registry persisted in `.skill-router-disabled.json` at the project root.
+- **Rationale:** ZCode discovers skills purely by filesystem presence in configured scan paths (`~/.zcode/skills/`, `<repo>/.zcode/skills/`). There is no `disabled: true` frontmatter flag, no `.zcode-skill-state.json`, and no skill-preferences registry — confirmed by examining `~/.zcode/cli/config.json`, `~/.zcode/v2/setting.json`, the zcode-guide SKILL.md, and the actual 53 skill directories in `~/.zcode/skills/`. The mirror-deletion approach is safe: only directories with `.skill-router-meta.json` are touched. User-created skills are never modified.
+- **Date:** 2026-09-23
+- **Status:** Accepted
+
+## D22 — Skill sync uses SHA-256 content hashing, not path or size
+
+- **Question:** How to detect changes between project skills and the ZCode mirror?
+- **Decision:** Compute SHA-256 of the full SKILL.md file content (including frontmatter). Two skills with identical content hash are classified as `unchanged` regardless of when they were last written. Differences in hash classify as `update`; presence in one side only classifies as `add` or `remove`.
+- **Rationale:** Content-hash comparison is order-independent, handles renames correctly (a renamed file has different path but same hash → update), and avoids false positives from metadata-only changes (e.g., filesystem timestamps). SHA-256 is collision-resistant and available in Node.js built-ins with zero dependencies. Path-based or size-based comparison would miss content changes that happen to produce the same file size, or produce false updates when only timestamps differ.
+- **Date:** 2026-09-23
+- **Status:** Accepted
+
+## D24 — Hierarchical routing deprecated in favor of flat BM25
+
+- **Question:** Should hierarchical (domain-first) routing be the default for large corpora?
+- **Decision:** No. `src/routing/selector.mjs` always selects `"flat"` as the default strategy regardless of corpus size. Hierarchical remains available via `--experimental` flag but is considered deprecated.
+- **Rationale:** Phase 3 scale benchmark (docs/reports/phase-3-scale-benchmark.md) showed flat BM25 is faster at every corpus size (2ms vs 4ms at N=50, 15ms vs 17ms at N=500), with equal or slightly better Top-1 accuracy at all scales. The previously assumed inflection point at N=100 (auto-enable hierarchical) was not supported by data. The `--hierarchical` CLI flag still works for explicit opt-in.
+- **Date:** 2026-09-23
 - **Status:** Accepted

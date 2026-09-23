@@ -24,11 +24,14 @@ const SCHEMA = {
   SKILL_ROUTER_RRF_K: { min: 1, max: 1000, type: 'int' },
   SKILL_ROUTER_DOMAIN_THRESHOLD: { min: 0, max: 1, type: 'float' },
   SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD: { min: 0, max: 1, type: 'float' },
+  SKILL_ROUTER_HIERARCHICAL_CONFIDENCE_THRESHOLD: { min: 0, max: 1, type: 'float' },
   SKILL_ROUTER_HIGH_THRESHOLD: { min: 0, max: 1, type: 'float' },
   SKILL_ROUTER_MEDIUM_THRESHOLD: { min: 0, max: 1, type: 'float' },
   SKILL_ROUTER_TIMEOUT_MS: { min: 50, max: 30000, type: 'int' },
   SKILL_ROUTER_MAX_PROMPT_LENGTH: { min: 128, max: 102400, type: 'int' },
   SKILL_ROUTER_MAX_OUTPUT_LENGTH: { min: 1024, max: 102400, type: 'int' },
+  SKILL_ROUTER_BUDGET_MAX_CHARS: { min: 1024, max: 102400, type: 'int' },
+  SKILL_ROUTER_BUDGET_MIN_PER_SKILL: { min: 100, max: 10240, type: 'int' },
 };
 
 /**
@@ -88,11 +91,14 @@ export function mergeEnvOverrides(defaults) {
       SKILL_ROUTER_RRF_K: ['rrf', 'k'],
       SKILL_ROUTER_DOMAIN_THRESHOLD: ['routing', 'domainThreshold'],
       SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD: ['routing', 'multiDomainThreshold'],
+      SKILL_ROUTER_HIERARCHICAL_CONFIDENCE_THRESHOLD: ['routing', 'hierarchicalConfidenceThreshold'],
       SKILL_ROUTER_HIGH_THRESHOLD: ['confidence', 'highThreshold'],
       SKILL_ROUTER_MEDIUM_THRESHOLD: ['confidence', 'mediumThreshold'],
       SKILL_ROUTER_TIMEOUT_MS: ['hook', 'timeoutMs'],
       SKILL_ROUTER_MAX_PROMPT_LENGTH: ['hook', 'maxPromptLength'],
       SKILL_ROUTER_MAX_OUTPUT_LENGTH: ['hook', 'maxOutputLength'],
+      SKILL_ROUTER_BUDGET_MAX_CHARS: ['budget', 'maxChars'],
+      SKILL_ROUTER_BUDGET_MIN_PER_SKILL: ['budget', 'minPerSkill'],
     };
     const path = pathMap[key];
     if (!path) continue;

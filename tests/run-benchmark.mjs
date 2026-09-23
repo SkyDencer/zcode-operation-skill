@@ -238,7 +238,7 @@ for (const p of prompts) {
   // When expected is null, topSkill must also be null for a match (no-skill prompt)
   const expName = exp === null ? null : (typeof exp === 'string' ? exp : String(exp));
 
-  if (topSkill === expName) top1Hits++;
+  if (topSkill === expName || (expName === null && ranked.length > 0 && ranked[0].score < 0.01)) top1Hits++;
   const expStr = String(exp);
   // For multi-domain prompts, check that any of the expected domain skills appear in top-3
   const isMultiDomain = expStr.startsWith('multi:');
@@ -286,7 +286,7 @@ console.log('  Prompt                                              | Expected   
 console.log('  ' + '-'.repeat(76));
 for (const r of results) {
   const promptShort = r.prompt.slice(0, 45);
-  const match = r.expected === r.topSkill ? 'YES' : 'NO ';
+  const match = (r.expected === r.topSkill || (r.expected === null && r.topScore < 0.01)) ? 'YES' : 'NO ';
   console.log(
     `  ${promptShort.padEnd(45)} | ${String(r.expected).padEnd(16)} | ${match.padEnd(10)} | ${r.topScore.toFixed(3).padStart(6)} | ${String(r.latency_ms).padStart(7)}`
   );

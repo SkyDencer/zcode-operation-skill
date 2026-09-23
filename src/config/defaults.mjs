@@ -66,6 +66,8 @@ export function getDefaults() {
     routing: {
       domainThreshold: 0.80,
       multiDomainThreshold: 0.50,
+      hierarchicalTopDomains: 3,
+      hierarchicalConfidenceThreshold: 0.08,
     },
     confidence: {
       highThreshold: _thresholds?.high ?? 0.85,
@@ -75,6 +77,10 @@ export function getDefaults() {
       timeoutMs: 200,
       maxPromptLength: 10240,
       maxOutputLength: 30000,
+    },
+    budget: {
+      maxChars: 24000,
+      minPerSkill: 500,
     },
   };
 }
@@ -121,6 +127,8 @@ export function mergeWithEnv(defaults) {
   override('hook.timeoutMs', 'SKILL_ROUTER_TIMEOUT_MS');
   override('hook.maxPromptLength', 'SKILL_ROUTER_MAX_PROMPT_LENGTH');
   override('hook.maxOutputLength', 'SKILL_ROUTER_MAX_OUTPUT_LENGTH');
+  override('budget.maxChars', 'SKILL_ROUTER_BUDGET_MAX_CHARS');
+  override('budget.minPerSkill', 'SKILL_ROUTER_BUDGET_MIN_PER_SKILL');
 
   return cfg;
 }

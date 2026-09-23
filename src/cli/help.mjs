@@ -18,7 +18,12 @@ Subcommands:
   reindex    Rebuild the BM25 index and embeddings
   benchmark  Run the benchmark suite
   stats      Show corpus statistics (counts, domains, keywords)
-  import     Bulk import skills from a directory (placeholder)
+  analytics  Show usage analytics from routing logs
+  import     Bulk import skills from a directory
+  sync       Sync project skills to the ZCode mirror
+  sources    List current sources and skill counts
+  verify     Health check: sync drift, orphans, index integrity, thresholds
+  doctor     Diagnostic report: environment, corpus, benchmarks, overrides
   help       Show this help message
 
 Examples:
@@ -29,6 +34,8 @@ Examples:
   node bin/skill-router.mjs remove backend-my-skill
   node bin/skill-router.mjs stats
   node bin/skill-router.mjs benchmark --mode bm25
+  node bin/skill-router.mjs verify
+  node bin/skill-router.mjs doctor
 
 Options:
   --skills-dir <dir>   Override the default skills directory (default: data/skills)
