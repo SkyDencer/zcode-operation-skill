@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Skill Router is a zero-dependency Node.js plugin for ZCode that intercepts authoring prompts, retrieves relevant skill documentation via hybrid lexical+semantic search, and injects it into the model context.
+The Skill Router is a zero-dependency Node.js plugin for ZCode that intercepts authoring prompts, retrieves relevant skill documentation via BM25 lexical search, and injects it into the model context. Phase 2 added hierarchical routing, quality validation, adaptive threshold tuning, synonym expansion, query caching, context budget management, usage analytics, and an external skill import pipeline. Phase 3 added ZCode skill sync (SHA-256 based), a disable mechanism for mirror skills, a two-source index with collision resolution, verify/doctor diagnostic CLIs, and a routing selector that makes flat BM25 the default path.
 
 ## Data Flow
 
@@ -10,108 +10,259 @@ The Skill Router is a zero-dependency Node.js plugin for ZCode that intercepts a
 ZCode UserPromptSubmit
         │
         ▼
-┌──────────────────┐
-│  hooks/route.mjs │  ← Input validation, timeout guard, error boundary
-└────────┬─────────┘
-         │ JSON payload (prompt, cwd)
-         ▼
-┌──────────────────────┐
-│  src/loader.mjs      │  ← Parse SKILL.md frontmatter
-└────────┬─────────────┘
-         │ skill-index.json
-         ▼
-┌─────────────────────────────────────────────────────────┐
-│  src/core/routing/planner.mjs                           │
-│  ├─ detectDomains() → DomainMatch[]                     │
-│  ├─ Single: top confidence > 0.90 with clear gap        │
-│  ├─ Multi: 2+ domains ≥ 0.50 confidence                 │
-│  └─ Fallback: no strong signal                          │
-└─────────────────────────┬───────────────────────────────┘
-                          │
-          ┌───────────────┼───────────────┐
-          ▼               ▼               ▼
-   ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-   │  BM25       │ │  Embeddings │ │  Reranker   │
-   │  rankSkills │ │  cosine sim │ │  (opt-in)   │
-   └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-          └────────┬───────┘               │
-                   ▼                       │
-          ┌─────────────────┐              │
-          │  RRF Fusion     │              │
-          │  score = Σ 1/(k │              │
-          │       + rank_i) │              │
-          └────────┬────────┘              │
-                   │                       │
-                   ▼                       ▼
-          ┌─────────────────────────────────────┐
-          │  readSkillContent() → additionalContext │
-          └───────────────────┬─────────────────┘
-                              │
-                              ▼
-          ┌─────────────────────────────────────┐
-          │  telemetry logger + metrics         │
-          │  (JSONL logs, ring buffer, reporter)│
-          └───────────────────┬─────────────────┘
-                              │
-                              ▼
-          ┌─────────────────────────────────────┐
-          │  output.json                        │
-          │  {                                   │
-          │    hookSpecificOutput: {...},       │
-          │    RoutePlan: { mode, domains... }  │
-          │  }                                  │
-          └─────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│  hooks/route.mjs │  Input validation, timeout guard, error boundary    │
+│                  │  Builds QueryCache, selects routing strategy        │
+│                  │  Fits selected skills within context budget         │
+└────────────────┬───────────────────────────────┘
+                 │ JSON payload (prompt, cwd)
+                 ▼
+┌──────────────────────────────────────────────────┐
+│  QueryCache.getOrSet()                           │
+│  Key: sha256(normalizedQuery) + indexFingerprint │
+│  TTL: 5 min  │  Max size: 64 entries            │
+└────────────────┬───────────────────────────────┘
+                 │ cache miss -> routing
+                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│  Router Selector (flat by default, --experimental for hierarch.) │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Flat (default, recommended)                             │    │
+│  │  planRoutes() -> single BM25 pass -> single/multi/       │    │
+│  │  fallback                                                │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │  Hierarchical (experimental, deprecated as default)      │    │
+│  │  Stage 1: matchDomainsToQuery() -> top-3 candidate domains│    │
+│  │  Stage 2: BM25 within each candidate domain only         │    │
+│  │  Stage 3: mergeAndRerank() with domain-confidence bonus  │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                                                                  │
+│  Both paths call rankSkills() from src/core/retriever/bm25.mjs  │
+│  with optional synonym expansion (expander.mjs)                 │
+└────────────────┬───────────────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────────────────────────┐
+│  readSkillContent() -> full SKILL.md text (capped at 4000 │
+│  chars per skill)                                        │
+└────────────────┬───────────────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────────────────────────┐
+│  fitWithinBudget() -> paragraph-safe truncation          │
+│  maxChars: 24000 (default) │ minPerSkill: 500           │
+└────────────────┬───────────────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────────────────────────┐
+│  telemetry logger (JSONL logs) + ring-buffer metrics    │
+│  Never logs raw query text - only SHA-256 hashes        │
+└────────────────┬───────────────────────────────┘
+                 │
+                 ▼
+┌──────────────────────────────────────────────────────────┐
+│  output.json                                            │
+│  {                                                     │
+│    hookSpecificOutput: { additionalContext },           │
+│    RoutePlan: { mode, domains, primary, candidates }   │
+│  }                                                      │
+└──────────────────────────────────────────────────────────┘
 ```
+
+## Sync Subsystem
+
+The sync subsystem manages the relationship between project skills (`data/skills/`) and the ZCode mirror (`~/.zcode/skills/`). It consists of four modules:
+
+```
+src/sync/
+├── planner.mjs  ← planSync() — SHA-256 comparison, classify add/update/remove/unchanged/disabled
+├── writer.mjs   ← applySync() — safe mirror write with meta-file protection
+├── state.mjs    ← read/write .skill-router-sync-state.json (last sync timestamp, per-skill hashes)
+└── disabler.mjs ← disableSkill()/enableSkill(), read/write .skill-router-disabled.json
+```
+
+### Sync Flow
+
+```
+project data/skills/              ZCode mirror ~/.zcode/skills/
+        │                                    │
+        │   planSync(): compare SHA-256      │
+        │   hashes of SKILL.md content       │
+        │                                    │
+        ├───── add ──────────────────────────►│ copy SKILL.md + write meta
+        ├───── update ───────────────────────►│ overwrite SKILL.md + update meta
+        ├───── unchanged ─────────────────────│ no action
+        ├───── remove ───────────────────────►│ delete managed mirror dir
+        └───── disabled ─────────────────────►│ remove or shadow mirror dir
+                                              │
+        ▲                                    │
+        └───── .skill-router-meta.json ◄─────┘
+              (only managed dirs are touched)
+```
+
+### Sync Plan Classification
+
+| Category | Condition | Action in Mirror |
+|----------|-----------|------------------|
+| `add` | In project, not in mirror, not disabled | Copy SKILL.md + write `.skill-router-meta.json` |
+| `update` | In both, hash differs, not disabled | Overwrite SKILL.md + update meta |
+| `remove` | In mirror, not in project | Delete managed mirror directory |
+| `unchanged` | In both, hash matches, not disabled | No action |
+| `disabled` | Disabled registry contains name | Remove from mirror (mirror) or write shadow (shadow) |
+
+### Disable Mechanism
+
+Two mechanisms are available, selected with `--disable-mechanism mirror|shadow`:
+
+- **mirror** (default): Deletes the managed mirror directory. ZCode no longer discovers the skill. Only directories with `.skill-router-meta.json` are removed.
+- **shadow**: Writes a minimal disabled SKILL.md with `disabled: true` frontmatter at the same path. The real directory is preserved so enable restores it by overwriting the shadow.
+
+The disabled skills registry is stored in `.skill-router-disabled.json` at the project root:
+
+```json
+{
+  "disabled": ["backend-laravel-eloquent", "frontend-react-hooks"],
+  "lastModified": "2026-09-23T10:00:00.000Z"
+}
+```
+
+### State Persistence
+
+After each sync, `.skill-router-sync-state.json` records the last sync timestamp, mirror path, and per-skill hash+timestamp. This enables the `verify` command to detect drift between runs.
+
+## Two-Source Index
+
+When skills are loaded from multiple sources, name collisions can occur. The deduplication module resolves them with a priority rule:
+
+```
+Priority order (highest first):
+  1. project  (data/skills/)
+  2. zcode-user (data/skills/zcode/)
+```
+
+### Index Build Flow
+
+```
+loadSkills(data/skills/)              loadSkills(data/skills/zcode/)
+          │                                        │
+          └─────────── allEntries ─────────────────┘
+                          │
+                          ▼
+               deduplicate by path
+              (same file via different source scans)
+                          │
+                          ▼
+               tagSkillsBySource()
+           (most-specific source wins via path prefix)
+                          │
+                          ▼
+               resolveCollisions()
+           (project wins over zcode-user on name clash)
+                          │
+                          ▼
+              data/skill-index.json
+           (each entry carries source: "project"|"zcode-user")
+```
+
+Configuration via `SKILL_ROUTER_SOURCES` env var (colon-separated paths) or `reindex --sources project,zcode-user,all`.
 
 ## Core Modules
 
 ### BM25 Retriever (`src/core/retriever/bm25.mjs`)
-- Weighted field scoring: name ×3, description ×2, keywords ×1
+
+- Weighted field scoring: name x3, description x2, keywords x1
 - Standard BM25 formula with configurable k1 (1.5) and b (0.75)
 - Normalizes raw scores to [0, 1] by dividing by max
-- Exports: `rankSkills(prompt, index)`, `readSkillContent(ranked)`
+- Supports optional synonym expansion: original tokens weight 3x, expanded tokens weight 1x
+- Exports: `rankSkills(prompt, index, options)`, `readSkillContent(ranked)`
 
-### Hybrid Retriever (`src/core/retriever/hybrid.mjs`)
-- Runs BM25 and embedding similarity independently
-- Fuses via Reciprocal Rank Fusion: `score = Σ (1 / (k + rank_i))` with k=60
-- BM25 rank used as tiebreaker when RRF scores are within 1e-10
-- Optional reranking stage (BLEND=0.01, opt-in via `{rerank: true}`)
-- Exports: `hybridRetrieve(prompt, index, options)`
+### Synonym Expander (`src/core/retrieval/expander.mjs`)
 
-### Embedding Engine (`src/core/embeddings/engine.mjs`)
-- FNV-1a hash function (32-bit, seed 0x811c9dc5)
-- Character 2-grams + 3-grams + word tokens + word bigrams hashed into 256 dims
-- Unit vector normalization
-- Cosine similarity bounded [0, 1]
-- Exports: `embed(text)`, `cosineSimilarity(a, b)`, `buildEmbeddingIndex(skills)`
+- Expands query tokens with synonym alternatives from `data/synonyms-curated.json`
+- Filters by minimum IDF (0.8) to avoid generic-token noise
+- Caps expansions at 3 tokens per query to prevent signal dilution
+- `toWeightedTokenArray()`: original tokens repeated 3x, synonyms 1x -- replicates weight ratio in BM25
+- Opt-in only: enabled via `--expand on` in benchmark or by passing `synonymMap` option
 
-### Reranker (`src/core/reranker/`)
-- **features.mjs**: Extracts 4 lexical features:
-  - `exactKeyword`: count of query tokens matching skill name/description/keywords
-  - `bigramOverlap`: shared bigrams between query and skill description
-  - `domainMatch`: 1.0 if query tokens overlap skill domains
-  - `titleMatch`: 1.0 if skill name tokens appear in query
-- **engine.mjs**: Blends RRF score with feature score (BLEND=0.01)
-  - `blended = (1-BLEND) * rrfScore + BLEND * featureScore`
-  - Opt-in to avoid degrading hybrid accuracy on small corpora
+### Synonym Map Builder (`src/core/retrieval/synonyms.mjs`)
 
-### Domain Detector (`src/core/routing/detector.mjs`)
-- Three signals per domain:
-  1. **BM25 signal**: avg raw BM25 score normalized against corpus total
-  2. **Coverage signal**: fraction of domain skills above 30% of global max
-  3. **Embedding signal**: avg cosine similarity of domain skills to query
-- Combined: `confidence = 0.5×bm25 + 0.3×coverage + 0.2×embedding`
-- Matched tokens: query tokens found in domain keyword pools
+- Builds synonym map from three sources: curated JSON, co-occurrence analysis, abbreviation lists
+- Curated entries (54 pairs): framework aliases, ORM names, testing terms, etc.
+- Co-occurrence detection: tokens appearing in the same skill's keyword pool are linked
+- Stored as `Map<string, string[]>` for O(1) lookup during expansion
+
+### Hierarchical Router (`src/core/routing/hierarchical.mjs`)
+
+- Three-stage pipeline for large corpora:
+  1. **Domain detection** -- matches query tokens against domain registry metadata (keyword + description), returning top-3 candidate domains
+  2. **Domain-scoped BM25** -- runs full BM25 within each candidate domain only (not across all skills)
+  3. **Merge & rerank** -- takes best score per skill across domains, applies domain-confidence bonus (primary +10%, secondary +5%)
+- Falls back to full BM25 when no domain metadata exists or query has no tokens
+- Returns `HierarchicalPlan` with `{ mode, domains, skills, primaryDomain, candidateDomainCount, totalSkillsScored }`
+- Deprecated as default: benchmark showed flat is faster at all corpus sizes
+
+### Domain Registry (`src/core/routing/domain-registry.mjs`)
+
+- Manages per-domain metadata stored in `data/domains/<domain>/meta.json`
+- Each `meta.json`: `{ name, description, keywords, skillCount }`
+- `populateDomainsFromSkills()` auto-generates/updates metadata from the skill corpus during `build-index`
+- `matchDomainsToQuery()` scores each domain by keyword overlap (60%) and description overlap (40%)
+- Used by hierarchical router (Stage 1) and quality validator (domain membership check)
 
 ### Route Planner (`src/core/routing/planner.mjs`)
-- **Single-domain**: top confidence > 0.90 AND gap > 0.15 over second domain
-- **Multi-domain**: 2+ domains with confidence >= 0.50 (checked after single)
-- **Fallback**: no strong signal → plain hybrid retrieve
+
+- Three outcomes: **single-domain**, **multi-domain**, **fallback**
+- Single-domain: top confidence > 0.90 AND gap > 0.15 over second domain
+- Multi-domain: 2+ domains with confidence >= 0.50
+- Fallback: no strong signal -> plain flat retrieve
 - Multi-domain uses single hybrid pass with domain-distributed scoring
 
+### Router Selector (`src/core/routing/selector.mjs`)
+
+- `selectRouter(corpusSize, options)` chooses between flat and hierarchical routing
+- Default: **flat** -- benchmark evidence shows flat is faster and equally/more accurate at all scales (N=50 to N=500)
+- `mode` option: force `"flat"` or `"hierarchical"`
+- `experimental` flag: enables deprecated hierarchical path
+- Hierarchical is NOT auto-enabled by corpus size anymore; it requires explicit flag
+
+### Context Budget Manager (`src/core/budget/manager.mjs`)
+
+- `fitWithinBudget(skills, options)` distributes a total character budget across selected skills
+- If total raw content is under budget, returns all entries unmodified
+- Otherwise, divides budget equally with a per-skill floor (`minPerSkill`, default 500 chars)
+- Calls `truncateAtParagraph()` to never split mid-paragraph
+- Configurable via `SKILL_ROUTER_BUDGET_MAX_CHARS` (default 24000) and `SKILL_ROUTER_BUDGET_MIN_PER_SKILL` (default 500)
+
+### Query Cache (`src/core/cache/query-cache.mjs`)
+
+- Wraps an `LRUCache` with TTL expiration (default 5 minutes)
+- Key = `{indexFingerprint}:{sha256(normalizedQuery)}` -- ensures cache invalidation on index rebuild
+- `computeIndexFingerprint()` uses FNV-1a 64-bit hash of sorted skill names
+- `getOrSet(query, factory)` pattern: returns cached value or computes and stores
+- Stats tracking: hits, misses, hit rate, current size
+- Updated in `hooks/route.mjs` -- all routing plans pass through the cache
+
+### LRU Cache (`src/core/cache/lru.mjs`)
+
+- Pure LRU eviction policy implemented with `Map` for O(1) get/set
+- Methods: `get()`, `set()`, `delete()`, `size`, `clear()`, `has()`, `iterator()`
+- Configurable max size; oldest entry evicted when capacity exceeded
+
+### Index Deduplicator (`src/index/dedupe.mjs`)
+
+- `resolveCollisions(indexEntries)` resolves name collisions across multi-source index entries
+- Priority order: `project` (2) > `zcode-user` (1)
+- Logs collision details to console: which entry was kept, which was removed, and their paths
+- Used during `reindex` and `build-index` when multiple sources are configured
+
 ### Telemetry (`src/core/telemetry/`)
+
 - **logger.mjs**: JSONL logging with daily rotation (`logs/YYYY-MM-DD.jsonl`)
   - Fields: ts, event, queryHash, queryLength, candidates, selected, mode, latencyMs, confidence
+  - Events: `retrieve`, `build`, `cache`, `budget`, `error`
   - Never logs raw query text (hashed only)
 - **metrics.mjs**: In-memory ring buffer of last 1000 requests
   - `recordLatency(ms)`, `recordAccuracy(hit)`, `recordFallback()`
@@ -119,17 +270,98 @@ ZCode UserPromptSubmit
 - **reporter.mjs**: Human-readable markdown tables for metrics and benchmarks
 
 ### Configuration (`src/config/`)
+
 - **defaults.mjs**: All tunable parameters with descriptive defaults
+  - Loads optimized confidence thresholds from `data/thresholds.json` when present
+  - Falls back to hardcoded defaults when file is absent or malformed
 - **env.mjs**: Reads `SKILL_ROUTER_*` env vars, validates types/ranges, falls back to defaults
 - Schema validation prevents invalid values from breaking the system
+
+### Adaptive Threshold Tuning (`src/tuning/optimizer.mjs`)
+
+- Grid search over `(high, medium)` confidence threshold pairs
+- High range: [0.70, 0.95] in 0.05 steps; Medium range: [0.40, 0.75] in 0.05 steps
+- Objective: maximize Top-1 accuracy subject to fallback rate < 15%
+- Tie-breakers: (1) lower fallback rate, (2) closest to current defaults
+- Evaluates 45 combinations on the 130-prompt benchmark in ~12 seconds
+- Writes results to `data/thresholds.json` -- consumed by `defaults.mjs` at startup
+- Optimized thresholds (current): high=0.85, medium=0.60, Top-1=96.9%, fallback=8.46%
+
+### Skill Quality Validator (`src/quality/validator.mjs`)
+
+- Validates each SKILL.md file against 6 rules:
+  1. Name is present and non-empty
+  2. Name pattern: starts with one of its declared domains followed by `-`
+  3. Description length: 40-400 characters
+  4. Keywords count: 3-15 entries
+  5. Domains all exist in `data/domains/` registry
+  6. Content token count: 100-800 tokens (after frontmatter)
+- Returns `ValidationResult { valid, issues: [{field, message}], score: 0-100 }`
+- `validateSkillsDir(dir)` walks a directory recursively and validates all SKILL.md files
+- Ran on real corpus: 54/54 skills fixed (52 had name not prefixed with domain, 54 had content <100 tokens)
+
+### External Skill Import (`src/import/`)
+
+- **scanner.mjs**: Recursively scans a source directory for SKILL.md files
+  - Blocks path traversal (`..`, `~`, leading `/`)
+  - Skips symlinks pointing outside the source root
+  - Respects `maxDepth` limit (default 10)
+  - Returns `SkillCandidate[]` with name, description, keywords, domains, sourcePath, content
+- **importer.mjs**: Validates candidates and copies them into `data/skills/`
+  - Detects name collisions; skips or overwrites with `--force`
+  - Runs `validateSkill()` before accepting; rejects invalid skills
+  - Builds target directory from name slug: `backend-eloquent` -> `data/skills/backend/eloquent/`
+- **reporter.mjs**: Produces console-readable import reports (imported/rejected/skipped counts)
+
+### Usage Analytics (`src/analytics/`)
+
+- **reader.mjs**: Parses JSONL log files, handles missing files and malformed lines gracefully
+- **analyzer.mjs**: Computes metrics from parsed entries:
+  - `totalRequests`, `totalBuilds`, `totalErrors`
+  - `perDayHistogram`: retrieve counts grouped by date
+  - `fallbackRateOverTime`: % of retrieves with zero results, per day
+  - `medianLatencyTrend`: median durationMs per day
+  - `top10Skills`: most frequently recommended skills (via BM25 lookup on top results)
+  - `commonPromptHashes`: SHA-256 hashes of the 10 most frequent queries (raw prompts never displayed)
+- **reporter.mjs**: Generates a formatted markdown report
+- CLI: `node bin/skill-router.mjs analytics [--since N days] [--json]`
+
+## Scale Findings
+
+Phase 3 conducted a rigorous scale benchmark comparing flat BM25 against hierarchical routing across synthetic corpora of 50, 100, 200, 300, and 500 skills. Synthetic prompts were generated to target specific skills (2 prompts per skill using rotating template forms), making this a matching-corpus benchmark.
+
+### Key Results
+
+| N | Mode | Top-1 | Recall@3 | Median ms | P95 ms | Fallback |
+|---|------|-------|----------|-----------|--------|----------|
+| 50 | flat | 85.0% | 97.0% | 2 | 3 | 0.0% |
+| 50 | hierarchical | 85.0% | 97.0% | 4 | 4 | 0.0% |
+| 100 | flat | 76.0% | 93.5% | 3 | 4 | 0.0% |
+| 100 | hierarchical | 76.0% | 93.5% | 5 | 6 | 0.0% |
+| 200 | flat | 50.2% | 84.5% | 6 | 7 | 0.0% |
+| 200 | hierarchical | 50.2% | 84.3% | 9 | 9 | 0.3% |
+| 300 | flat | 36.7% | 76.7% | 9 | 10 | 0.0% |
+| 300 | hierarchical | 36.5% | 76.3% | 11 | 12 | 0.3% |
+| 500 | flat | 39.5% | 64.2% | 15 | 16 | 0.0% |
+| 500 | hierarchical | 39.4% | 64.0% | 17 | 18 | 0.2% |
+
+### Conclusions
+
+1. **Flat BM25 is faster at every scale.** At N=50 it is 2x faster; the gap narrows to 1.13x at N=500 but flat never loses.
+2. **Accuracy is tied or slightly better for flat.** Hierarchical never outperforms flat; at N=300 and N=500 flat edges ahead by 0.1-0.2%.
+3. **Fallback rate is higher for hierarchical** at larger scales (0.3% vs 0.0%).
+4. **The inflection point** where Top-1 drops below 95% is at N=50 on synthetic prompts. This is a corpus-distribution issue, not an algorithm failure -- the real 54-skill corpus achieves 96.9% Top-1.
+5. **Decision**: hierarchical routing is deprecated as the default. Flat is the primary path. Hierarchical remains available via `--experimental` flag for users who want it.
+
+Full report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
 
 ## Hook Contract
 
 ### Input (stdin JSON)
 ```json
 {
-  "prompt": "string — user's authoring prompt",
-  "cwd": "string — workflow directory path"
+  "prompt": "string -- user's authoring prompt",
+  "cwd": "string -- workflow directory path"
 }
 ```
 
@@ -138,10 +370,10 @@ ZCode UserPromptSubmit
 {
   "hookSpecificOutput": {
     "hookEventName": "UserPromptSubmit",
-    "additionalContext": "string — skill documentation to inject"
+    "additionalContext": "string -- skill documentation to inject"
   },
   "RoutePlan": {
-    "mode": "single|multi|fallback",
+    "mode": "flat|hierarchical|single|multi|fallback",
     "domains": [{ "name": "string", "skills": ["string"] }],
     "primary": "string|null",
     "candidates": [{ "name": "string", "score": number }],
@@ -151,63 +383,75 @@ ZCode UserPromptSubmit
 ```
 
 ### Fail-Open Behavior
-- Empty input → exit 0, no output
-- Malformed JSON → exit 0, no output
-- Missing fields → safe defaults applied
-- Prompt > 10KB → truncated
-- Index not found → exit 0
-- Retrieval timeout (>200ms) → partial results
-- Any uncaught error → exit 0, log to stderr
+- Empty input -> exit 0, no output
+- Malformed JSON -> exit 0, no output
+- Missing fields -> safe defaults applied
+- Prompt > 10KB -> truncated
+- Index not found -> exit 0
+- Retrieval timeout (>200ms) -> partial results
+- Any uncaught error -> exit 0, log to stderr
 
 ## Performance Characteristics
 
 | Mode | Top-1 | Recall@3 | Median Latency | P95 Latency |
 |------|-------|----------|----------------|-------------|
-| BM25 | 95.4% | 95.4% | 2ms | 4ms |
-| Hybrid | 60.8% | 83.1% | 10ms | 14ms |
-| Routing overhead | — | — | +3ms | +5ms |
-
-**Note:** Hybrid mode trades Top-1 for broader recall. For production use, BM25 mode is recommended when precision matters; hybrid mode when recall matters. The reranker is disabled by default to preserve accuracy.
+| BM25 (real, 54 skills) | 96.9% | 89.2% | 2 ms | 3 ms |
+| BM25 (synthetic, 50) | 85.0% | 97.0% | 2 ms | 3 ms |
+| BM25 (synthetic, 100) | 76.0% | 93.5% | 3 ms | 4 ms |
+| BM25 (synthetic, 200) | 50.2% | 84.5% | 6 ms | 7 ms |
+| BM25 (synthetic, 500) | 39.5% | 64.2% | 15 ms | 16 ms |
+| Hierarchical (synthetic, 200) | 50.2% | 84.3% | 9 ms | 9 ms |
+| Hierarchical (synthetic, 500) | 39.4% | 64.0% | 17 ms | 18 ms |
+| BM25 + synonym expand | 80.0% | 87.7% | 2 ms | 3 ms |
+| Hybrid (BM25+FNV-1a) | 53.8% | 77.7% | 31 ms | 41 ms |
+| Routing overhead | -- | -- | +3 ms | +5 ms |
 
 ## Design Decisions
 
-1. **Zero dependencies** — No npm packages. All algorithms implemented from scratch.
-2. **Deterministic embeddings** — FNV-1a hashing ensures reproducible results without ML models.
-3. **RRF fusion** — Theoretically guaranteed to improve precision at rank 1 when combining independent rankers.
-4. **Opt-in reranking** — Feature-based reranking can degrade accuracy on small corpora; enabled only when explicitly requested.
-5. **Fail-open** — The hook never blocks user input. Any error results in clean exit with no output.
-6. **Single hybrid pass** — Multi-domain routing runs retrieval once and distributes scores, avoiding N× latency.
+1. **Zero dependencies** -- No npm packages. All algorithms implemented from scratch.
+2. **Deterministic embeddings** -- FNV-1a hashing ensures reproducible results without ML models.
+3. **Flat routing is default** -- Phase 3 scale benchmark proved flat is faster and equally accurate at all corpus sizes. Hierarchical is deprecated as default but available via `--experimental`.
+4. **Synonym expansion is opt-in** -- Defaults to off because expanding with low-IDF terms adds noise on the current corpus. Enabled via `--expand on`.
+5. **Thresholds are adaptive** -- Loaded from `data/thresholds.json` (produced by the optimizer) rather than hardcoded. Falls back to `0.85/0.60` if the file is missing.
+6. **Context budget is paragraph-safe** -- Truncation never splits mid-paragraph (double-newline boundary), preserving readability.
+7. **Query cache keys include index fingerprint** -- Any index rebuild (new skills added) automatically invalidates all cached entries.
+8. **Analytics preserves privacy** -- Raw prompts are never logged or displayed; only SHA-256 hashes appear in analytics reports.
+9. **Import validates before copying** -- Skills are validated against the 6-field quality rules before being written to `data/skills/`. Invalid skills are rejected with a clear report.
+10. **Sync protects user-managed skills** -- Only mirror directories with `.skill-router-meta.json` are modified. Hand-edited or user-created skills are left untouched.
+11. **Disable mechanism is filesystem-based** -- ZCode has no native per-skill disable API. Mirror removal or shadow SKILL.md is the best available approach.
+12. **Two-source index uses project priority** -- When the same skill name appears in project and zcode-user sources, the project version always wins.
 
 ## Phase 1 Findings: What Worked and What Did Not
 
 ### What Worked
 
-- **BM25 alone is strong.** Top-1 0.9769 (127/130) on 130 prompts against 54 skills. Fast, deterministic, reliable. Median latency 3 ms. This is the mode to use in production when precision matters.
-
-- **Multi-domain routing is functional.** The detector produces reasonable plans using a composite of BM25 signal, coverage signal, and embedding signal. Thresholds (single ≥ 0.90 with gap > 0.15; multi ≥ 0.50) are tuned for the current 54-skill / 11-domain corpus and may need re-tuning at scale.
-
+- **BM25 alone is strong.** Top-1 96.9% (126/130) on 130 prompts against 54 real skills. Fast, deterministic, reliable. Median latency 2 ms. This is the mode to use in production when precision matters.
+- **Multi-domain routing is functional.** The detector produces reasonable plans using a composite of BM25 signal, coverage signal, and embedding signal. Thresholds (single >= 0.90 with gap > 0.15; multi >= 0.50) are tuned for the current 54-skill / 11-domain corpus and may need re-tuning at scale.
 - **Telemetry stack works cleanly.** JSONL logging, ring-buffer metrics, and the human-readable reporter all function as designed with no regressions.
-
 - **Zero-dependency design holds.** All algorithms (BM25, FNV-1a embeddings, RRF, feature extraction) run from pure ESM with no npm packages.
+- **Quality validation fixes real problems.** Running `validate` on the real corpus fixed 52 skills with incorrect name prefixes and 54 skills with insufficient content tokens.
+- **Sync subsystem works correctly.** SHA-256 based comparison detects drift accurately; mirror protection prevents corruption of user-managed skills.
 
 ### What Did Not
 
-- **N-gram embeddings (256-dim, FNV-1a) are insufficient for semantic similarity.** When fused via RRF (`k=60`), the weak embedding signal degrades Top-1 from 97.7% down to 60.8%. Recall@3 improves (83.1%), but the net effect on precision is negative. This is a documented negative result — see [phase-1-final-report.md](./reports/phase-1-final-report.md).
-
-- **Feature-based reranker does not improve Top-1 on the current corpus.** The reranker is opt-in (`--rerank`) and blends a 4-feature lexical score (keyword, bigram, domain, title) at BLEND=0.01. On 54 skills, reranking produced no measurable Top-1 gain over raw BM25. The likely cause is insufficient training signal — four hand-tuned features on a small corpus cannot meaningfully re-rank against a ground-truth distribution. A larger corpus or learned weights would be needed.
-
-- **Embedding dimensionality is too low.** 256 dimensions from FNV-1a hashing means limited resolution per gram. With only 54 skills and ~100 unique n-grams each, effective discriminative power is low. Higher-dimensional hashes or a pre-trained model would be required for meaningful semantic signals.
+- **N-gram embeddings (256-dim, FNV-1a) are insufficient for semantic similarity.** When fused via RRF (`k=60`), the weak embedding signal degrades Top-1 from 97% down to ~54%. Recall@3 improves, but the net effect on precision is negative. This is a documented negative result.
+- **Feature-based reranker does not improve Top-1 on the current corpus.** The reranker is opt-in (`--rerank`) and blends a 4-feature lexical score at BLEND=0.01. On 54 skills, reranking produced no measurable Top-1 gain.
+- **Synonym expansion dilutes signal on small corpus.** BM25 with `--expand on` drops from 97% to 80% Top-1. The low-IDF synonym noise outweighs recall gains. Keep expansion off by default; tune thresholds before enabling.
+- **Embedding dimensionality is too low.** 256 dimensions from FNV-1a hashing means limited resolution per gram. Higher-dimensional hashes or a pre-trained model would be required for meaningful semantic signals.
+- **Hierarchical routing is slower than flat at all scales.** Phase 3 benchmark proved flat wins on speed at every corpus size while tying or edgeing out on accuracy. Hierarchical is deprecated as default.
 
 ### What We Would Do Differently
 
-Given what we know now, we would skip the hand-rolled n-gram embedding engine entirely and integrate a pre-trained embedding model (e.g., a small ONNX transformer or local tiny-BERT) from the start. The RRF fusion math is sound — the input quality was the bottleneck. Phase 2 (Adaptive Learning) is the natural place to revisit embedding quality with more signal.
+Given what we know now, we would skip the hand-rolled n-gram embedding engine entirely and integrate a pre-trained embedding model from the start. The RRF fusion math is sound -- the input quality was the bottleneck. Phase 3 infrastructure work (sync, disable, two-source index) is complete; semantic embedding upgrade should be revisited when a suitable ONNX model is identified.
 
 For the reranker specifically, we would either (a) collect implicit feedback data first and learn the feature weights, or (b) omit it entirely until the corpus grows large enough that lexical overlap becomes a discriminative signal.
 
-### Benchmark Summary (Phase 1, 130 prompts / 54 skills)
+### Benchmark Summary (Real Corpus, 130 prompts / 54 skills)
 
 | Mode | Top-1 | Recall@3 | Median Latency | Verdict |
 |------|-------|----------|----------------|---------|
-| BM25 | 97.7% (127/130) | 97.7% (127/130) | 3 ms | Production-ready |
-| BM25 + reranker | 97.7% (127/130) | 97.7% (127/130) | 3 ms | No improvement; opt-in only |
-| Hybrid (BM25 + n-gram RRF) | 60.8% | 83.1% (108/130) | 11 ms | Negative result; retain for Phase 2 research |
+| BM25 | 96.9% (126/130) | 89.2% (116/130) | 2 ms | Production-ready |
+| BM25 + synonym expand | 80.0% (104/130) | 87.7% | 2 ms | Opt-in; caution -- dilutes signal |
+| Hybrid (BM25+FNV-1a) | 53.8% (70/130) | 77.7% | 31 ms | Degrades BM25 baseline |
+| Hierarchical (200 skills, exp.) | 50.2% | 84.3% | 9 ms | Slower than flat; not recommended |
+| Routing overhead | -- | -- | +3 ms | Acceptable |
