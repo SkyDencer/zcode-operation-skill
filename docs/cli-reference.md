@@ -382,6 +382,163 @@ node bin/skill-router.mjs help
 
 ---
 
+### `feedback`
+
+Show routing feedback summary computed from decision logs. Reports decisions by mode, tier, router, top selected skills, and latency percentiles.
+
+```bash
+# Show feedback summary (text, last 300 decisions)
+node bin/skill-router.mjs feedback
+
+# Last 7 days only
+node bin/skill-router.mjs feedback --since 2026-09-17
+
+# Limit to N most recent decisions
+node bin/skill-router.mjs feedback --limit 50
+
+# JSON output for scripting
+node bin/skill-router.mjs feedback --json
+
+# Export decisions to CSV
+node bin/skill-router.mjs feedback --export ./decisions.csv
+```
+
+**Output fields:**
+- `totalCount`: number of decisions in the window
+- `byMode`: explicit vs implicit split
+- `byTier`: bm25 / slm / hybrid / none counts
+- `byRouter`: top-6 routers including `(none)` for implicit
+- `topSkills`: most frequently recommended skills with count
+- `p50Latency`, `p95Latency`, `maxLatency`: latency distribution
+- `fallbackRate`: percentage of zero-result retrieves
+
+---
+
+### `health`
+
+Alias for `verify`. Runs health checks on sync state, index integrity, and thresholds.
+
+```bash
+node bin/skill-router.mjs health
+```
+
+---
+
+### `tune`
+
+Adaptive BM25 weight tuning. Collects routing decisions and user feedback signals to propose field-weight adjustments, then applies them with guardrails. Full documentation is in [docs/tuning.md](./tuning.md).
+
+```bash
+# Show current weights, baseline, and attribution count
+node bin/skill-router.mjs tune --status
+
+# Compute proposed weights from benchmark attribution data (read-only)
+node bin/skill-router.mjs tune --analyze
+
+# Apply proposed weights with pre/post benchmark and auto-rollback on regression
+node bin/skill-router.mjs tune --apply
+
+# Preview what --apply would do without writing anything
+node bin/skill-router.mjs tune --apply --dry-run
+
+# Restore previous weights from the latest snapshot
+node bin/skill-router.mjs tune --rollback
+
+# Run analyze + apply in one step (with guardrails)
+node bin/skill-router.mjs tune --auto
+
+# Preview auto mode without applying
+node bin/skill-router.mjs tune --auto --dry-run
+
+# Print tuning history from logs/tuning/decisions.jsonl
+node bin/skill-router.mjs tune --report
+```
+
+**Options:**
+- `--dry-run` — Preview changes without applying them (works with `--apply` and `--auto`)
+- `--threshold N` — Minimum attributions required before proposing a change (default: 20)
+- `--json` — Output results as JSON (where supported)
+
+**Subcommand behaviour:**
+
+| Subcommand | What it does |
+|---|---|
+| `--status` | Shows current weights from `data/weights.json` (or defaults), baseline Top-1 from `data/baseline.json`, last applied timestamp, and attribution count |
+| `--analyze` | Re-runs the 130-prompt benchmark, attributes each outcome to a dominant BM25 field, computes proposed weight change, prints analysis (does NOT write files) |
+| `--apply` | Same analysis as `--analyze`, then: (1) snapshot current weights to `logs/weights/`, (2) run pre-benchmark, (3) write proposed weights to `data/weights.json`, (4) run post-benchmark, (5) auto-rollback if Top-1 drops > 1pp, (6) log decision to `logs/tuning/decisions.jsonl` |
+| `--rollback` | Reads the most recent snapshot from `logs/weights/weights-*.json` and restores those weights to `data/weights.json` |
+| `--auto` | Runs `--analyze` followed by `--apply` in sequence |
+| `--report` | Prints accepted/reverted/error counts and the last 5 tuning attempts from the decisions log |
+
+**Guardrails:**
+- `MAX_DELTA = 0.5`: no field can move more than 0.5 from the baseline weights in `data/baseline.json`
+- `ACCURACY_TOLERANCE = 1.0pp`: `--apply` auto-rolls back if Top-1 drops by more than 1 percentage point
+- Weight clamping: every field stays in `[0.5, 5.0]`
+- Sum preservation: weights are normalized so their total stays constant
+
+---
+
+### `verify --deep`
+
+Extended health check that includes schema validation of all log entries and checks for orphan deploy snapshots.
+
+```bash
+node bin/skill-router.mjs verify --deep
+```
+
+**Additional checks beyond `verify`:**
+
+| # | Check | Description |
+|---|---|---|
+| 6 | Hook registered | `hooks.events.UserPromptSubmit` in ZCode CLI config contains our hook entry |
+| 7 | Hook invocable | Spawns `node hooks/route.mjs` with test stdin and verifies valid JSON output |
+
+---
+
+### `deploy --with-hook`
+
+Deploy router skills and also register the `UserPromptSubmit` hook in ZCode's CLI config so the hook fires on every authoring event. Combines `deploy` with automatic hook configuration.
+
+```bash
+# Deploy routers and register hook
+node bin/skill-router.mjs deploy --with-hook
+
+# Dry-run both operations
+node bin/skill-router.mjs deploy --with-hook --dry-run
+```
+
+---
+
+### `deploy --list-snapshots`
+
+List all deploy snapshots stored in `logs/deploys/` with timestamps and router counts. Useful for choosing a snapshot to restore from.
+
+```bash
+node bin/skill-router.mjs deploy --list-snapshots
+```
+
+**Output:**
+
+| Snapshot file | Timestamp | Routers | Status |
+|---|---|---|---|
+| `deploy-snapshot-2026-09-23T10-00-00.json` | 2026-09-23 10:00 | 6 | valid |
+
+---
+
+### `deploy --restore <file>`
+
+Restore the ZCode mirror from a previous deploy snapshot. Performs the same verification as a normal deploy. Safe: only touches directories with `.skill-router-meta.json`.
+
+```bash
+# Restore from a specific snapshot
+node bin/skill-router.mjs deploy --restore ./logs/deploys/deploy-snapshot-2026-09-23T10-00-00.json
+
+# List snapshots first to find the right one
+node bin/skill-router.mjs deploy --list-snapshots
+```
+
+---
+
 ## Global Options
 
 | Option | Description |

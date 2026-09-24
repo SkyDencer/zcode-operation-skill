@@ -52,7 +52,61 @@ To preview without making changes:
 node scripts/install.mjs --dry-run
 ```
 
+## Quick Start
+
+The fastest path from clone to working router:
+
+```bash
+1. git clone the repo
+2. npm install
+3. node bin/skill-router.mjs deploy --with-hook
+4. Restart ZCode
+5. Test: send "$laravel fix N+1 query" in ZCode editor
+6. Use for a few weeks, then run: node bin/skill-router.mjs tune --auto --dry-run
+```
+
+After restart, every authoring prompt is routed automatically:
+- Prompts containing a `$` mention (e.g. `$laravel`, `$next`) dispatch to the matching router skill.
+- All other prompts are routed implicitly via BM25 over the leaf-skill corpus.
+
 ## How It Works
+
+### Native ZCode Skill Activation
+
+When a prompt contains a `$mention` such as `$next`, `$laravel`, `$react`, `$design`, `$test`, or `$meta`, ZCode activates the corresponding router skill natively. The router skill reads the leaf-skill instructions for its domain and applies them to the current task. No hook is involved for these explicit prompts -- the routing decision is made by ZCode's skill-matching engine before the hook layer runs.
+
+### The Hook Layer (Implicit Routing)
+
+For all other authoring events (the `UserPromptSubmit` hook), `hooks/route.mjs` runs as a subprocess:
+
+1. Reads the JSON payload from stdin (prompt + cwd).
+2. Loads the pre-built BM25 index from `data/skill-index.json`.
+3. Ranks leaf skills (router skills are excluded from implicit ranking) by lexical relevance.
+4. Reads full SKILL.md content for the top-k results.
+5. Fits content into the context budget with paragraph-safe truncation.
+6. Writes `.zcode/output.json` with `additionalContext` and `RoutePlan`.
+
+If anything fails (missing index, timeout, parse error), the hook exits 0 with no output -- this is **fail-open** behavior so ZCode is never blocked.
+
+### Fallback Chain
+
+```
+Prompt arrives
+    │
+    ▼
+Is there a $mention?
+    ├── Yes → Native skill activation (router skill runs directly)
+    │
+    └── No  → BM25 on leaf-only index
+                │
+                ▼
+            SLM enabled? (SKILL_ROUTER_SLM_ENABLED=true)
+                ├── Yes → Hybrid BM25 + SLM (experimental, slow)
+                │
+                └── No  → Pure BM25 (default, ~2ms)
+```
+
+The default path is pure BM25. SLM is opt-in because benchmarks showed the 0.5B model underperforms BM25.
 
 ### Retrieval
 
@@ -103,6 +157,37 @@ Retrieval results are cached in an LRU cache with a 5-minute TTL. Cache keys are
 ### Context Budget
 
 Selected skill content is fitted within a configurable character budget (default 24,000 chars total, 500 chars minimum per skill). Truncation is paragraph-safe: it never splits mid-paragraph (double-newline boundary).
+
+### Adaptive Feedback Loop
+
+The router collects implicit user-correction signals automatically as you use ZCode. Every routing decision is logged to `logs/routing-YYYYMMDD.jsonl`, and subsequent user actions (retry, rephrase, or explicit override) are captured as `logs/signals-YYYYMMDD.jsonl`. The `feedback --outcomes` command correlates decisions with signals to classify each prompt as positive, negative, or unknown.
+
+When enough attribution data has accumulated (default: 20+ outcomes), the system can adjust BM25 field weights — increasing the weight of fields that drove successful matches and decreasing fields that drove misses. Guardrails prevent any single change from exceeding `MAX_DELTA` (0.5) per field, and `--apply` runs a benchmark before and after, auto-rolling back if Top-1 accuracy drops by more than 1 percentage point.
+
+```bash
+# Inspect current weights and tunin g history
+node bin/skill-router.mjs tune --status
+
+# See proposed weight changes without applying them
+node bin/skill-router.mjs tune --analyze
+
+# Run the full loop: analyze, apply, benchmark, auto-rollback if regression
+node bin/skill-router.mjs tune --auto
+
+# Preview what --auto would do without writing anything
+node bin/skill-router.mjs tune --auto --dry-run
+
+# See the full tuning history log
+node bin/skill-router.mjs tune --report
+
+# Roll back to the previous snapshot of weights
+node bin/skill-router.mjs tune --rollback
+
+# View outcome correlation with field attribution
+node bin/skill-router.mjs feedback --outcomes
+```
+
+Run `tune --auto` after a few weeks of usage when you have enough routing decisions to produce reliable signal. The baseline Top-1 (92.31%) is frozen in `data/baseline.json` and used as the regression guard. Full documentation is at [docs/tuning.md](./docs/tuning.md).
 
 ## Scale
 
@@ -161,6 +246,9 @@ The project ships a full management CLI at `bin/skill-router.mjs`:
 | `verify` | Health check: sync drift, orphans, index integrity |
 | `doctor` | Diagnostic report for the installation |
 | `analytics` | Show usage analytics from routing logs |
+| `feedback` | Show routing feedback summary (decisions, modes, top skills, latency) |
+| `health` | Quick health status (8 checks: routers, plugin dir, hook, index, hook invocable, llama-server, forbidden files, thresholds) |
+| `tune` | Adaptive BM25 weight tuning (`--analyze`, `--apply`, `--rollback`, `--status`, `--auto`, `--report`) |
 | `help` | Show help |
 
 ```bash
@@ -254,6 +342,59 @@ node tests/slm-benchmark/runner.mjs --mode hybrid --slm
 
 **Note:** Larger models (1.5B+) may perform better. The 0.5B model is insufficient for meaningful semantic reranking on this skill corpus. See [docs/reports/phase-2-slm-benchmark.md](./docs/reports/phase-2-slm-benchmark.md) for full results.
 
+SLM remains **disabled by default** in Phase 4. No changes to its status.
+
+## Verify & Health
+
+Use these commands to check the router's state at any time:
+
+```bash
+# Quick health check (8 checks: routers, plugin dir, hook, index, hook invocable, llama-server, forbidden files, thresholds)
+node bin/skill-router.mjs health
+
+# Show routing feedback summary (decisions, modes, top skills, latency)
+node bin/skill-router.mjs feedback
+
+# Health checks: sync drift, orphans, index integrity, thresholds
+node bin/skill-router.mjs verify
+
+# Deep verification (adds hook-registered and hook-invocable checks)
+node bin/skill-router.mjs verify --deep
+
+# Diagnostic report: environment, corpus, benchmarks, overrides
+node bin/skill-router.mjs doctor
+
+# Preview deploy changes without applying
+node bin/skill-router.mjs deploy --dry-run
+
+# Deploy router skills and register hook in ZCode config
+node bin/skill-router.mjs deploy --with-hook
+
+# List deployed snapshots for rollback reference
+node bin/skill-router.mjs deploy --list-snapshots
+
+# Restore from a previous snapshot
+node bin/skill-router.mjs deploy --restore ./logs/deploys/deploy-snapshot-YYYY-MM-DDTHH-mm-ss.json
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|---|---|
+| 0 | All checks passed |
+| 1 | One or more health checks failed (`verify`) or warnings only (`health`) |
+| 2 | Unhealthy — one or more `health` checks failed |
+
+### Log Files
+
+Routing decisions are logged to `logs/routing-YYYYMMDD.jsonl`. Analytics cover broader runtime events from `logs/YYYY-MM-DD.jsonl`. Use these commands to query them:
+
+```bash
+node bin/skill-router.mjs analytics          # all time
+node bin/skill-router.mjs analytics --since 7 # last 7 days
+node bin/skill-router.mjs analytics --json   # machine-readable output
+```
+
 ## Limitations
 
 - **Synonym expansion degrades Top-1** on the current 54-skill corpus (80% vs 97% with expansion off). Keep expansion off by default.
@@ -271,7 +412,7 @@ zcode-operation-skill/
 ├── .zcode-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── bin/
-│   └── skill-router.mjs      # CLI entry point (15 subcommands)
+│   └── skill-router.mjs      # CLI entry point (18 subcommands)
 ├── hooks/
 │   ├── hooks.json            # Hook registration
 │   ├── route.mjs             # Main hook: stdin -> route -> output
@@ -288,7 +429,9 @@ zcode-operation-skill/
 │   ├── core/
 │   │   ├── retriever/
 │   │   │   ├── bm25.mjs      # rankSkills() with field-weighted BM25
-│   │   │   └── hybrid.mjs    # BM25 + embeddings via RRF fusion; routeWithExplicit
+│   │   │   ├── hybrid.mjs    # BM25 + embeddings via RRF fusion; routeWithExplicit
+│   │   │   ├── attribution.mjs  # attributeOutcome: per-field BM25 scoring
+│   │   │   └── weights.mjs       # computeWeights: adaptive field weight adjustment
 │   │   ├── routing/
 │   │   │   ├── hierarchical.mjs  # 3-stage domain-first retrieval (experimental)
 │   │   │   ├── explicit.mjs        # detectExplicitSkill() — $-mention detection
@@ -318,7 +461,12 @@ zcode-operation-skill/
 │   │   └── telemetry/
 │   │       ├── logger.mjs      # JSONL logging (hash-only queries)
 │   │       ├── metrics.mjs     # Ring-buffer p50/p95/p99 metrics
-│   │       └── reporter.mjs    # Human-readable markdown reports
+│   │       ├── reporter.mjs    # Human-readable markdown reports
+│   ├── src/telemetry/          # Decision logs, signals, outcomes (outside src/)
+│   │   ├── feedback.mjs        # logDecision(), readDecisions(), summarize()
+│   │   ├── signals.mjs         # recordSignal(), readSignals()
+│   │   ├── outcomes.mjs        # correlateFromLogs() — outcome classification
+│   │   └── session-tracker.mjs # trackPrompt() — implicit signal detection
 │   ├── quality/
 │   │   ├── validator.mjs       # validateSkill() with 6-field checks
 │   │   └── reporter.mjs        # Markdown + console report formatters
@@ -343,7 +491,8 @@ zcode-operation-skill/
 │   ├── deploy/
 │   │   ├── planner.mjs         # planDeploy(): compare router-skills/ vs mirror
 │   │   ├── writer.mjs          # applyDeploy(): copy routers, snapshot, rollback
-│   │   └── verifier.mjs        # verifyDeploy(): post-deploy health checks
+│   │   ├── verifier.mjs        # verifyDeploy(): post-deploy health checks
+│   │   └── hook-registrar.mjs  # registerHook(), unregisterHook(), isHookRegistered()
 │   └── cli/
 │       ├── list.mjs            # List skills by domain with quality
 │       ├── add.mjs             # Add a single skill
@@ -356,9 +505,13 @@ zcode-operation-skill/
 │       ├── sync.mjs            # Sync to ZCode mirror
 │       ├── deploy.mjs          # Deploy router skills to ZCode mirror
 │       ├── sources.mjs         # List sources and collisions
-│       ├── verify.mjs          # Health checks (5 checks)
+│       ├── verify.mjs          # Health checks (5 checks, 7 with --deep)
 │       ├── doctor.mjs          # Diagnostic report
 │       ├── analytics.mjs       # Show usage analytics
+│       ├── feedback.mjs        # Routing decision feedback summary
+│       ├── health.mjs          # Quick health status (8 checks)
+│       ├── tune.mjs            # Adaptive weight tuning CLI
+│       ├── tune-core.mjs       # Shared tuning logic (apply/rollback/report)
 │       └── help.mjs            # CLI help text
 ├── data/
 │   ├── skills/                 # Production SKILL.md manifests
@@ -411,6 +564,7 @@ zcode-operation-skill/
 | [docs/cli-reference.md](./docs/cli-reference.md) | Every CLI subcommand documented with examples |
 | [docs/getting-started.md](./docs/getting-started.md) | 5-minute tour for new users |
 | [docs/skill-authoring.md](./docs/skill-authoring.md) | How to write high-quality SKILL.md files |
+| [docs/tuning.md](./docs/tuning.md) | How the adaptive feedback loop works, reading reports, safety guarantees |
 | [docs/problems.md](./docs/problems.md) | Open and resolved issues |
 | [docs/manager-playbook.md](./docs/manager-playbook.md) | Project manager guide and escalation triggers |
 | [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md) | Phase 3 scale benchmark and findings |
@@ -425,7 +579,7 @@ zcode-operation-skill/
 | 2 | Scale & Tooling | Hierarchical routing, quality validator, CLI management tool, adaptive threshold tuning, synonym expansion, query cache, context budget manager, usage analytics, external skill import, scale benchmarks | Complete |
 | 3 | Sync & Infrastructure | ZCode skill sync, disable mechanism, two-source index, verify/doctor CLI, routing selector (flat default), scale benchmark validation, two-mode routing ($mention detection), router skill deploy subsystem | Complete |
 | 4 | Log Rotation & Cleanup | Implement 30-day log rotation, disk-space monitoring, stale cache eviction | Planned |
-| 5 | Feedback Loop | Collect implicit user corrections (skill dismissed / manually selected) and use them to adjust field weights | Planned |
+| 5 | Feedback Loop | Collect implicit user corrections (dismissed/selected skills); adjust field weights from feedback | Complete |
 | 6 | Semantic Embedding Upgrade | Replace FNV-1a n-gram embeddings with a pre-trained local model (e.g., ONNX transformer) for meaningful semantic signals | Planned |
 | 7 | Polishing | Edge-case hardening, error recovery, comprehensive documentation | Planned |
 

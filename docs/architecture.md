@@ -478,6 +478,167 @@ node tests/slm-benchmark/runner.mjs --mode hybrid --slm
 
 A larger model (1.5B+) or a pre-trained embedding model (Phase 6) would be prerequisites for SLM to become worthwhile.
 
+## Deployment
+
+### Router Skills vs Leaf Skills
+
+The router deploys two kinds of skills to the ZCode mirror:
+
+| Kind | Location | Purpose | Deployed to |
+|------|----------|---------|-------------|
+| **Router skills** | `router-skills/router-{name}/SKILL.md` | Dispatch to the right leaf-skill domain | `~/.zcode/skills/router-{name}/` |
+| **Leaf skills** | `data/skills/{domain}/{slug}/SKILL.md` | Contain actual workflow instructions | `~/.zcode/skills/{domain}/{slug}/` |
+
+### Hook Registration
+
+The `UserPromptSubmit` hook must be registered in ZCode's CLI config (`~/.zcode/cli/config.json`). The project ships `hooks/hooks.json` as a reference manifest, but ZCode does not read hooks from plugin directories — only from the CLI config.
+
+The `--with-hook` flag on `deploy` invokes `src/deploy/hook-registrar.mjs`, which writes the hook entry idempotently into `~/.zcode/cli/config.json`:
+
+```json
+{
+  "hooks": {
+    "events": {
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "process",
+              "command": "node",
+              "args": ["${ZCODE_PLUGIN_ROOT}/hooks/route.mjs"],
+              "timeoutMs": 3500,
+              "enabled": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+The `${ZCODE_PLUGIN_ROOT}` literal is preserved in the config; ZCode substitutes it at runtime. Backups of the modified config are written to `logs/backups/` before each write.
+
+### Deploy Subsystem
+
+The deploy subsystem (`src/deploy/`) manages the router-side of the installation:
+
+1. **Plan** (`planner.mjs`): compares `router-skills/` source against the ZCode mirror using SHA-256 hashes. Classifies routers as add, update, or unchanged.
+2. **Write** (`writer.mjs`): copies router SKILL.md files to the mirror, writes `.skill-router-meta.json`, creates a timestamped snapshot before any writes, and attempts rollback on error.
+3. **Verify** (`verifier.mjs`): post-deploy health check that verifies all expected routers are present with valid meta, no orphan router dirs exist, and the hook is registered.
+4. **Hook Registrar** (`hook-registrar.mjs`): `registerHook()`, `unregisterHook()`, `isHookRegistered()`, `detectHookConfigPath()`. Idempotent registration of the `UserPromptSubmit` hook into ZCode's CLI config with backup-before-write.
+
+Snapshots are saved to `logs/deploys/deploy-snapshot-*.json` and can be used for rollback with `deploy --rollback <file>`.
+
+### Feedback Loop
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     ZCode Editor                              │
+│                    (workflow authoring)                       │
+└──────────────────────┬────────────────────────────────────────┘
+                       │ UserPromptSubmit
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  hooks/route.mjs (subprocess)                                  │
+│   ├─ detects $mention → native skill activation                │
+│   ├─ BM25 ranks leaf skills                                    │
+│   ├─ reads SKILL.md content                                    │
+│   ├─ fits into context budget                                  │
+│   └─ writes .zcode/output.json + logs JSONL events             │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │ additionalContext injected into model
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Model responds                             │
+│                 (uses injected skill context)                  │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  logs/routing-YYYYMMDD.jsonl                                   │
+│   {"ts":"...","mode":"implicit","tier":"bm25",                │
+│    "router":null,"selectedSkills":[...],"promptHash":"sha256:.."}│
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  node bin/skill-router.mjs feedback                            │
+│   ├─ reads all log files                                       │
+│   ├─ summarizes by mode, tier, router, top skills              │
+│   └─ reports latency percentiles and fallback rate             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+The feedback command aggregates routing decisions from the JSONL log and produces a summary report. In future phases, this feedback data will be used to adjust retrieval parameters (Phase 5) and train semantic embeddings (Phase 6).
+
+## Adaptive Feedback Loop
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     ZCode Editor                              │
+│                    (workflow authoring)                       │
+└──────────────────────┬────────────────────────────────────────┘
+                       │ UserPromptSubmit
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Decision: hooks/route.mjs                                     │
+│   ├─ BM25 ranks leaf skills                                    │
+│   ├─ writes .zcode/output.json                                 │
+│   └─ logs decision to logs/routing-YYYYMMDD.jsonl              │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │ model uses injected context
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Outcome signals (implicit user behaviour)                     │
+│   ├─ retry     : same prompt re-submitted within 5 min         │
+│   ├─ rephrase  : prompt rephrased within 5 min                 │
+│   ├─ dismiss   : user dismissed suggestion without use         │
+│   └─ success   : no corrective signal within 10 min            │
+│   Recorded in logs/signals-YYYYMMDD.jsonl                      │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Attribution: src/core/retriever/attribution.mjs               │
+│   ├─ attributeOutcome(decision, outcome, leafIndex)            │
+│   ├─ computes per-field BM25 (name, description, keywords)     │
+│   ├─ determines dominant field that drove the top-ranked skill │
+│   └─ returns Attribution record with dominantField             │
+└──────────────────────┬──────────────────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  Weight Update: src/core/retriever/weights.mjs                 │
+│   ├─ computeWeights(attributions, currentWeights)              │
+│   ├─ positive outcomes → +5% on dominant field                 │
+│   ├─ negative outcomes → -5% on dominant field                 │
+│   ├─ clamp each weight to [0.5, 5.0]                           │
+│   ├─ normalize so sum stays constant                           │
+│   └─ require ≥ 20 attributions before changing                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Why Adaptation is Bounded
+
+The feedback loop adjusts BM25 field weights but does so under strict constraints to prevent regression:
+
+1. **Minimum sample size** — `computeWeights` requires at least 20 attributed outcomes before producing any change. This prevents noise from a handful of decisions from driving spurious weight shifts.
+
+2. **MaxDelta guardrail** — `src/cli/tune-guard.mjs` enforces `MAX_DELTA = 0.5`: no single field may move more than 0.5 away from the baseline weights in `data/baseline.json`. If the proposed change exceeds this bound, the guard returns `action: "refuse"` and the apply is blocked.
+
+3. **Accuracy tolerance** — `--apply` runs the BM25 benchmark *before* and *after* writing new weights. If Top-1 accuracy drops by more than `ACCURACY_TOLERANCE` (1.0 percentage point), the system automatically rolls back to the pre-change weights.
+
+4. **Weight clamping** — Each field is clamped to `[0.5, 5.0]`. No weight can drop to zero (which would effectively disable a field) or rise unboundedly.
+
+5. **Sum preservation** — After clamping, weights are normalized so their sum equals the original sum. This prevents the total signal strength from drifting upward or downward.
+
+6. **Frozen baseline** — `data/baseline.json` records the authoritative BM25 Top-1 (92.31%) and the default weights (`name: 3, description: 2, keywords: 1`). All guardrail checks reference this file. Users should update it manually via `tune --apply` after a successful run, or regenerate it after a corpus change.
+
+7. **Snapshots** — Every successful `--apply` writes a snapshot to `logs/weights/weights-*.json`. `tune --rollback` restores the most recent snapshot. Rollback is manual; the system never auto-rolls back beyond the pre-benchmark safeguard.
+
+These bounds ensure the feedback loop can nudge weights toward better performance but can never degrade the system below its frozen baseline without explicit user intervention.
+
 ## Phase 1 Findings: What Worked and What Did Not
 
 ### What Worked

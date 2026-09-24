@@ -137,7 +137,7 @@ calls, and no persistent state beyond the JSON skill index.
 │  │  skills      │  │  fingerprint │  │  verify, doctor,     │  │
 │  │  match-      │  │  keyed       │  │  help                │  │
 │  │  DomainsTo   │  │              │  │                      │  │
-│  │  Query()     │  │  Key:        │  │  14 subcommands      │  │
+│  │  Query()     │  │  Key:        │  │  17 subcommands      │  │
 │  └──────────────┘  │  sha256+fp   │  └──────────────────────┘  │
 │                     └──────────────┘                               │
 └──────────────────────┬──────────────────────────────────────────┘
@@ -251,7 +251,8 @@ calls, and no persistent state beyond the JSON skill index.
 
 - **planner.mjs** — `planDeploy(projectDir, zcodeDir)`: compares `router-skills/` source against the ZCode mirror using SHA-256 hashes. Classifies routers as add/update/unchanged. Reads the disabled registry to classify leaf skills needing disable.
 - **writer.mjs** — `applyDeploy(plan, projectDir, zcodeDir, options)`: copies router SKILL.md files to the mirror, writes `.skill-router-meta.json`, disables leaves via shadow mechanism. Creates a timestamped snapshot before any writes; attempts rollback on error.
-- **verifier.mjs** — `verifyDeploy(projectDir, zcodeDir)`: post-deploy health check. Verifies all expected routers are present with valid meta, all disabled leaves are actually disabled, no orphan router dirs exist.
+- **verifier.mjs** — `verifyDeploy(projectDir, zcodeDir)`: post-deploy health check. Verifies all expected routers are present with valid meta, all disabled leaves are actually disabled, no orphan router dirs exist, and the hook is registered.
+- **hook-registrar.mjs** — `registerHook()`, `unregisterHook()`, `isHookRegistered()`, `detectHookConfigPath()`. Idempotent registration of the `UserPromptSubmit` hook into ZCode's CLI config (`~/.zcode/cli/config.json`) with backup-before-write and `${ZCODE_PLUGIN_ROOT}` literal preservation.
 
 ### Hierarchical Router (`src/core/routing/hierarchical.mjs`)
 
@@ -423,10 +424,27 @@ calls, and no persistent state beyond the JSON skill index.
 - **metrics.mjs** -- In-memory ring buffer of last 1000 requests. Tracks latency percentiles (p50/p95/p99), hit/fallback counts.
 - **reporter.mjs** -- Human-readable markdown tables for metrics snapshots.
 
+### User Feedback Telemetry (`src/telemetry/`)
+
+- **feedback.mjs** -- `logDecision()` writes routing decisions (mode, tier, router, selectedSkills, latencyMs, confidence, prompt) to `logs/routing-YYYYMMDD.jsonl` with daily rotation and SHA-256 prompt hashing. `readDecisions()` and `summarize()` parse and aggregate decisions.
+- **signals.mjs** -- `recordSignal()` appends user feedback signals (retry, dismiss, rephrase, success, explicit_override) to `logs/signals-YYYYMMDD.jsonl`. Signals are fire-and-forget and never block the hook. `readSignals()` reads with optional date/type filters.
+- **outcomes.mjs** -- `correlate(decisions, signals)` classifies each decision as positive/negative/unknown based on signal proximity windows (retry within 5m = negative, explicit_override within 2m = negative, no signals within 10m = positive). `correlateFromLogs()` is the convenience wrapper used by `feedback --outcomes`.
+- **session-tracker.mjs** -- `trackPrompt(prompt, promptHash)` detects implicit feedback signals from prompt patterns and emits a Signal or null. Used inside `hooks/route.mjs` to record signals without adding UI dependencies.
+
+### BM25 Attribution Engine (`src/core/retriever/attribution.mjs`)
+
+- `attributeOutcome(decision, outcome, index)` computes per-field BM25 scores (name, description, keywords) for the top-ranked skill, determines which field was the dominant contributor, and returns an `Attribution` record with `dominantField`, `fields`, `selectedSkill`, and `decisionHash`.
+- Used by `feedback --outcomes` and `tune --analyze` to attribute positive/negative outcomes to specific fields.
+
+### Adaptive Weight Adjuster (`src/core/retriever/weights.mjs`)
+
+- `computeWeights(attributions, currentWeights, opts)` applies a 5% gradient-free adjustment: positive outcomes increase the dominant field by 5%, negative outcomes decrease it by 5%. Each weight is clamped to `[0.5, 5.0]` and the sum is preserved via normalization.
+- Requires at least `minOutcomes` (default 20) attributions before producing a change. Returns `{ changed, newWeights, reason, sampleSize }`.
+
 ### CLI (`bin/skill-router.mjs` + `src/cli/`)
 
 - Entry point at `bin/skill-router.mjs` routes to subcommand modules.
-- Subcommands (14 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `import`, `sync`, `sources`, `verify`, `doctor`, `analytics`, `help`.
+- Subcommands (18 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `import`, `sync`, `sources`, `verify`, `doctor`, `analytics`, `feedback`, `health`, `tune`, `help`.
 - Each subcommand is a separate module in `src/cli/` with an exported `main(argv)` function.
 
 ## Skill Index Schema
@@ -535,7 +553,11 @@ See `docs/implementation-plan.md` for the per-phase hook integration details.
 
 ## Logging Format
 
-Every log line is a single JSON object (no pretty-print), one per line:
+Two types of logs are produced:
+
+### Runtime Events (`logs/YYYY-MM-DD.jsonl`)
+
+Written by `src/core/telemetry/logger.mjs`. One JSON object per line, no pretty-print:
 
 ```jsonl
 {"ts":"2026-09-20T12:00:00.000Z","event":"retrieve","query":"deploy aws lambda","resultCount":3,"durationMs":12}
@@ -545,8 +567,18 @@ Every log line is a single JSON object (no pretty-print), one per line:
 {"ts":"2026-09-20T12:00:01.000Z","event":"error","query":"deploy aws lambda","error":"index not found"}
 ```
 
-Logs rotate by date: `logs/2026-09-20.jsonl`. Lines older than 30 days are
-eligible for cleanup (Phase 4).
+Logs rotate by date. Lines older than 30 days are eligible for cleanup (Phase 4).
+
+### Routing Decisions (`logs/routing-YYYYMMDD.jsonl`)
+
+Written by `src/telemetry/feedback.mjs` via `logDecision()`. One JSON object per line, no pretty-print:
+
+```jsonl
+{"ts":"2026-09-20T12:00:00.000Z","mode":"implicit","router":null,"tier":"bm25","selectedSkills":["backend-laravel-eloquent","backend-api-rest"],"latencyMs":{"total":2,"bm25":2},"confidence":0.92,"promptHash":"sha256:abc123...","sessionId":"user-123","version":"0.2.0"}
+{"ts":"2026-09-20T12:00:01.000Z","mode":"explicit","router":"router-laravel","tier":"bm25","selectedSkills":["backend-laravel-migrations"],"latencyMs":{"total":3,"bm25":3},"confidence":0.88,"promptHash":"sha256:def456...","sessionId":"user-123","version":"0.2.0"}
+```
+
+Raw prompts are never stored — only SHA-256 hashes appear. The `feedback` CLI reads these files and produces summary reports.
 
 ## Environment Variables
 
