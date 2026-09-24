@@ -1,4 +1,8 @@
 node_modules/
+logs/routing-*.jsonl
+logs/routing.jsonl
+logs/backups/
+logs/deploys/
 logs/*.jsonl
 logs/*.json
 data/skill-index.json

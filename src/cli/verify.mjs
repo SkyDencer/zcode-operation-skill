@@ -1,14 +1,20 @@
 /**
  * verify — Run health checks for sync state and index integrity.
  *
- * Usage: node bin/skill-router.mjs verify [--skills-dir <dir>] [--zcode-dir <dir>]
+ * Usage: node bin/skill-router.mjs verify [--skills-dir <dir>] [--zcode-dir <dir>] [--deep] [--json]
  *
- * Checks:
+ * Checks (default 5):
  *   1. Mirror directories match project skills (no drift)
  *   2. Orphan mirror directories flagged
  *   3. Meta files present in router-managed mirrors
  *   4. Index is up to date (hash matches corpus)
  *   5. Thresholds file exists and is valid
+ *
+ * Deep checks (with --deep, adds 2 more):
+ *   6. Hook registered: checks if hooks.events.UserPromptSubmit in ZCode CLI config
+ *      contains our hook (args includes '${ZCODE_PLUGIN_ROOT}/hooks/route.mjs')
+ *   7. Hook invocable: spawns `node hooks/route.mjs` with test stdin and verifies
+ *      valid JSON output with hookSpecificOutput.additionalContext field
  *
  * Exit code 0 = all checks pass, 1 = one or more failures.
  */
@@ -16,6 +22,7 @@ import { resolve, join } from 'node:path';
 import { existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
+import { spawn } from 'node:child_process';
 import { planSync } from '../sync/planner.mjs';
 import { readSyncState } from '../sync/state.mjs';
 import { loadSkills } from '../loader.mjs';
@@ -29,37 +36,19 @@ const YELLOW = '\x1b[33m';
 const BOLD = '\x1b[1m';
 const DIM = '\x1b[2m';
 
-function green(msg) {
-  return `${GREEN}${msg}${RESET}`;
-}
-function red(msg) {
-  return `${RED}${msg}${RESET}`;
-}
-function yellow(msg) {
-  return `${YELLOW}${msg}${RESET}`;
-}
-function bold(msg) {
-  return `${BOLD}${msg}${RESET}`;
-}
-function dim(msg) {
-  return `${DIM}${msg}${RESET}`;
-}
+function green(msg) { return `${GREEN}${msg}${RESET}`; }
+function red(msg) { return `${RED}${msg}${RESET}`; }
+function yellow(msg) { return `${YELLOW}${msg}${RESET}`; }
+function bold(msg) { return `${BOLD}${msg}${RESET}`; }
+function dim(msg) { return `${DIM}${msg}${RESET}`; }
 
 // ── Check result tracking ─────────────────────────────────────────────────────
 
 const results = [];
 
-function pass(check, detail) {
-  results.push({ check, ok: true, detail });
-}
-
-function fail(check, detail) {
-  results.push({ check, ok: false, detail });
-}
-
-function warn(check, detail) {
-  results.push({ check, ok: null, detail });
-}
+function pass(check, detail) { results.push({ check, ok: true, detail }); }
+function fail(check, detail) { results.push({ check, ok: false, detail }); }
+function warn(check, detail) { results.push({ check, ok: null, detail }); }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -84,6 +73,10 @@ function readMetaFile(skillDir) {
   } catch {
     return null;
   }
+}
+
+function getZcodeCliConfigPath() {
+  return resolve(homedir(), '.zcode', 'cli', 'config.json');
 }
 
 // ── 1. Mirror sync check ─────────────────────────────────────────────────────
@@ -162,7 +155,6 @@ async function checkMetaFiles(projectSkillsDir, zcodeSkillsDir) {
       projectRoot: process.cwd(),
     });
 
-    // Check that all unchanged skills in the mirror have a .skill-router-meta.json
     const missing = [];
     for (const entry of plan.unchanged) {
       const mirrorDir = join(zcodeSkillsDirResolved, entry.path);
@@ -201,7 +193,6 @@ async function checkIndexUpToDate(skillsDir) {
       return;
     }
 
-    // Build a map of expected hashes from the actual files
     const expectedHashes = new Map();
     const skills = await loadSkills(resolve(skillsDir ?? join(process.cwd(), 'data', 'skills')));
     for (const skill of skills) {
@@ -211,7 +202,6 @@ async function checkIndexUpToDate(skillsDir) {
       }
     }
 
-    // Each index entry should have a path that exists and matches its hash
     const mismatches = [];
     for (const entry of index) {
       const expectedHash = expectedHashes.get(entry.name);
@@ -267,19 +257,148 @@ function checkThresholds() {
   }
 }
 
+// ── 6. Hook registered (deep) ─────────────────────────────────────────────────
+
+function checkHookRegistered() {
+  const label = 'Hook registered';
+  const configPath = getZcodeCliConfigPath();
+
+  if (!existsSync(configPath)) {
+    fail(label, `ZCode CLI config not found at ${configPath}`);
+    return;
+  }
+
+  try {
+    const raw = readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(raw);
+    const hooks = config?.hooks?.events?.UserPromptSubmit;
+
+    if (!Array.isArray(hooks) || hooks.length === 0) {
+      fail(label, 'No UserPromptSubmit hooks configured in ZCode CLI config');
+      return;
+    }
+
+    // Check if any hook references our route.mjs
+    let found = false;
+    for (const hookGroup of hooks) {
+      const hookList = hookGroup?.hooks || [];
+      for (const hook of hookList) {
+        const args = hook?.args || [];
+        const argsStr = JSON.stringify(args);
+        if (argsStr.includes('hooks/route.mjs') || argsStr.includes('route.mjs')) {
+          found = true;
+          break;
+        }
+      }
+      if (found) break;
+    }
+
+    if (found) {
+      pass(label, 'hook registered in ZCode CLI config');
+    } else {
+      fail(label, 'hook not found in UserPromptSubmit hooks — run deploy to register');
+    }
+  } catch (err) {
+    fail(label, `config parse error: ${err.message}`);
+  }
+}
+
+// ── 7. Hook invocable (deep) ──────────────────────────────────────────────────
+
+function checkHookInvocable() {
+  const label = 'Hook invocable';
+  const routePath = resolve('hooks', 'route.mjs');
+
+  if (!existsSync(routePath)) {
+    fail(label, `hook script not found: ${routePath}`);
+    return;
+  }
+
+  const testInput = JSON.stringify({ prompt: 'test', cwd: '.' });
+  const idxPath = resolve('data', 'skill-index.json');
+
+  if (!existsSync(idxPath)) {
+    fail(label, 'skill-index.json not found — cannot test hook invocation');
+    return;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const child = spawn(process.execPath, [routePath], {
+        cwd: process.cwd(),
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: { ...process.env, INDEX_PATH: idxPath },
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk) => { stdout += chunk; });
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+      child.on('error', (err) => {
+        fail(label, `failed to spawn hook: ${err.message}`);
+        resolve();
+      });
+
+      child.stdin.write(testInput);
+      child.stdin.end();
+
+      child.on('close', (code) => {
+        if (code !== 0) {
+          fail(label, `hook exited with code ${code}${stderr ? ': ' + stderr.trim().slice(0, 100) : ''}`);
+          resolve();
+          return;
+        }
+
+        try {
+          const output = JSON.parse(stdout);
+          if (output?.hookSpecificOutput?.additionalContext !== undefined) {
+            pass(label, 'hook responds with valid JSON and additionalContext field');
+          } else {
+            fail(label, 'hook output missing hookSpecificOutput.additionalContext');
+          }
+        } catch (parseErr) {
+          fail(label, `hook output is not valid JSON: ${parseErr.message}`);
+        }
+        resolve();
+      });
+    } catch (err) {
+      fail(label, `spawn error: ${err.message}`);
+      resolve();
+    }
+  });
+}
+
 // ── Output ─────────────────────────────────────────────────────────────────────
 
-function printResults() {
-  console.log('');
-  console.log(bold('Skill Router — Verify'));
-  console.log('');
-
+function printResults(isJson, isDeep) {
   const total = results.length;
   const passed = results.filter((r) => r.ok === true).length;
   const failed_ = results.filter((r) => r.ok === false).length;
   const warned = results.filter((r) => r.ok === null).length;
 
-  // Header row
+  if (isJson) {
+    const output = {
+      checks: results.map((r) => ({
+        name: r.check,
+        passed: r.ok === true,
+        warning: r.ok === null,
+        detail: r.detail,
+      })),
+      passed,
+      failed: failed_,
+      warned,
+      deep: isDeep,
+    };
+    console.log(JSON.stringify(output, null, 2));
+    return failed_ === 0;
+  }
+
+  console.log('');
+  console.log(bold('Skill Router — Verify'));
+  console.log('');
+
   const header = `${dim('Check')}${' '.repeat(38)} | ${dim('Status')}`;
   console.log(header);
   console.log(dim('─'.repeat(62)));
@@ -312,23 +431,36 @@ function printResults() {
 export async function main(argv) {
   let skillsDir = null;
   let zcodeDir = null;
+  let deep = false;
+  let isJson = false;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--skills-dir' && argv[i + 1]) {
       skillsDir = resolve(argv[++i]);
     } else if (argv[i] === '--zcode-dir' && argv[i + 1]) {
       zcodeDir = resolve(argv[++i]);
+    } else if (argv[i] === '--deep') {
+      deep = true;
+    } else if (argv[i] === '--json') {
+      isJson = true;
     }
   }
 
   const projectSkillsDir = skillsDir ?? join(process.cwd(), 'data', 'skills');
 
+  // ── Default 5 checks ─────────────────────────────────────────────────────
   await checkMirrorSync(projectSkillsDir, zcodeDir);
   await checkOrphanMirrors(projectSkillsDir, zcodeDir);
   await checkMetaFiles(projectSkillsDir, zcodeDir);
   await checkIndexUpToDate(skillsDir);
   checkThresholds();
 
-  const allPass = printResults();
+  // ── Deep checks 6 & 7 ────────────────────────────────────────────────────
+  if (deep) {
+    checkHookRegistered();
+    await checkHookInvocable();
+  }
+
+  const allPass = printResults(isJson, deep);
   process.exit(allPass ? 0 : 1);
 }

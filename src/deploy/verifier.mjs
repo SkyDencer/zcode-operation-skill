@@ -12,6 +12,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { readDisabledRegistry } from '../sync/disabler.mjs';
+import { isHookRegistered, detectHookConfigPath } from '../deploy/hook-registrar.mjs';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ import { readDisabledRegistry } from '../sync/disabler.mjs';
  * @typedef {Object} VerifyReport
  * @property {boolean} routersOk
  * @property {boolean} leavesOk
+ * @property {boolean} hookRegistered
  * @property {string[]} warnings
  * @property {RouterHealth[]} routers
  * @property {LeafHealth[]} leaves
@@ -194,7 +196,18 @@ export function verifyDeploy(projectDir, zcodeDir) {
 
   const leavesOk = leaves.every((l) => l.disabled);
 
-  return { routersOk, leavesOk, warnings, routers, leaves, mirrorPath: mirrorRoot };
+  // ── Check hook registration ────────────────────────────────────────────────
+  let hookRegistered = false;
+  try {
+    const configPath = detectHookConfigPath(zcodeDir);
+    if (configPath) {
+      hookRegistered = isHookRegistered(configPath);
+    }
+  } catch {
+    warnings.push('Cannot check hook registration');
+  }
+
+  return { routersOk, leavesOk, hookRegistered, warnings, routers, leaves, mirrorPath: mirrorRoot };
 }
 
 // ── CLI entry point ────────────────────────────────────────────────────────────

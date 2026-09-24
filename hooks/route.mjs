@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { rankSkills, readSkillContent } from '../src/index.mjs';
 import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
+import { logDecision } from '../src/telemetry/feedback.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
@@ -216,6 +217,18 @@ async function main() {
     routerMatched: decision.routerMatched ?? null,
     mode: decision.mode ?? tier,
     slmEnabled: config.slm?.enabled ?? false,
+  });
+
+  // Log structured routing decision for feedback analytics
+  const modeLabel = (decision.explicit ?? false) ? 'explicit' : 'implicit';
+  await logDecision({
+    mode: modeLabel,
+    router: decision.routerMatched ?? null,
+    tier,
+    selectedSkills: rankedNames.map((s) => s.name),
+    latencyMs: { total: latency, bm25: bm25Latency },
+    confidence,
+    prompt: trimmedPrompt,
   });
 
   if (rankedNames.length === 0) {

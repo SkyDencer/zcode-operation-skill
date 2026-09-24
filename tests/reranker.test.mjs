@@ -21,6 +21,10 @@ const INDEX_PATH = resolve(BASE, 'data/skill-index.json');
 const prompts = JSON.parse(readFileSync(PROMPTS_PATH, 'utf-8'));
 const expected = JSON.parse(readFileSync(EXPECTED_PATH, 'utf-8'));
 const index = JSON.parse(readFileSync(INDEX_PATH, 'utf-8'));
+// FIX: Filter to leaf-only index. Router skills (router-*) are dispatchers,
+// not content — they must not compete in hybrid retrieval. Matches
+// hooks/route.mjs:136 where leafIndex is built identically.
+const leafIndex = index.filter((s) => !s.name.startsWith('router-'));
 
 let passed = 0;
 let failed = 0;
@@ -121,18 +125,18 @@ for (const p of prompts.slice(0, 20)) {
   const exp = expected.find((e) => e.id === p.id)?.expected;
   const expName = typeof exp === 'string' ? exp : String(exp);
 
-  // BM25 only
-  const bm25Result = rankSkills(p.prompt, index);
+  // BM25 only (leaf-only index)
+  const bm25Result = rankSkills(p.prompt, leafIndex);
   const bm25Top = bm25Result.length > 0 ? bm25Result[0].skill.name : null;
   if (bm25Top === expName) bm25Hits++;
 
-  // Hybrid without reranking
-  const hybridNoRerank = hybridRetrieve(p.prompt, index, { rerank: false });
+  // Hybrid without reranking (leaf-only index)
+  const hybridNoRerank = hybridRetrieve(p.prompt, leafIndex, { rerank: false });
   const hybridNoRerankTop = hybridNoRerank.length > 0 ? hybridNoRerank[0].skill.name : null;
   if (hybridNoRerankTop === expName) hybridHits++;
 
-  // Hybrid with reranking
-  const hybridRerank = hybridRetrieve(p.prompt, index, { rerank: true });
+  // Hybrid with reranking (leaf-only index)
+  const hybridRerank = hybridRetrieve(p.prompt, leafIndex, { rerank: true });
   const hybridRerankTop = hybridRerank.length > 0 ? hybridRerank[0].skill.name : null;
   if (hybridRerankTop === expName) hybridRerankHits++;
 }
