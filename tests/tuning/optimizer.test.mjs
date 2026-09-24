@@ -9,11 +9,14 @@
  * - Defaults are used when no thresholds file exists
  * - reportTuning produces valid markdown output
  * - Optimizer completes in under 30 seconds
+ * - The canonical corpus is the 54-skill leaf-only index (see "CANONICAL CORPUS"
+ *   below); the full 60-entry index is retained only to assert the router gap.
  */
 import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { optimizeThresholds } from '../../src/tuning/optimizer.mjs';
 import { reportTuning } from '../../src/tuning/report.mjs';
+import { rankSkills } from '../../src/core/retriever/bm25.mjs';
 import { getDefaults } from '../../src/config/defaults.mjs';
 
 const BASE = resolve('.');
@@ -61,11 +64,39 @@ console.log('\n=== Optimizer Tests ===\n');
 // Load full corpus once
 const prompts = JSON.parse(readFileSync(PROMPTS_PATH, 'utf-8'));
 const expected = JSON.parse(readFileSync(EXPECTED_PATH, 'utf-8'));
-const index = JSON.parse(readFileSync(INDEX_PATH, 'utf-8'));
+const fullIndex = JSON.parse(readFileSync(INDEX_PATH, 'utf-8'));
+
+/**
+ * CANONICAL CORPUS FOR THIS SUITE: the 54-skill leaf-only index.
+ *
+ * WHY leaf-only and not the full 60-entry index:
+ * data/skill-index.json contains 54 leaf skills plus 6 `router-*` dispatcher
+ * skills. The router entries are dispatchers, not content skills: the hook
+ * excludes them from implicit BM25 ranking (hooks/route.mjs:139) and only
+ * consults them for explicit `$mention` dispatch. The benchmark prompt set
+ * (tests/prompts.json) and its labels (tests/expected-routes.json) target leaf
+ * skills exclusively, so router entries can only pollute an implicit ranking.
+ *
+ * Measured Top-1 on the same 130 prompts, same BM25 code, same weights:
+ *   full 60-entry index (54 leaf + 6 router) : 112/130 = 0.8615
+ *   leaf-only index (54 leaf)                : 118/130 = 0.9077
+ *
+ * Including the routers costs 6 correct top-1 answers, which is what pushed
+ * this suite below its 0.89 assertion for several phases. Leaf-only is also the
+ * corpus the routing path actually serves by default, so tuning thresholds
+ * against it is the behaviour under test. The other Phase 4/5 suites
+ * (routing, hybrid, reranker) were reconciled to the same leaf-only choice for
+ * the same reason (docs/problems.md rows 1-4).
+ *
+ * The full index is still read above (`fullIndex`) and is used in section 14 to
+ * assert the router-pollution gap explicitly, so this decision stays visible
+ * rather than silently dropping the 60-entry corpus from the test suite.
+ */
+const leafIndex = fullIndex.filter((s) => !s.name.startsWith('router-'));
 
 // 1. Return shape
 console.log('1. Return shape');
-const result = optimizeThresholds(prompts, index, expected);
+const result = optimizeThresholds(prompts, leafIndex, expected);
 assert(typeof result.high === 'number', 'high is a number');
 assert(typeof result.medium === 'number', 'medium is a number');
 assert(typeof result.noSkill === 'number', 'noSkill is a number');
@@ -84,8 +115,8 @@ assert(result.medium < result.high, `medium (${result.medium}) < high (${result.
 console.log('\n3. Fallback rate constraint');
 assert(result.fallbackRate < 0.15, `fallbackRate ${result.fallbackRate.toFixed(4)} < 0.15`);
 
-// 4. Top-1 accuracy matches BM25 baseline
-console.log('\n4. Top-1 accuracy');
+// 4. Top-1 accuracy matches BM25 baseline on the canonical leaf-only corpus
+console.log('\n4. Top-1 accuracy (leaf-only 54-skill corpus)');
 assert(result.top1 >= 0.89, `top1 ${result.top1.toFixed(4)} >= 0.89`);
 
 // 5. Grid evaluated count
@@ -182,18 +213,45 @@ try {
 // 12. Optimizer performance — must complete in < 30s on full corpus
 console.log('\n12. Performance (< 30s)');
 const t0 = performance.now();
-const perfResult = optimizeThresholds(prompts, index, expected);
+const perfResult = optimizeThresholds(prompts, leafIndex, expected);
 const elapsed = performance.now() - t0;
 assert(elapsed < 30000, `optimizer completed in ${elapsed.toFixed(0)}ms (< 30000ms)`);
 console.log(`    Elapsed: ${elapsed.toFixed(0)} ms`);
 
 // 13. Result determinism — same inputs produce same outputs
 console.log('\n13. Determinism');
-const r1 = optimizeThresholds(prompts, index, expected);
-const r2 = optimizeThresholds(prompts, index, expected);
+const r1 = optimizeThresholds(prompts, leafIndex, expected);
+const r2 = optimizeThresholds(prompts, leafIndex, expected);
 assert(r1.high === r2.high, 'high is deterministic');
 assert(r1.medium === r2.medium, 'medium is deterministic');
 assert(r1.top1 === r2.top1, 'top1 is deterministic');
+
+// 14. Corpus choice is explicit — the leaf-only corpus is the canonical one and
+//     the full index is kept visible so the router-pollution gap stays asserted.
+console.log('\n14. Canonical corpus (leaf-only 54)');
+assert(fullIndex.length === 60, `full index has 60 entries (54 leaf + 6 router), got ${fullIndex.length}`);
+assert(fullIndex.filter((s) => s.name.startsWith('router-')).length === 6, 'full index has 6 router-* entries');
+assert(leafIndex.length === 54, `leaf-only index has 54 entries, got ${leafIndex.length}`);
+assert(leafIndex.every((s) => !s.name.startsWith('router-')), 'leaf index contains no router-* entries');
+assert(fullIndex.every((s) => leafIndex.includes(s) || s.name.startsWith('router-')), 'leaf index is the full index minus routers');
+
+// Measure the raw strict top-1 on both corpora so the documented gap is enforced.
+function rawTop1(idx) {
+  let hits = 0;
+  for (let i = 0; i < prompts.length; i++) {
+    const ranked = rankSkills(prompts[i].prompt, idx);
+    const topSkill = ranked.length > 0 ? ranked[0].skill.name : null;
+    const exp = expected[i]?.expected;
+    const expName = exp === null || exp === undefined ? null : String(exp);
+    if (topSkill === expName) hits++;
+  }
+  return hits / prompts.length;
+}
+const leafTop1 = rawTop1(leafIndex);
+const fullTop1 = rawTop1(fullIndex);
+assert(leafTop1 > fullTop1, `leaf-only top1 ${leafTop1.toFixed(4)} > full-index top1 ${fullTop1.toFixed(4)} (router pollution)`);
+assert(leafTop1 >= 0.89, `leaf-only top1 ${leafTop1.toFixed(4)} >= 0.89 canonical baseline`);
+assert(result.top1 === leafTop1, `optimizer top1 ${result.top1.toFixed(4)} matches measured leaf-only top1`);
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
