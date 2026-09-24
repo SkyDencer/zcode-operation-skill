@@ -7,6 +7,10 @@
  * Confidence thresholds are loaded from data/thresholds.json when present
  * (produced by src/tuning/optimizer.mjs), otherwise the hardcoded defaults
  * below are used.
+ *
+ * BM25 field weights are loaded from data/weights.json when present
+ * (produced by src/core/retriever/weights.mjs), otherwise the hardcoded
+ * defaults below are used.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -34,6 +38,32 @@ function loadThresholds() {
 const _thresholds = loadThresholds();
 
 /**
+ * Load adaptive BM25 field weights from data/weights.json if it exists.
+ * Falls back to hardcoded defaults when the file is absent or malformed.
+ *
+ * @returns {{name:number, description:number, keywords:number}|undefined}
+ */
+function loadWeights() {
+  try {
+    const path = resolve('data/weights.json');
+    const raw = readFileSync(path, 'utf-8');
+    const data = JSON.parse(raw);
+    if (
+      typeof data.name === 'number' &&
+      typeof data.description === 'number' &&
+      typeof data.keywords === 'number'
+    ) {
+      return { name: data.name, description: data.description, keywords: data.keywords };
+    }
+  } catch {
+    // File missing or malformed — use hardcoded defaults
+  }
+  return undefined;
+}
+
+const _weights = loadWeights();
+
+/**
  * Return the default configuration object.
  *
  * @returns {object}
@@ -43,9 +73,9 @@ export function getDefaults() {
     bm25: {
       k1: 1.5,
       b: 0.75,
-      nameWeight: 3,
-      descriptionWeight: 2,
-      keywordWeight: 1,
+      nameWeight: _weights?.name ?? 3,
+      descriptionWeight: _weights?.description ?? 2,
+      keywordWeight: _weights?.keywords ?? 1,
     },
     embeddings: {
       dimensions: 256,

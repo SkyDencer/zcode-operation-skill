@@ -1,0 +1,21 @@
+{
+  "benchmark": {
+    "top1": 0.9231,
+    "recallAt3": 0.8923,
+    "medianLatencyMs": 3,
+    "p95LatencyMs": 5,
+    "noSkillRate": 0.0846
+  },
+  "weights": {
+    "name": 3,
+    "description": 2,
+    "keywords": 1
+  },
+  "thresholds": {
+    "high": 0.85,
+    "medium": 0.6
+  },
+  "baselineAt": "2026-09-24T13:00:00.000Z",
+  "indexSize": 60,
+  "promptCount": 130
+}
