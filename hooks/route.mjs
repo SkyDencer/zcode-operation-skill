@@ -10,10 +10,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { rankSkills, readSkillContent } from '../src/index.mjs';
 import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
 import { logDecision } from '../src/telemetry/feedback.mjs';
+import { trackPrompt } from '../src/telemetry/session-tracker.mjs';
+import { recordSignal } from '../src/telemetry/signals.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
@@ -230,6 +233,17 @@ async function main() {
     confidence,
     prompt: trimmedPrompt,
   });
+
+  // Emit feedback signal if detected (fire-and-forget, never blocks routing)
+  try {
+    const promptHash = 'sha256:' + createHash('sha256').update(trimmedPrompt).digest('hex');
+    const signal = trackPrompt(trimmedPrompt, promptHash);
+    if (signal) {
+      await recordSignal(signal);
+    }
+  } catch {
+    // Signal logging failures must never block the hook
+  }
 
   if (rankedNames.length === 0) {
     process.exit(0);

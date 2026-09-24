@@ -1,0 +1,4 @@
+{"ts":"2026-09-24T08:06:00.000Z","decisionHash":"sha256:neg002retryhash0000000000000000000000000000000000000000000000000","type":"retry","details":{"attemptCount":2}}
+{"ts":"2026-09-24T08:11:00.000Z","decisionHash":"sha256:neg003overridehash00000000000000000000000000000000000000000000","type":"explicit_override","details":{"previousHash":"sha256:orig_hash"}}
+{"ts":"2026-09-24T08:16:00.000Z","decisionHash":"sha256:neg004rephrasehash0000000000000000000000000000000000000000000000","type":"rephrase","details":{"similarity":0.72,"previousHash":"sha256:orig_hash"}}
+{"ts":"2026-09-23T06:00:00.000Z","decisionHash":"sha256:stalehash0000000000000000000000000000000000000000000000000000000000","type":"retry","details":{"attemptCount":2}}
