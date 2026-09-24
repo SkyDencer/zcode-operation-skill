@@ -8,12 +8,12 @@
 
 ## 1. Root Cause
 
-Plugin hooks in ZCode 3.14.1 are **not failing at the schema or discovery level** — they are failing at the **plugin enablement level**. The hook contract (`hooks/hooks.json` at the standard location, `${ZCODE_PLUGIN_ROOT}` variable expansion, `matcher: "."` regex) is correctly implemented and auto-discovered per docs. However, the `zcode-skill-router` plugin does **not appear in the `enabledPlugins` map** in `~/.zcode/cli/config.json` (read at `C:\Users\PC-1\.zcode\cli\config.json:1-32`). Since plugin hooks "follow the plugin's enable state" (per hooks docs, Configuration Sources table), a plugin that is absent from or disabled in `enabledPlugins` will not have its hooks executed, regardless of how correct `hooks/hooks.json` is. A secondary issue: workspace-scoped hooks in `<workspace>/.zcode/config.json` are **silently ignored** for security (`config_project_hooks_ignored`), so placing hook config there never works.
+Plugin hooks in ZCode 3.14.1 are **not failing at the schema or discovery level** — they are failing at the **plugin enablement level**. The hook contract (`hooks/hooks.json` at the standard location, `${ZCODE_PLUGIN_ROOT}` variable expansion, `matcher: "."` regex) is correctly implemented and auto-discovered per docs. However, the `zcode-skill-router` plugin does **not appear in the `enabledPlugins` map** in `~/.zcode/cli/config.json` (read at `~/.zcode/cli/config.json`, lines 1-32). Since plugin hooks "follow the plugin's enable state" (per hooks docs, Configuration Sources table), a plugin that is absent from or disabled in `enabledPlugins` will not have its hooks executed, regardless of how correct `hooks/hooks.json` is. A secondary issue: workspace-scoped hooks in `<workspace>/.zcode/config.json` are **silently ignored** for security (`config_project_hooks_ignored`), so placing hook config there never works.
 
 ## 2. Config Path
 
-**User-scope hooks:** `~/.zcode/cli/config.json` (verified: `C:\Users\PC-1\.zcode\cli\config.json` exists, `hooks.enabled: true`, line 12)
-**Workspace hooks (not executed):** `<workspace>/.zcode/config.json` (verified: `C:\Users\PC-1\.zcode\workspace\default\.zcode\config.json` contains empty `events: {}`, line 2-4 — ignored per docs)
+**User-scope hooks:** `~/.zcode/cli/config.json` (verified: `~/.zcode/cli/config.json` exists, `hooks.enabled: true`, line 12)
+**Workspace hooks (not executed):** `<workspace>/.zcode/config.json` (verified: `~/.zcode/workspace/default/.zcode/config.json` contains empty `events: {}`, line 2-4 — ignored per docs)
 
 ## 3. Schema Comparison
 
@@ -48,10 +48,10 @@ This mirrors the existing deploy subsystem pattern (`src/deploy/writer.mjs:125` 
 
 | File | Key Finding |
 |---|---|
-| `C:\Users\PC-1\.zcode\cli\config.json` (read) | `hooks.enabled: true`; `zcode-skill-router` **absent** from `enabledPlugins`; one disabled test-hook entry at line 17 |
-| `C:\Users\PC-1\.zcode\workspace\default\.zcode\config.json` (read) | Empty `events: {}` — workspace hooks ignored per docs |
+| `~/.zcode/cli/config.json` (read) | `hooks.enabled: true`; `zcode-skill-router` **absent** from `enabledPlugins`; one disabled test-hook entry at line 17 |
+| `~/.zcode/workspace/default/.zcode/config.json` (read) | Empty `events: {}` — workspace hooks ignored per docs |
 | `hooks/hooks.json` (read, project) | Valid schema; `matcher: "."`, `timeoutMs: 3500`, `statusMessage: "Routing skills..."` |
-| `C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router\hooks\hooks.json` (read) | Identical to project except `statusMessage: "Routing skill..."` (stale, singular) |
+| `~/.zcode/workspace/default/plugins/zcode-skill-router/hooks/hooks.json` (read) | Identical to project except `statusMessage: "Routing skill..."` (stale, singular) |
 | `.zcode-plugin/plugin.json` (read, both project and installed) | Byte-identical; no `hooks` field (auto-discovery confirmed) |
 | `find ... hooks.json` (ran via PowerShell) | 5 `hooks.json` files found: 2 empty official, 2 empty server, 1 active (zcode-skill-router) |
 | `find ... plugin.json -exec grep '"hooks"'` (ran via PowerShell) | **0 plugins** declare `hooks` field in manifest — all rely on auto-discovery |
