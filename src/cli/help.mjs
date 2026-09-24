@@ -25,6 +25,8 @@ Subcommands:
   sources    List current sources and skill counts
   verify     Health check: sync drift, orphans, index integrity, thresholds
   doctor     Diagnostic report: environment, corpus, benchmarks, overrides
+  feedback   Show routing decision feedback summary
+  tune       Adaptive BM25 weight tuning (analyze, apply, rollback, auto)
   help       Show this help message
 
 Examples:
@@ -37,6 +39,11 @@ Examples:
   node bin/skill-router.mjs benchmark --mode bm25
   node bin/skill-router.mjs verify
   node bin/skill-router.mjs doctor
+  node bin/skill-router.mjs feedback --since 2026-09-20
+  node bin/skill-router.mjs tune --analyze
+  node bin/skill-router.mjs tune --apply --dry-run
+  node bin/skill-router.mjs tune --status
+  node bin/skill-router.mjs tune --rollback
 
 Options:
   --skills-dir <dir>   Override the default skills directory (default: data/skills)
