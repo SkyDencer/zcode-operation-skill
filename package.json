@@ -22,6 +22,7 @@
     "test:cli": "node tests/cli/list.test.mjs && node tests/cli/reindex.test.mjs && node tests/cli/validate.test.mjs && node tests/cli/verify.test.mjs && node tests/cli/verify-deep.test.mjs && node tests/cli/doctor.test.mjs && node tests/cli/health.test.mjs && node tests/cli/tune-guard.test.mjs && node tests/cli/tune.test.mjs && node tests/cli/esm-require.test.mjs",
     "test:e2e": "node tests/e2e/full-pipeline.mjs && node tests/e2e/idempotency.mjs && node tests/e2e/orphan-cleanup.mjs && node tests/e2e/hook-process.mjs && node tests/e2e/full-loop.mjs",
     "test:deploy": "node tests/deploy/hook-registrar.test.mjs",
-    "benchmark:two-mode": "node tests/two-mode-benchmark/runner.mjs"
+    "benchmark:two-mode": "node tests/two-mode-benchmark/runner.mjs",
+    "coverage": "node tests/run-coverage.mjs"
   }
 }
