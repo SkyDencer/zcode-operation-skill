@@ -5,13 +5,16 @@
  * into the project's skills directory after validation.
  *
  * Security:
- *   - Blocks path traversal (../ patterns) in target paths
+ *   - Blocks path traversal (../ patterns) in source and target paths
+ *   - Rejects skill names that are not a single safe path segment
+ *   - Verifies the resolved target directory is inside the skills directory
  *   - Never overwrites existing skills without --force
  *   - Validates all candidates before any copy operations
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { validateSkill } from '../quality/validator.mjs';
+import { isSafeName, isWithinRoot } from '../utils/fs.mjs';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -73,23 +76,26 @@ function hasTraversal(path) {
  * Resolve the target directory for a skill name.
  * e.g. "backend-eloquent" → data/skills/backend/eloquent/
  *
+ * The name is untrusted frontmatter data, so it must be a single safe path
+ * segment and the resolved directory must stay inside skillsDir. Returns null
+ * when either check fails.
+ *
  * @param {string} name
- * @param {string} skillsDir
- * @returns {string}
+ * @param {string} skillsDir — absolute, already-resolved skills directory
+ * @returns {string | null}
  */
 function resolveTargetDir(name, skillsDir) {
+  if (!isSafeName(name)) return null;
+
   const nameParts = name.split('-');
   const domainPart = nameParts[0];
   const slugPart = nameParts.slice(1).join('-');
 
-  if (!domainPart) {
-    return join(skillsDir, name);
-  }
+  const targetDir = slugPart
+    ? join(skillsDir, domainPart, slugPart)
+    : join(skillsDir, domainPart || name);
 
-  if (slugPart) {
-    return join(skillsDir, domainPart, slugPart);
-  }
-  return join(skillsDir, domainPart);
+  return isWithinRoot(skillsDir, targetDir) ? targetDir : null;
 }
 
 /**
@@ -163,7 +169,7 @@ export function importSkills(candidates, options = {}) {
 
   // Resolve target directory safely
   const resolvedSkillsDir = resolve(skillsDir);
-  if (hasTraversal(resolvedSkillsDir)) {
+  if (hasTraversal(skillsDir)) {
     throw new Error('Target skills directory contains path traversal: ' + skillsDir);
   }
 
@@ -197,8 +203,19 @@ export function importSkills(candidates, options = {}) {
       continue;
     }
 
-    // ── Check collision ─────────────────────────────────────────────────────
+    // ── Check name safety and target containment ─────────────────────────────
     const targetDir = resolveTargetDir(candidate.name, resolvedSkillsDir);
+    if (!targetDir) {
+      item.status = 'rejected';
+      item.issues = [{
+        field: 'path',
+        message: `Skill name contains path traversal or separators: ${candidate.name}`,
+      }];
+      items.push(item);
+      continue;
+    }
+
+    // ── Check collision ─────────────────────────────────────────────────────
     const targetPath = join(targetDir, 'SKILL.md');
 
     if (existsSync(targetPath) && !force) {

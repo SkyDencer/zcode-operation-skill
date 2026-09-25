@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { existsSync, readFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { validateSkill } from '../quality/validator.mjs';
 import { parseFrontmatter } from '../loader.mjs';
+import { isSafeName, isWithinRoot } from '../utils/fs.mjs';
 
 const SKILLS_DIR = resolve('data/skills');
 
@@ -35,6 +36,14 @@ export function main(argv) {
 
   if (!fm.name) {
     console.error('Error: SKILL.md missing "name" in frontmatter.');
+    process.exit(1);
+  }
+
+  // The frontmatter name becomes a directory name, so it must be a single safe
+  // path segment. Rejected here regardless of --dry-run: this is not a quality
+  // check, it is a guard against writing outside data/skills.
+  if (!isSafeName(fm.name)) {
+    console.error(`Error: invalid skill name "${fm.name}" — a name must not contain path separators or "..".`);
     process.exit(1);
   }
 
@@ -68,6 +77,12 @@ export function main(argv) {
     targetDir = resolve(SKILLS_DIR, domainPart, slugPart);
   } else {
     targetDir = resolve(SKILLS_DIR, domainPart);
+  }
+
+  // Defence in depth: the derived directory must still be inside data/skills.
+  if (!isWithinRoot(SKILLS_DIR, targetDir)) {
+    console.error(`Error: skill name "${fm.name}" resolves outside ${SKILLS_DIR}.`);
+    process.exit(1);
   }
 
   const targetPath = resolve(targetDir, 'SKILL.md');

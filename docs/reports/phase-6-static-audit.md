@@ -369,9 +369,16 @@ $ node tests/run-benchmark.mjs --corpus synthetic-50      # generator path now r
   only absolute user-local path occurrence is the git-ignored generated index (**P6-H9**).
 - **No `eval`, `new Function`, or shell interpolation of untrusted input**; the
   CLI arg parser only resolves paths (`src/cli/sync.mjs:33-48`).
-- **Path-traversal guards in the importer are effective:**
-  `src/import/importer.mjs:165-167,182-187` rejects `..`/`.` components before
-  any copy, and the import test suite passes (`tests/import/importer.test.mjs`).
+- **Path-traversal guards in the importer: NOT effective — corrected after
+  review.** This entry originally claimed the guards at
+  `src/import/importer.mjs:165-167,182-187` were effective. They were not:
+  `hasTraversal()` was called on an already-`resolve()`d absolute skills
+  directory (always false) and on `candidate.sourcePath` (never on the
+  untrusted frontmatter `name`, which is what builds the destination
+  directory). A skill named `backend-../../../../pwned` passed
+  `validateSkill()` and wrote `SKILL.md` outside `data/skills`. Fixed in the
+  6.4 security remediation; see `docs/problems.md` (P6-C3) and
+  `tests/security/path-traversal.test.mjs`.
 
 ---
 

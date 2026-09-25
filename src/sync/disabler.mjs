@@ -11,18 +11,18 @@
  *
  * Safety: Only mirror directories bearing .skill-router-meta.json are touched.
  * User-created / hand-edited skills (no meta) are never modified or deleted.
+ * Every derived path must resolve inside the mirror (and project) root.
  */
-import { createHash } from 'node:crypto';
 import {
   existsSync,
   readFileSync,
-  readdirSync,
   writeFileSync,
   rmSync,
   copyFileSync,
   mkdirSync,
 } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
+import { isWithinRoot } from '../utils/fs.mjs';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -60,13 +60,6 @@ const META_FILENAME = '.skill-router-meta.json';
 const SKILL_FILE_NAME = 'SKILL.md';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-/**
- * Compute SHA-256 hex digest of a UTF-8 string.
- */
-function hashContent(content) {
-  return createHash('sha256').update(content, 'utf-8').digest('hex');
-}
 
 /**
  * Read the .skill-router-meta.json for a mirror skill directory, if present.
@@ -110,6 +103,16 @@ function readSkillContent(skillDir) {
 export function disableSkill(mirrorPath, entry, mechanism = 'mirror') {
   const mirrorRoot = resolve(mirrorPath);
   const mirrorSkillDir = join(mirrorRoot, entry.path);
+
+  // ── Guard: the entry path must stay inside the mirror root ───────────────
+  // entry.path reaches us from .skill-router-disabled.json via --disable, so
+  // an unsanitised name could otherwise delete or shadow outside the mirror.
+  if (!isWithinRoot(mirrorRoot, mirrorSkillDir)) {
+    return {
+      success: false,
+      message: `Cannot disable ${entry.name}: path escapes the mirror root: ${entry.path}`,
+    };
+  }
 
   // ── Guard: only touch managed directories ─────────────────────────────────
   if (mechanism === 'mirror') {
@@ -214,6 +217,14 @@ export function enableSkill(mirrorPath, entry, projectSkillsDir, mechanism = 'mi
   const mirrorSkillDir = join(mirrorRoot, entry.path);
   const sourcePath = join(projectRoot, entry.path, SKILL_FILE_NAME);
 
+  // ── Guard: the entry path must stay inside both roots ────────────────────
+  if (!isWithinRoot(mirrorRoot, mirrorSkillDir) || !isWithinRoot(projectRoot, sourcePath)) {
+    return {
+      success: false,
+      message: `Cannot enable ${entry.name}: path escapes the project or mirror root: ${entry.path}`,
+    };
+  }
+
   if (!existsSync(sourcePath)) {
     return {
       success: false,
@@ -282,7 +293,6 @@ export function writeDisabledRegistry(disabled, projectRoot = process.cwd()) {
 }
 
 // ── CLI entry point ────────────────────────────────────────────────────────────
-
 const _cliArgv1 = process.argv[1]?.replace(/\\/g, '/') ?? '';
 if (_cliArgv1 && import.meta.url.endsWith(_cliArgv1)) {
   console.log('This module is not meant to be run directly. Use: node bin/skill-router.mjs sync');

@@ -23,6 +23,7 @@ import {
 } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { disableSkill } from './disabler.mjs';
+import { isWithinRoot } from '../utils/fs.mjs';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -75,16 +76,6 @@ const SKILL_FILE_NAME = 'SKILL.md';
  */
 function hashContent(content) {
   return createHash('sha256').update(content, 'utf-8').digest('hex');
-}
-
-/**
- * Check whether a resolved path is safely within a root directory.
- */
-function isWithinRoot(checkPath, root) {
-  const normalize = (p) => p.replace(/\\/g, '/').replace(/\/+$/, '');
-  const normPath = normalize(checkPath);
-  const normRoot = normalize(root);
-  return normPath === normRoot || normPath.startsWith(normRoot + '/');
 }
 
 /**
@@ -174,14 +165,14 @@ export function applySync(plan, projectSkillsDir, options = {}) {
     const sourcePath = join(projectRoot, entry.path, SKILL_FILE_NAME);
     const mirrorSkillDir = join(mirrorRoot, entry.path);
 
-    if (!existsSync(sourcePath)) {
-      errors.push(`Source not found for add: ${entry.name} (${sourcePath})`);
+    // Safety: verify source and mirror targets are within their roots
+    if (!isWithinRoot(projectRoot, sourcePath) || !isWithinRoot(mirrorRoot, mirrorSkillDir)) {
+      errors.push(`Path escapes project or mirror root for ${entry.name}: ${entry.path}`);
       continue;
     }
 
-    // Safety: verify source is within project root
-    if (!isWithinRoot(sourcePath, projectRoot)) {
-      errors.push(`Source path escapes project root for ${entry.name}: ${sourcePath}`);
+    if (!existsSync(sourcePath)) {
+      errors.push(`Source not found for add: ${entry.name} (${sourcePath})`);
       continue;
     }
 
@@ -206,6 +197,11 @@ export function applySync(plan, projectSkillsDir, options = {}) {
   for (const entry of plan.update) {
     const sourcePath = join(projectRoot, entry.path, SKILL_FILE_NAME);
     const mirrorSkillDir = join(mirrorRoot, entry.path);
+
+    if (!isWithinRoot(projectRoot, sourcePath) || !isWithinRoot(mirrorRoot, mirrorSkillDir)) {
+      errors.push(`Path escapes project or mirror root for ${entry.name}: ${entry.path}`);
+      continue;
+    }
 
     if (!existsSync(sourcePath)) {
       errors.push(`Source not found for update: ${entry.name} (${sourcePath})`);
@@ -239,6 +235,11 @@ export function applySync(plan, projectSkillsDir, options = {}) {
   // ── Handle removes ─────────────────────────────────────────────────────────
   for (const entry of plan.remove) {
     const mirrorSkillDir = join(mirrorRoot, entry.path);
+
+    if (!isWithinRoot(mirrorRoot, mirrorSkillDir)) {
+      errors.push(`Path escapes the mirror root for ${entry.name}: ${entry.path}`);
+      continue;
+    }
 
     if (dryRun) {
       if (!quiet) console.log(`  [DRY-RUN] Would remove: ${entry.name}`);

@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, statSy
 import { parseFrontmatter } from '../loader.mjs';
 import { validateSkill } from '../quality/validator.mjs';
 import { formatConsoleReport } from '../import/reporter.mjs';
+import { isSafeName, isWithinRoot } from '../utils/fs.mjs';
 
 const SKILLS_DIR = resolve('data/skills');
 const MAX_DEPTH = 10;
@@ -81,15 +82,22 @@ function scanSourceSync(sourceDir) {
 /**
  * Resolve the target directory for a skill name.
  * e.g. "backend-eloquent" → data/skills/backend/eloquent/
+ *
+ * The name comes from untrusted SKILL.md frontmatter, so it must be a single
+ * safe path segment and the resolved directory must stay inside skillsDir.
+ * Returns null when either check fails.
  */
 function resolveTargetDir(name, skillsDir) {
+  if (!isSafeName(name)) return null;
+
   const parts = name.split('-');
   const domainPart = parts[0];
   const slugPart = parts.slice(1).join('-');
-  if (slugPart) {
-    return join(skillsDir, domainPart, slugPart);
-  }
-  return join(skillsDir, domainPart);
+  const targetDir = slugPart
+    ? join(skillsDir, domainPart, slugPart)
+    : join(skillsDir, domainPart || name);
+
+  return isWithinRoot(skillsDir, targetDir) ? targetDir : null;
 }
 
 /**
@@ -196,8 +204,19 @@ export function main(argv) {
       continue;
     }
 
-    // Check collision
+    // Check name safety and target containment
     const targetDir = resolveTargetDir(candidate.name, resolvedSkillsDir);
+    if (!targetDir) {
+      item.status = 'rejected';
+      item.issues = [{
+        field: 'path',
+        message: `Skill name contains path traversal or separators: ${candidate.name}`,
+      }];
+      items.push(item);
+      continue;
+    }
+
+    // Check collision
     const targetPath = join(targetDir, 'SKILL.md');
 
     if (existsSync(targetPath) && !force) {
