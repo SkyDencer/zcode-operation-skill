@@ -262,6 +262,49 @@ const { main: cliMain } = await import('../../src/cli/feedback.mjs');
 // but we verified writeCSV logic inline above. The CLI module imports it.
 assert(true, 'CLI feedback module loads and exports main()');
 
+// ─── 9. readDecisions with since beyond log range ─────────────────────────────
+console.log('\n9. readDecisions with since beyond log range');
+
+const futureFile = join(TEST_LOG_DIR, 'routing-20260101.jsonl');
+try {
+  writeFileSync(futureFile, [
+    '{"ts":"2026-01-01T00:00:00.000Z","mode":"implicit","router":null,"tier":"bm25","selectedSkills":["skill-a"],"latencyMs":{"total":1},"confidence":0.5,"promptHash":"sha256:abc","sessionId":null,"version":null}\n',
+  ].join(''), 'utf-8');
+
+  const result = await readDecisions({ since: '2027-01-01', limit: 100, logDir: TEST_LOG_DIR });
+  assert(result.length === 0, `no results when since is beyond all logs, got ${result.length}`);
+} finally {
+  try { unlinkSync(futureFile); } catch { /* ignore */ }
+}
+
+// ─── 10. readDecisions with limit: 0 ──────────────────────────────────────────
+console.log('\n10. readDecisions with limit: 0');
+
+try {
+  writeFileSync(futureFile, [
+    '{"ts":"2026-01-01T00:00:00.000Z","mode":"implicit","router":null,"tier":"bm25","selectedSkills":["skill-a"],"latencyMs":{"total":1},"confidence":0.5,"promptHash":"sha256:abc","sessionId":null,"version":null}\n',
+    '{"ts":"2026-01-01T00:00:01.000Z","mode":"explicit","router":"router-next","tier":"bm25","selectedSkills":["skill-b"],"latencyMs":{"total":2},"confidence":0.8,"promptHash":"sha256:def","sessionId":null,"version":null}\n',
+  ].join(''), 'utf-8');
+
+  // limit: 0 should still return all results (limit only trims from the end)
+  const result = await readDecisions({ limit: 0, logDir: TEST_LOG_DIR });
+  assert(result.length === 2, `limit:0 returns all results, got ${result.length}`);
+} finally {
+  try { unlinkSync(futureFile); } catch { /* ignore */ }
+}
+
+// ─── 11. summarize with empty decisions array ─────────────────────────────────
+console.log('\n11. summarize with empty decisions array');
+
+const emptySummary = summarize([]);
+assert(emptySummary.totalCount === 0, 'totalCount is 0 for empty input');
+assert(emptySummary.byMode.explicit === 0, 'explicit is 0');
+assert(emptySummary.byMode.implicit === 0, 'implicit is 0');
+assert(emptySummary.p50Latency === 0, 'p50 is 0');
+assert(emptySummary.p95Latency === 0, 'p95 is 0');
+assert(emptySummary.maxLatency === 0, 'max is 0');
+assert(emptySummary.fallbackRate === 0, 'fallbackRate is 0');
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 teardown();
 

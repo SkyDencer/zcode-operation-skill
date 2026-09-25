@@ -210,3 +210,20 @@ test('parseMultiSelection — returns empty when all scores below 0.5', () => {
   const result = parseMultiSelection(raw, KNOWN);
   assert.deepEqual(result.skills, []);
 });
+
+// ─── parseMultiSelection — empty array body ──────────────────────────────────
+
+test('parseMultiSelection — empty skills array returns empty', () => {
+  const raw = JSON.stringify({ skills: [], confidence: 0.5 });
+  const result = parseMultiSelection(raw, KNOWN);
+  assert.deepEqual(result.skills, []);
+  assert.equal(result.confidence, 0.5);
+});
+
+// ─── parseMultiSelection — null body string ──────────────────────────────────
+
+test('parseMultiSelection — null body string returns empty', () => {
+  const result = parseMultiSelection(null, KNOWN);
+  assert.deepEqual(result.skills, []);
+  assert.equal(result.raw, '');
+});

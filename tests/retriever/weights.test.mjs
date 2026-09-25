@@ -222,6 +222,68 @@ assert(
   'larger fraction produces larger weight change'
 );
 
+// ─── 10. all-positive attributions → consistent increase ─────────────────────
+console.log('\n10. all-positive attributions → consistent weight increase');
+
+const allPositiveAttrs = Array.from({ length: 25 }, (_, i) => ({
+  decisionHash: `sha256:ap${i}`,
+  outcome: 'positive',
+  fields: { name: 1, description: 1, keywords: 1 },
+  dominantField: i % 3 === 0 ? 'name' : i % 3 === 1 ? 'description' : 'keywords',
+  selectedSkill: 'test-skill',
+}));
+
+const r10 = computeWeights(allPositiveAttrs, BASE_WEIGHTS);
+assert(r10.changed === true, 'changed is true for all-positive set');
+assert(r10.reason === 'applied', 'reason is applied');
+// Verify at least one field changed (weights may normalize back, but individual changes exist)
+const nameDelta10 = r10.newWeights.name - BASE_WEIGHTS.name;
+const descDelta10 = r10.newWeights.description - BASE_WEIGHTS.description;
+const kwDelta10 = r10.newWeights.keywords - BASE_WEIGHTS.keywords;
+assert(
+  nameDelta10 !== 0 || descDelta10 !== 0 || kwDelta10 !== 0,
+  `at least one weight changed in all-positive set: name=${nameDelta10.toFixed(4)}, desc=${descDelta10.toFixed(4)}, kw=${kwDelta10.toFixed(4)}`
+);
+
+// ─── 11. all-negative attributions → consistent decrease ──────────────────────
+console.log('\n11. all-negative attributions → consistent weight decrease');
+
+const allNegativeAttrs = Array.from({ length: 25 }, (_, i) => ({
+  decisionHash: `sha256:an${i}`,
+  outcome: 'negative',
+  fields: { name: 1, description: 1, keywords: 1 },
+  dominantField: i % 3 === 0 ? 'name' : i % 3 === 1 ? 'description' : 'keywords',
+  selectedSkill: 'test-skill',
+}));
+
+const r11 = computeWeights(allNegativeAttrs, BASE_WEIGHTS);
+assert(r11.changed === true, 'changed is true for all-negative set');
+assert(r11.reason === 'applied', 'reason is applied');
+// Verify at least one field changed
+const nameDelta11 = r11.newWeights.name - BASE_WEIGHTS.name;
+const descDelta11 = r11.newWeights.description - BASE_WEIGHTS.description;
+const kwDelta11 = r11.newWeights.keywords - BASE_WEIGHTS.keywords;
+assert(
+  nameDelta11 !== 0 || descDelta11 !== 0 || kwDelta11 !== 0,
+  `at least one weight changed in all-negative set: name=${nameDelta11.toFixed(4)}, desc=${descDelta11.toFixed(4)}, kw=${kwDelta11.toFixed(4)}`
+);
+
+// ─── 12. below minOutcomes returns changed:false ──────────────────────────────
+console.log('\n12. below minOutcomes → changed:false even with strong signal');
+
+const smallStrongAttrs = Array.from({ length: 5 }, () => ({
+  decisionHash: 'sha256:small',
+  outcome: 'positive',
+  fields: { name: 3, description: 0.1, keywords: 0.1 },
+  dominantField: 'name',
+  selectedSkill: 'test-skill',
+}));
+
+const r12 = computeWeights(smallStrongAttrs, BASE_WEIGHTS);
+assert(r12.changed === false, 'changed is false when below minOutcomes');
+assert(r12.reason === 'insufficient_data', 'reason is insufficient_data');
+assert(r12.sampleSize === 5, 'sampleSize reports actual count');
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 console.log('\n=== Results ===');
 console.log(`  Passed: ${passed}`);

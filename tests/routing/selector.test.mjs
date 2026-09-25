@@ -58,6 +58,10 @@ test('corpusSize=0 → flat', () => eq(selectRouter(0), 'flat'));
 test('corpusSize=1 → flat', () => eq(selectRouter(1), 'flat'));
 test('corpusSize=10000 → flat', () => eq(selectRouter(10000), 'flat'));
 
+// ── Unknown mode option is ignored, falls through to default ──────────────────
+test("mode='unknown' → flat (ignored, falls through to default)", () =>
+  eq(selectRouter(100, { mode: 'unknown' }), 'flat'));
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\nResults`);
 console.log(`  Passed: ${passed}`);

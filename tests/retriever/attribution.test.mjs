@@ -180,6 +180,39 @@ assert(
   `selectedSkill matches rankSkills top result: expected ${topSkill}, got ${r9.selectedSkill}`
 );
 
+// ─── 10. missing selectedSkills in decision does not crash ─────────────────────
+console.log('\n10. missing selectedSkills does not crash');
+
+// attributeOutcome uses decision.prompt and index, not selectedSkills directly.
+// But the schema says selectedSkills is part of the decision; missing it should not throw.
+const r10 = attributeOutcome(
+  { prompt: 'laravel eloquent', promptHash: 'sha256:noskills' },
+  'positive',
+  leafIndex
+);
+assert(r10 !== null, 'returns attribution even when selectedSkills is missing');
+assert(typeof r10.selectedSkill === 'string', 'selectedSkill is populated from top-ranked skill');
+
+// ─── 11. empty string prompt returns null ─────────────────────────────────────
+console.log('\n11. empty string prompt returns null');
+
+const r11 = attributeOutcome(
+  { prompt: '', promptHash: 'sha256:empty', selectedSkills: [] },
+  'negative',
+  leafIndex
+);
+assert(r11 === null, 'returns null for empty string prompt');
+
+// ─── 12. non-string prompt type returns null ──────────────────────────────────
+console.log('\n12. non-string prompt type returns null');
+
+const r12 = attributeOutcome(
+  { prompt: 123, promptHash: 'sha256:num', selectedSkills: [] },
+  'positive',
+  leafIndex
+);
+assert(r12 === null, 'returns null for non-string prompt');
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 console.log('\n=== Results ===');
 console.log(`  Passed: ${passed}`);
