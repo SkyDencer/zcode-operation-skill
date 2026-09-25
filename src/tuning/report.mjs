@@ -109,8 +109,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.url.spli
   const expected = JSON.parse(readFileSync(EXPECTED_PATH, 'utf-8'));
   const index = JSON.parse(readFileSync(INDEX_PATH, 'utf-8'));
   const thresholds = JSON.parse(readFileSync(THRESHOLDS_PATH, 'utf-8'));
+  // Report the same implicit-routing corpus as the optimizer: router-* entries
+  // are explicit dispatchers and must not lower the leaf-skill benchmark score.
+  const leafIndex = index.filter((skill) => !skill.name.startsWith('router-'));
 
-  const result = optimizeThresholds(prompts, index, expected);
+  const result = optimizeThresholds(prompts, leafIndex, expected);
   const report = reportTuning(result, {
     defaultHigh: 0.85,
     defaultMedium: 0.60,

@@ -259,6 +259,35 @@ try {
   }
 }
 
+// ─── 8. Fixed-clock replay of the on-disk logs (logDir proof) ────────────────
+// The live CLI clock is Date.now(); once signals age past 10m every outcome is
+// correctly "unknown", so the live run alone cannot show a negative. Replaying
+// each decision with opts.now pinned to its own first corrective signal proves
+// logDir is resolved: an undefined dir loads zero signals -> all "positive".
+console.log('\n8. Fixed-clock replay of the on-disk logs (logDir proof)');
+const { readDecisions } = await import('../../src/telemetry/feedback.mjs');
+const onDisk = await readDecisions({ limit: 300 });
+if (onDisk.length > 0) {
+  const byHash = new Map();
+  for (const f of readdirSync(SIGNALS_DIR).filter((n) => n.startsWith('signals-') && n.endsWith('.jsonl'))) {
+    for (const l of readFileSync(join(SIGNALS_DIR, f), 'utf-8').split('\n').filter((x) => x.trim())) {
+      const s = JSON.parse(l);
+      if ((s.type === 'retry' || s.type === 'explicit_override') && !byHash.has(s.decisionHash)) {
+        byHash.set(s.decisionHash, s);
+      }
+    }
+  }
+  const replayable = onDisk.filter((d) => byHash.has(d.promptHash));
+  let neg = 0;
+  for (const d of replayable) {
+    const [o] = await correlateFromLogs([d], { logDir: SIGNALS_DIR, now: new Date(byHash.get(d.promptHash).ts).getTime() });
+    if (o.outcome === 'negative') neg++;
+  }
+  assert(neg > 0, `fixed-clock replay yields a non-zero negative count, got ${neg} of ${replayable.length} replayable decisions`);
+  console.log(`    Replayed ${replayable.length} decisions at their own signal time: negative=${neg}`);
+} else {
+  console.log('  - skipped: no on-disk routing decisions to replay');
+}
 // ─── Summary ──────────────────────────────────────────────────────────────────
 console.log('\n=== Results ===');
 console.log(`  Passed: ${passed}`);

@@ -208,8 +208,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.url.spli
   const prompts = JSON.parse(readFileSync(PROMPTS_PATH, 'utf-8'));
   const expected = JSON.parse(readFileSync(EXPECTED_PATH, 'utf-8'));
   const index = JSON.parse(readFileSync(INDEX_PATH, 'utf-8'));
+  // Threshold tuning mirrors the hook's implicit route: router-* dispatchers are
+  // used only for explicit mentions and must not compete with leaf skills.
+  const leafIndex = index.filter((skill) => !skill.name.startsWith('router-'));
 
-  const result = optimizeThresholds(prompts, index, expected);
+  const result = optimizeThresholds(prompts, leafIndex, expected);
   const elapsed = performance.now() - startTime;
 
   // Write thresholds file
