@@ -305,13 +305,13 @@ Or run the SLM benchmark:
 node tests/slm-benchmark/runner.mjs --mode hybrid --slm
 ```
 
-See [docs/reports/phase-2-slm-benchmark.md](./docs/reports/phase-2-slm-benchmark.md) for benchmark results.
+See [docs/reports/phase-2-slm-benchmark.md](reports/phase-2-slm-benchmark.md) for benchmark results.
 
-- Read [docs/ai-context.md](./docs/ai-context.md) for the full technical architecture.
-- Read [docs/cli-reference.md](./docs/cli-reference.md) for every CLI subcommand.
-- Read [docs/skill-authoring.md](./docs/skill-authoring.md) for guidelines on writing high-quality SKILL.md files.
-- Check [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md) for scale benchmark details.
-- See [docs/implementation-plan.md](./docs/implementation-plan.md) for the project roadmap.
+- Read [docs/ai-context.md](ai-context.md) for the full technical architecture.
+- Read [docs/cli-reference.md](cli-reference.md) for every CLI subcommand.
+- Read [docs/skill-authoring.md](skill-authoring.md) for guidelines on writing high-quality SKILL.md files.
+- Check [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-benchmark.md) for scale benchmark details.
+- See [docs/implementation-plan.md](implementation-plan.md) for the project roadmap.
 
 ## Troubleshooting
 

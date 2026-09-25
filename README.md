@@ -222,7 +222,7 @@ Synthetic scale benchmarks (N skills, generated prompts matching skill names/key
 Key findings from scale benchmarks:
 - Flat BM25 is faster than hierarchical at ALL corpus sizes (2x faster at N=50, narrowing to 1.13x at N=500).
 - Flat wins on the real 54-skill corpus (96.9% Top-1); larger real corpora are untested.
-- Hierarchical routing is deprecated as default; flat is the primary path. Hierarchical remains available via `--experimental` flag.
+- Hierarchical routing is deprecated as default; flat is the primary path. It is available programmatically via `selectRouter(corpusSize, { mode: 'hierarchical' })` in `src/routing/selector.mjs`.
 
 Full scale report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
 
@@ -412,7 +412,7 @@ zcode-operation-skill/
 ├── .zcode-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── bin/
-│   └── skill-router.mjs      # CLI entry point (18 subcommands)
+│   └── skill-router.mjs      # CLI entry point (20 subcommands)
 ├── hooks/
 │   ├── hooks.json            # Hook registration
 │   ├── route.mjs             # Main hook: stdin -> route -> output
@@ -568,6 +568,9 @@ zcode-operation-skill/
 | [docs/problems.md](./docs/problems.md) | Open and resolved issues |
 | [docs/manager-playbook.md](./docs/manager-playbook.md) | Project manager guide and escalation triggers |
 | [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md) | Phase 3 scale benchmark and findings |
+| [docs/sync.md](./docs/sync.md) | Skill sync guide: project-to-ZCode mirror workflow |
+| [docs/troubleshooting.md](./docs/troubleshooting.md) | Common issues and resolution steps |
+| [docs/zcode-skill-visibility.md](./docs/zcode-skill-visibility.md) | ZCode skill visibility research and disable mechanism |
 | [AGENTS.md](./AGENTS.md) | Mandatory workflow rules for all subagents |
 
 ## Roadmap

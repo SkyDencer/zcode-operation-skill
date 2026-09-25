@@ -26,6 +26,7 @@ Subcommands:
   verify     Health check: sync drift, orphans, index integrity, thresholds
   doctor     Diagnostic report: environment, corpus, benchmarks, overrides
   feedback   Show routing decision feedback summary
+  health     Run health checks on sync state and index integrity
   tune       Adaptive BM25 weight tuning (analyze, apply, rollback, auto)
   help       Show this help message
 

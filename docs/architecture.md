@@ -352,7 +352,7 @@ Phase 3 conducted a rigorous scale benchmark comparing flat BM25 against hierarc
 4. **The inflection point** where Top-1 drops below 95% is at N=50 on synthetic prompts. This is a corpus-distribution issue, not an algorithm failure -- the real 54-skill corpus achieves 96.9% Top-1.
 5. **Decision**: hierarchical routing is deprecated as the default. Flat is the primary path. Hierarchical remains available via `--experimental` flag for users who want it.
 
-Full report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
+Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-benchmark.md)
 
 ## Hook Contract
 

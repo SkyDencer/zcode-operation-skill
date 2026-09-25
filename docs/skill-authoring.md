@@ -199,7 +199,7 @@ node src/quality/validator.mjs data/skills/backend/laravel/eloquent
 - [ ] **Domains** are registered in `data/domains/`
 - [ ] **Content** is 100–800 tokens with clear section headings
 - [ ] **Version** is a valid semantic version string (recommended)
-- [ ] **Re-ran `npm run build-index`** after adding or modifying the file
+- [ ] **Re-ran `node hooks/build-index.mjs`** after adding or modifying the file
 - [ ] **Ran the benchmark** to confirm no accuracy regression
 
 ## Common Pitfalls
@@ -246,8 +246,8 @@ Content is what gets injected as context. Thin content means the model receives 
 3. **Ensure domain metadata exists:** `data/domains/<domain>/meta.json`
 4. **Run validation:** `node bin/skill-router.mjs validate`
 5. **Fix any issues** reported by the validator
-6. **Rebuild the index:** `npm run build-index`
-7. **Run the benchmark:** `npm run benchmark` to confirm no regression
+6. **Rebuild the index:** `node hooks/build-index.mjs`
+7. **Run the benchmark:** `node tests/run-benchmark.mjs --mode bm25` to confirm no regression
 8. **Commit the changes** (let the project manager handle commits)
 
 ## Bulk Importing Skills

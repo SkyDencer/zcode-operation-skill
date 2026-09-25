@@ -1,6 +1,6 @@
 
 
-The final Phase 0.5b report has been written to `D:/www/local/operation-skill/docs/reports/phase-0.5b-deployment-20260921.md`.
+The final Phase 0.5b report has been written to `docs/reports/phase-0.5b-deployment-20260921.md`.
 
 **Summary of what's in the report:**
 

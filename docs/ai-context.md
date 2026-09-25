@@ -137,7 +137,7 @@ calls, and no persistent state beyond the JSON skill index.
 │  │  skills      │  │  fingerprint │  │  verify, doctor,     │  │
 │  │  match-      │  │  keyed       │  │  help                │  │
 │  │  DomainsTo   │  │              │  │                      │  │
-│  │  Query()     │  │  Key:        │  │  17 subcommands      │  │
+│  │  Query()     │  │  Key:        │  │  20 subcommands      │  │
 │  └──────────────┘  │  sha256+fp   │  └──────────────────────┘  │
 │                     └──────────────┘                               │
 └──────────────────────┬──────────────────────────────────────────┘
@@ -208,12 +208,12 @@ calls, and no persistent state beyond the JSON skill index.
 ### Route Selector (`src/routing/selector.mjs`)
 
 - `selectRouter(corpusSize, options)` chooses between flat and hierarchical routing.
-- Priority order: explicit `mode` option > `experimental` flag > default flat.
+- Priority order: explicit `mode` option > default flat. Hierarchical is available programmatically via `selectRouter(corpusSize, { mode: 'hierarchical' })`.
 - Default is always **flat** based on Phase 3 benchmark findings:
   - Flat is faster at ALL corpus sizes (N=50 to N=500).
   - Flat has equal or slightly better Top-1 accuracy.
   - Hierarchical has equal or higher fallback rates.
-- Hierarchical remains available via `--experimental` flag.
+- Hierarchical remains available programmatically via `mode: 'hierarchical'` option to `selectRouter()`.
 
 ### Explicit Router Detection (`src/core/routing/explicit.mjs`)
 
@@ -261,7 +261,7 @@ calls, and no persistent state beyond the JSON skill index.
   2. **Domain-scoped BM25** -- runs `rankSkills()` within each candidate domain only.
   3. **Merge & rerank** -- takes best score per skill across domains; applies domain-confidence bonus (+10% primary, +5% secondary).
 - Returns `HierarchicalPlan` with merged ranked skills and domain metadata.
-- Deprecated as default; available experimentally via `--experimental` flag or `mode: "hierarchical"`.
+- Deprecated as default; available programmatically via `mode: "hierarchical"` option to `selectRouter()`.
 
 ### Domain Registry (`src/core/routing/domain-registry.mjs`)
 
@@ -595,6 +595,7 @@ All tunable parameters can be overridden via `SKILL_ROUTER_*` environment variab
 | `SKILL_ROUTER_RRF_K` | 60 | RRF fusion constant |
 | `SKILL_ROUTER_DOMAIN_THRESHOLD` | 0.80 | Single-domain confidence threshold |
 | `SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD` | 0.50 | Multi-domain confidence threshold |
+| `SKILL_ROUTER_HIERARCHICAL_CONFIDENCE_THRESHOLD` | 0.08 | Hierarchical routing confidence threshold for domain selection |
 | `SKILL_ROUTER_HIGH_THRESHOLD` | 0.85 | High-confidence threshold (override thresholds.json) |
 | `SKILL_ROUTER_MEDIUM_THRESHOLD` | 0.60 | Medium-confidence threshold (override thresholds.json) |
 | `SKILL_ROUTER_TIMEOUT_MS` | 200 | Hook timeout in milliseconds |

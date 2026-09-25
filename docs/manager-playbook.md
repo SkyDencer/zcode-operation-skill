@@ -21,7 +21,7 @@ Your task: <SPECIFIC_TASK_DESCRIPTION>
 
 Definition of Done:
   1. Code matches the spec in docs/implementation-plan.md for this phase.
-  2. npm run benchmark passes.
+  2. `node tests/run-benchmark.mjs --mode bm25` passes.
   3. docs/current-state.md updated with an entry log line.
   4. No regressions in previously passing benchmarks.
 
@@ -37,8 +37,8 @@ Rules:
 Before advancing a phase, verify:
 
 - [ ] All source files for the phase exist and are syntactically valid ESM.
-- [ ] `npm run build-index` completes without errors.
-- [ ] `npm run benchmark` exits 0.
+  - [ ] `node hooks/build-index.mjs` completes without errors.
+  - [ ] `node tests/run-benchmark.mjs --mode bm25` exits 0.
 - [ ] `docs/current-state.md` has a dated entry.
 - [ ] `docs/problems.md` has no open issues specific to this phase.
 - [ ] `docs/decision-dictionary.md` captures any new decisions.
