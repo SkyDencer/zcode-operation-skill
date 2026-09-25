@@ -23,8 +23,7 @@ import { logDecision } from '../src/telemetry/feedback.mjs';
 import { trackPrompt } from '../src/telemetry/session-tracker.mjs';
 import { recordSignal } from '../src/telemetry/signals.mjs';
 import { getConfig } from '../src/config/env.mjs';
-import { createProvider } from '../src/core/embeddings/provider.mjs';
-import { ProviderNotAvailableError } from '../src/core/embeddings/errors.mjs';
+import { resolveProvider } from '../src/core/embeddings/resolve.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
@@ -38,35 +37,21 @@ const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
 
-// Resolve embedding provider from config with automatic fallback to FNV-1a.
-// When SKILL_ROUTER_EMBEDDING_PROVIDER=onnx and the model is not cached,
-// fall back to fnv1a and log a warning. The hook stays fail-open.
-let _provider = null;
-try {
-  const providerType = config.embeddings?.provider ?? 'fnv1a';
-  _provider = createProvider(providerType);
-} catch (err) {
-  console.error(`[skill-router] provider init failed: ${err.message}`);
-}
+// Resolve the embedding provider from config. When
+// SKILL_ROUTER_EMBEDDING_PROVIDER=onnx and the model is not cached,
+// resolveProvider() logs a warning and hands back the FNV-1a provider;
+// when no provider is usable at all the hook degrades to pure BM25.
+// Resolution is a filesystem probe only — it never loads a model.
+const providerResolution = resolveProvider(config);
 
 /**
- * Get the active embedding provider, falling back to Fnv1aProvider when
- * the configured provider is unavailable and fallback is enabled.
+ * Get the active embedding provider, or null when the caller should fall
+ * back to pure BM25 retrieval.
  *
- * @returns {object|null} provider instance or null if none available
+ * @returns {object|null} provider instance
  */
 function getProvider() {
-  if (_provider) return _provider;
-  if (config.embeddings?.fallbackToFnv1a !== false) {
-    try {
-      const fallback = createProvider('fnv1a');
-      console.error('[skill-router] falling back to fnv1a provider');
-      return fallback;
-    } catch {
-      // Fallback also failed — return null
-    }
-  }
-  return null;
+  return providerResolution.provider;
 }
 
 /**
@@ -192,7 +177,9 @@ async function main() {
         // when a provider is available; fall back to pure BM25 otherwise.
         const provider = getProvider();
         if (provider) {
-          const ranked = hybridRetrieve(query, idx, { provider, rerank: false });
+          // Await: providers such as ONNX build their embedding index
+          // asynchronously, so hybridRetrieve() may hand back a Promise.
+          const ranked = await hybridRetrieve(query, idx, { provider, rerank: false });
           const tier = ranked.length > 0 ? 'bm25' : 'none';
           const confidence = ranked.length > 0 ? ranked[0].score : 0;
           return {
@@ -278,6 +265,8 @@ async function main() {
     routerMatched: decision.routerMatched ?? null,
     mode: decision.mode ?? tier,
     slmEnabled: config.slm?.enabled ?? false,
+    embeddingProvider: providerResolution.used,
+    embeddingProviderFallback: providerResolution.fellBack,
   });
 
   // Log structured routing decision for feedback analytics

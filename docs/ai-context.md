@@ -160,11 +160,11 @@ calls, and no persistent state beyond the JSON skill index.
 - Truncates prompts exceeding `maxPromptLength` (default 10240 chars).
 - Loads `data/skill-index.json`; fails open if missing.
 - **Explicit detection** — calls `detectExplicitSkill(prompt, index)` before retrieval. If a `$`-mention is found, the prompt is stripped and routed via `routeWithExplicit()` which scopes BM25 to the router's domain. See `src/core/routing/explicit.mjs` and `src/config/aliases.mjs`.
-- **Implicit routing** — when no explicit match, builds a leaf-only index (filters out `router-*` entries) and runs pure BM25 (`rankSkills`) unless SLM is enabled via `SKILL_ROUTER_SLM_ENABLED=true`.
+- **Implicit routing** — when no explicit match, builds a leaf-only index (filters out `router-*` entries) and, when SLM is disabled (the default), runs hybrid retrieval (`hybridRetrieve`, BM25 + embeddings fused by weighted RRF) using the provider resolved at hook start by `resolveProvider()`; if no provider is usable it degrades to pure BM25 (`rankSkills`).
 - Creates a `QueryCache` keyed by index fingerprint + query hash.
 - Reads full SKILL.md content for top-ranked skills via `readSkillContent()`.
 - Fits selected skills into the context budget via `fitWithinBudget()`.
-- Logs retrieve, cache, budget, and route events to JSONL (including mode, tier, slmEnabled, routerMatched).
+- Logs retrieve, cache, budget, and route events to JSONL (including mode, tier, slmEnabled, routerMatched, embeddingProvider, embeddingProviderFallback).
 - Writes `output.json` with `hookSpecificOutput.additionalContext` and `RoutePlan`.
 
 ### Index Builder (`hooks/build-index.mjs`)
@@ -188,10 +188,28 @@ calls, and no persistent state beyond the JSON skill index.
 
 ### Hybrid Retriever (`src/core/retriever/hybrid.mjs`)
 
-- Runs BM25 and FNV-1a n-gram embedding similarity independently.
-- Fuses via Reciprocal Rank Fusion: `score = Sum (1 / (k + rank_i))`, k=60.
+- Runs BM25 and embedding similarity independently, through the Provider
+  interface (so FNV-1a and ONNX are interchangeable).
+- Fuses via **weighted** Reciprocal Rank Fusion:
+  `score = w_bm25 * 1/(k + rank_bm25) + w_semantic * 1/(k + rank_semantic)`,
+  with `k = 60` and weights `bm25 = 0.4`, `semantic = 0.6` from
+  `embeddings.weights` in `src/config/defaults.mjs`.
 - BM25 rank used as tiebreaker when RRF scores are within 1e-10.
-- Optional feature-based reranking stage (opt-in).
+- `options._weightBm25` / `options._weightSemantic` override the weights
+  per call (used by `tests/retriever/weighted-rrf.test.mjs`).
+- Providers whose `buildIndex()` is asynchronous (ONNX) make `hybridRetrieve()`
+  return a Promise; callers must await it. The hook does.
+- Optional feature-based reranking stage (opt-in, `options.rerank: true`).
+
+### Provider Resolution (`src/core/embeddings/resolve.mjs`)
+
+- `resolveProvider(config)` turns the `embeddings` config block into a usable
+  provider: it constructs the requested provider, probes it with
+  `isAvailable()` (a filesystem check — no model load, no network), and when
+  the probe fails and `embeddings.fallbackToFnv1a` is not disabled, returns the
+  FNV-1a provider and a `warning` string the hook prints to stderr.
+- Returns `provider: null` when nothing is usable, and the caller degrades to
+  pure BM25. The hook never fails because of a missing semantic backend.
 
 ### Embedding Engine (`src/core/embeddings/engine.mjs`)
 
@@ -202,8 +220,9 @@ calls, and no persistent state beyond the JSON skill index.
 
 ### Reranker (`src/core/reranker/`)
 
-- **features.mjs**: Extracts 4 lexical features -- exact keyword overlap, bigram overlap, domain match, title match.
+- **features.mjs**: Extracts 5 features -- exact keyword overlap, bigram overlap, domain match, title match, and `embeddingSimilarity` (cosine similarity between the prompt embedding and the skill-description embedding, computed only when an embedding provider is supplied; 0 otherwise).
 - **engine.mjs**: Blends RRF score with feature score (BLEND=0.01). Opt-in to avoid degrading accuracy on small corpora.
+- Weights come from `data/reranker-weights.json` (linear regression over the 30-prompt benchmark, produced by `src/scripts/train-reranker-weights.mjs`) merged over the defaults in `src/config/defaults.mjs`.
 
 ### Route Selector (`src/routing/selector.mjs`)
 
@@ -597,6 +616,7 @@ All tunable parameters can be overridden via `SKILL_ROUTER_*` environment variab
 | `SKILL_ROUTER_BM25_DESC_WEIGHT` | 2 | Description field weight multiplier |
 | `SKILL_ROUTER_BM25_KEYWORD_WEIGHT` | 1 | Keywords field weight multiplier |
 | `SKILL_ROUTER_EMBED_DIMS` | 256 | Embedding dimensionality |
+| `SKILL_ROUTER_EMBEDDING_PROVIDER` | `fnv1a` | Embedding provider: `fnv1a` or `onnx`. Resolved once at hook start; falls back to `fnv1a` with a warning when the ONNX model is not cached |
 | `SKILL_ROUTER_RRF_K` | 60 | RRF fusion constant |
 | `SKILL_ROUTER_DOMAIN_THRESHOLD` | 0.80 | Single-domain confidence threshold |
 | `SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD` | 0.50 | Multi-domain confidence threshold |

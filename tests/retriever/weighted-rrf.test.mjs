@@ -110,6 +110,60 @@ for (const r of resultA.slice(0, 3)) {
   }
 }
 
+// 8. The weights are numerically respected, not just read from config
+console.log('\n8. Weight overrides change the fused components');
+const onlyBm25 = hybridRetrieve(query, leafIndex, {
+  provider,
+  rerank: false,
+  _weightBm25: 1,
+  _weightSemantic: 0,
+});
+assert(onlyBm25.every((r) => r.semanticRrf === 0), 'semantic=0 zeroes every semanticRrf term');
+assert(
+  onlyBm25.every((r) => Math.abs(r.score - r.bm25Rrf) < 1e-12),
+  'with semantic=0 the fused score is the BM25 RRF term alone',
+);
+const onlySemantic = hybridRetrieve(query, leafIndex, {
+  provider,
+  rerank: false,
+  _weightBm25: 0,
+  _weightSemantic: 1,
+});
+assert(onlySemantic.every((r) => r.bm25Rrf === 0), 'bm25=0 zeroes every bm25Rrf term');
+assert(
+  onlySemantic.every((r) => Math.abs(r.score - r.semanticRrf) < 1e-12),
+  'with bm25=0 the fused score is the semantic RRF term alone',
+);
+
+// 9. Default weights scale each term by the configured weight
+console.log('\n9. Default weights scale each RRF term');
+const topDefault = defaultResult[0];
+const bm25RankOfTop =
+  rankSkills(query, leafIndex).findIndex((r) => r.skill.name === topDefault.skill.name) + 1;
+assert(
+  bm25RankOfTop > 0 && Math.abs(topDefault.bm25Rrf - 0.4 / (60 + bm25RankOfTop)) < 1e-12,
+  `bm25Rrf equals 0.4/(60+rank) with k=60 (got ${topDefault.bm25Rrf}, rank ${bm25RankOfTop})`,
+);
+const semanticRankOfTop = (() => {
+  const sims = new Map();
+  const prebuilt = provider.buildIndex(leafIndex);
+  const q = provider.embed(query);
+  for (const s of leafIndex) {
+    const v = prebuilt.get(s.name);
+    let dot = 0;
+    if (v) for (let i = 0; i < v.length; i++) dot += v[i] * q[i];
+    sims.set(s.name, dot);
+  }
+  return [...sims.entries()].sort((a, b) => b[1] - a[1]).findIndex(
+    ([n]) => n === topDefault.skill.name,
+  ) + 1;
+})();
+assert(
+  semanticRankOfTop > 0 &&
+    Math.abs(topDefault.semanticRrf - 0.6 / (60 + semanticRankOfTop)) < 1e-12,
+  `semanticRrf equals 0.6/(60+rank) with k=60 (got ${topDefault.semanticRrf}, rank ${semanticRankOfTop})`,
+);
+
 // ─── Summary ─────────────────────────────────────────────────────────────────
 
 console.log('\n=== Results ===');

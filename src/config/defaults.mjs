@@ -99,8 +99,9 @@ export function getDefaults() {
         domainMatch: 0.5,
         titleMatch: 3.0,
         // Cosine similarity between prompt and skill description embeddings.
-        // Retrained via linear regression on the 30-prompt benchmark (see
-        // tests/reranker/weights-train.mjs). Updated after retraining.
+        // Overridden by data/reranker-weights.json when that file is present;
+        // those weights come from a linear regression over the 30-prompt
+        // benchmark (src/scripts/train-reranker-weights.mjs).
         embeddingSimilarity: 0.8,
       },
     },
