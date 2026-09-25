@@ -91,8 +91,8 @@ assert(differs, 'k=1 produces different fusion scores than the default constant'
 console.log('\n4. Source contract (config link)');
 const source = readFileSync(HYBRID_PATH, 'utf-8');
 assert(
-  /const\s*\{\s*rrf\s*\}\s*=\s*getDefaults\(\)/.test(source),
-  'hybrid.mjs destructures rrf from getDefaults()'
+  /const\s*\{\s*rrf(?:\s*,\s*embeddings)?\s*\}\s*=\s*getDefaults\(\)/.test(source),
+  'hybrid.mjs destructures rrf (and optionally embeddings) from getDefaults()'
 );
 assert(
   source.includes('options.k ?? rrf.k'),

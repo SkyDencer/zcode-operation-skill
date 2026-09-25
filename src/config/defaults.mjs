@@ -81,6 +81,13 @@ export function getDefaults() {
       dimensions: 256,
       ngramSizes: [2, 3],
       hashSeed: 0x811c9dc5,
+      // Provider type: 'fnv1a' (default, zero-dependency) or 'onnx' (requires model download).
+      // When set to 'onnx' and the model is not cached, the hook falls back to 'fnv1a'.
+      provider: 'fnv1a',
+      fallbackToFnv1a: true,
+      // RRF fusion weights: how much each retrieval signal contributes to the fused score.
+      // bm25 + semantic should sum to 1.0 for a proper convex combination.
+      weights: { bm25: 0.4, semantic: 0.6 },
     },
     rrf: {
       k: 60,
@@ -91,6 +98,10 @@ export function getDefaults() {
         bigramOverlap: 0.2,
         domainMatch: 0.5,
         titleMatch: 3.0,
+        // Cosine similarity between prompt and skill description embeddings.
+        // Retrained via linear regression on the 30-prompt benchmark (see
+        // tests/reranker/weights-train.mjs). Updated after retraining.
+        embeddingSimilarity: 0.8,
       },
     },
     routing: {

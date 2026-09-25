@@ -2,7 +2,8 @@
  * Hybrid retrieval module — BM25 + semantic embeddings fused via RRF.
  *
  * Runs lexical (BM25) and semantic (cosine similarity) retrieval
- * independently, then fuses the rankings using Reciprocal Rank Fusion.
+ * independently, then fuses the rankings using Reciprocal Rank Fusion
+ * with configurable source weights (default: bm25=0.4, semantic=0.6).
  * When RRF scores are tied, BM25 rank is used as tiebreaker to
  * preserve lexical precision while gaining semantic recall.
  * An optional reranking stage blends RRF scores with feature-based
@@ -18,8 +19,13 @@ import { rerank } from '../reranker/engine.mjs';
 import { createProvider } from '../embeddings/provider.mjs';
 import { getDefaults } from '../../config/defaults.mjs';
 
-const { rrf } = getDefaults();
+const { rrf, embeddings } = getDefaults();
 const DEFAULT_PROVIDER_TYPE = 'fnv1a';
+
+// Weighted RRF fusion: bm25 and semantic contributions are scaled by
+// embeddings.weights before summing, so more reliable signals dominate.
+const BM25_WEIGHT = embeddings.weights.bm25;
+const SEMANTIC_WEIGHT = embeddings.weights.semantic;
 
 /**
  * Hybrid retrieve — BM25 + embedding similarity fused by Reciprocal Rank Fusion.
@@ -71,26 +77,30 @@ export function hybridRetrieve(prompt, index, options = {}) {
     embeddingRank.set(s.name, i + 1);
   });
 
-  // ── RRF Fusion ────────────────────────────────────────────────────────────
+  // ── RRF Fusion (weighted) ─────────────────────────────────────────────────
+  // score = w_bm25 * Σ(1/(k+rank_bm25)) + w_semantic * Σ(1/(k+rank_semantic))
   const fused = new Map();
 
   for (const r of bm25Results) {
     const rank = bm25Rank.get(r.skill.name);
-    const rrfScore = 1 / (k + rank);
+    const rrfScore = BM25_WEIGHT * (1 / (k + rank));
     fused.set(r.skill.name, {
       skill: r.skill,
       bm25Score: r.score,
       embeddingScore: 0,
       rrfScore,
+      bm25Rrf: rrfScore,
+      semanticRrf: 0,
     });
   }
 
   for (const s of simScores) {
     const rank = embeddingRank.get(s.name);
-    const rrfScore = 1 / (k + rank);
+    const rrfScore = SEMANTIC_WEIGHT * (1 / (k + rank));
     const existing = fused.get(s.name);
     if (existing) {
       existing.rrfScore += rrfScore;
+      existing.semanticRrf = rrfScore;
       existing.embeddingScore = s.sim;
     } else {
       const skill = index.find((sk) => sk.name === s.name);
@@ -100,6 +110,8 @@ export function hybridRetrieve(prompt, index, options = {}) {
           bm25Score: 0,
           embeddingScore: s.sim,
           rrfScore,
+          bm25Rrf: 0,
+          semanticRrf: rrfScore,
         });
       }
     }
@@ -117,12 +129,14 @@ export function hybridRetrieve(prompt, index, options = {}) {
 
   // ── Optional reranking stage ──────────────────────────────────────────────
   if (options.rerank === true && results.length > 1) {
-    const reranked = rerank(prompt, results, { topK });
+    const reranked = rerank(prompt, results, { topK, provider });
     return reranked.map((r) => ({
       skill: r.skill,
       score: r.rerankScore,
       bm25Score: r.bm25Score,
       embeddingScore: r.embeddingScore,
+      bm25Rrf: r.bm25Rrf,
+      semanticRrf: r.semanticRrf,
     }));
   }
 
@@ -132,6 +146,8 @@ export function hybridRetrieve(prompt, index, options = {}) {
     score: r.rrfScore,
     bm25Score: r.bm25Score,
     embeddingScore: r.embeddingScore,
+    bm25Rrf: r.bm25Rrf,
+    semanticRrf: r.semanticRrf,
   }));
 }
 

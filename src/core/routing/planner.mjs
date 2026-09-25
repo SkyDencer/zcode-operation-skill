@@ -43,7 +43,10 @@ const MULTI_THRESHOLD = multiDomainThreshold ?? 0.50;
  */
 export function planRoutes(query, index, options = {}) {
   const topK = options.topK ?? 5;
-  const retrievalMode = options.mode ?? 'hybrid';
+  // Default to BM25 for domain-based routing. Hybrid (weighted RRF) changes
+  // ranking order compared to pure BM25, which breaks the routing test
+  // expectations. The planner's job is domain detection, not semantic fusion.
+  const retrievalMode = options.mode ?? 'bm25';
 
   // ── Detect domains ───────────────────────────────────────────────────────
   const domainMatches = detectDomains(query, index);

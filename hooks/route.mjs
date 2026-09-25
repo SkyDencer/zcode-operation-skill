@@ -6,18 +6,25 @@
  * `$laravel`) before retrieval, scopes BM25 to the matched router's
  * domain when found, otherwise falls back to routeHybrid(). Writes the
  * output plan to .zcode/output.json alongside an additionalContext block.
+ *
+ * Embedding provider is resolved from config.embeddings.provider with
+ * automatic fallback to Fnv1aProvider when the configured provider
+ * (e.g. ONNX) is not available and config.embeddings.fallbackToFnv1a is true.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { rankSkills, readSkillContent } from '../src/index.mjs';
+import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
 import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
 import { logDecision } from '../src/telemetry/feedback.mjs';
 import { trackPrompt } from '../src/telemetry/session-tracker.mjs';
 import { recordSignal } from '../src/telemetry/signals.mjs';
 import { getConfig } from '../src/config/env.mjs';
+import { createProvider } from '../src/core/embeddings/provider.mjs';
+import { ProviderNotAvailableError } from '../src/core/embeddings/errors.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
@@ -30,6 +37,37 @@ const INDEX_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.json');
 const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
+
+// Resolve embedding provider from config with automatic fallback to FNV-1a.
+// When SKILL_ROUTER_EMBEDDING_PROVIDER=onnx and the model is not cached,
+// fall back to fnv1a and log a warning. The hook stays fail-open.
+let _provider = null;
+try {
+  const providerType = config.embeddings?.provider ?? 'fnv1a';
+  _provider = createProvider(providerType);
+} catch (err) {
+  console.error(`[skill-router] provider init failed: ${err.message}`);
+}
+
+/**
+ * Get the active embedding provider, falling back to Fnv1aProvider when
+ * the configured provider is unavailable and fallback is enabled.
+ *
+ * @returns {object|null} provider instance or null if none available
+ */
+function getProvider() {
+  if (_provider) return _provider;
+  if (config.embeddings?.fallbackToFnv1a !== false) {
+    try {
+      const fallback = createProvider('fnv1a');
+      console.error('[skill-router] falling back to fnv1a provider');
+      return fallback;
+    } catch {
+      // Fallback also failed — return null
+    }
+  }
+  return null;
+}
 
 /**
  * Build the additionalContext string from ranked skills.
@@ -150,6 +188,26 @@ async function main() {
       // Implicit routing: full hybrid pipeline on leaf skills only
       const slmEnabled = config.slm?.enabled !== false;
       if (!slmEnabled) {
+        // Implicit routing: use hybrid retrieval (BM25 + embeddings via RRF)
+        // when a provider is available; fall back to pure BM25 otherwise.
+        const provider = getProvider();
+        if (provider) {
+          const ranked = hybridRetrieve(query, idx, { provider, rerank: false });
+          const tier = ranked.length > 0 ? 'bm25' : 'none';
+          const confidence = ranked.length > 0 ? ranked[0].score : 0;
+          return {
+            skills: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
+            tier,
+            confidence,
+            candidates: ranked.slice(0, config.slm?.topCandidates ?? 20).map((r) => ({
+              name: r.skill.name,
+              description: r.skill.description,
+              bm25Score: r.bm25Score,
+            })),
+            latencyMs: { total: 0, bm25: 0, slmEnabled: false },
+          };
+        }
+        // No provider available — pure BM25 fallback
         const ranked = rankSkills(query, idx);
         const tier = ranked.length > 0 ? 'bm25' : 'none';
         const confidence = ranked.length > 0 ? ranked[0].score : 0;

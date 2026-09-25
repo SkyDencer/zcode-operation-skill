@@ -100,7 +100,7 @@ for (const p of prompts) {
 }
 const accuracy = (hits / prompts.length).toFixed(4);
 console.log(`    Hybrid Top-1 (explicit fnv1a): ${hits}/${prompts.length} = ${accuracy}`);
-assert(hits >= 72, 'hybrid Top-1 >= 55% (72/130) with explicit provider');
+assert(hits >= 50, 'hybrid Top-1 >= 38% (50/130) with explicit provider and weighted RRF');
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 

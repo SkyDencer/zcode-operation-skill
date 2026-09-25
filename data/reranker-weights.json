@@ -1,0 +1,7 @@
+{
+  "exactKeyword": 0.0245,
+  "bigramOverlap": 0.0854,
+  "domainMatch": 0.0153,
+  "titleMatch": 0.06,
+  "embeddingSimilarity": 0.0901
+}
