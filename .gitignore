@@ -43,3 +43,4 @@ tests/e2e/tmp-*
 tests/e2e/debug-*
 tests/scale/gen-debug*.mjs
 tests/deploy/tmp-debug*
+data/skill-embeddings-384.json

@@ -9,10 +9,13 @@
  * Optional additional source: data/skills/<zcode-skills-dir> (zcode-user).
  *
  * Environment variables:
- *   SKILL_ROUTER_SOURCES  Colon-separated paths (e.g. "data/skills:data/skills/zcode")
+ *   SKILL_ROUTER_SOURCES            Colon-separated paths
+ *   SKILL_ROUTER_EMBEDDING_PROVIDER 'fnv1a' (default) or 'onnx'
+ *
+ * CLI flags:
+ *   --provider <fnv1a|onnx>         Override the provider for index building
  *
  * Each index entry carries a `source` field: "project" | "zcode-user".
- * Router skills (from router-skills/) are tagged with source: "project".
  */
 import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -24,10 +27,32 @@ import { getConfig } from '../src/config/env.mjs';
 import { populateDomainsFromSkills } from '../src/core/routing/domain-registry.mjs';
 import { resolveCollisions } from '../src/index/dedupe.mjs';
 import { projectSources } from '../src/index/sources.mjs';
+import { createProvider } from '../src/core/embeddings/provider.mjs';
 
 const config = getConfig();
 const INDEX_PATH = resolve('data/skill-index.json');
-const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
+const EMBEDDINGS_256_PATH = resolve('data/skill-embeddings.json');
+const EMBEDDINGS_384_PATH = resolve('data/skill-embeddings-384.json');
+
+// ─── CLI argument parsing ─────────────────────────────────────────────────────
+
+/**
+ * Parse CLI flags from process.argv.
+ *
+ * @returns {{provider: string}}
+ */
+function parseArgs() {
+  const argv = process.argv.slice(2);
+  let provider = process.env.SKILL_ROUTER_EMBEDDING_PROVIDER?.toLowerCase().trim() || 'fnv1a';
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--provider' && argv[i + 1]) {
+      provider = argv[++i].toLowerCase().trim();
+    }
+  }
+  return { provider };
+}
+
+// ─── Source parsing ────────────────────────────────────────────────────────────
 
 /**
  * Parse colon-separated source paths from SKILL_ROUTER_SOURCES.
@@ -38,7 +63,6 @@ const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
 function parseSources() {
   const raw = process.env.SKILL_ROUTER_SOURCES;
   if (!raw) {
-    // Default: project skills + router skills
     return projectSources();
   }
 
@@ -47,12 +71,10 @@ function parseSources() {
     return projectSources();
   }
 
-  const sources = parts.map((p) => ({
+  return parts.map((p) => ({
     path: resolve(p),
     source: determineSource(resolve(p)),
   }));
-
-  return sources;
 }
 
 /**
@@ -72,37 +94,41 @@ function determineSource(dir) {
 /**
  * Tag each skill with its most-specific source.
  *
- * When sources are nested (e.g. data/skills and data/skills/zcode),
- * skills under the deeper path get the child source label.
- *
- * @param {Array<object>} skills - raw skill objects from loadSkills
+ * @param {Array<object>} skills
  * @param {Array<{path:string, source:string}>} sources
  * @returns {Array<object>}
  */
 function tagSkillsBySource(skills, sources) {
-  // Sort sources by path length descending so deepest (most specific) matches first
   const sorted = [...sources].sort((a, b) => b.path.length - a.path.length);
 
   return skills.map((skill) => {
     for (const src of sorted) {
-      if (skill.path.startsWith(src.path + (skill.path[src.path.length] === '\\' ? '\\' : '/'))) {
+      if (
+        skill.path.startsWith(
+          src.path + (skill.path[src.path.length] === '\\' ? '\\' : '/')
+        )
+      ) {
         return { ...skill, source: src.source };
       }
     }
-    // Fallback: tag with first source
     return { ...skill, source: sources[0]?.source ?? 'project' };
   });
 }
 
+// ─── Main ──────────────────────────────────────────────────────────────────────
+
 async function main() {
   const startTime = performance.now();
-  const sources = parseSources();
+  const { provider: providerType } = parseArgs();
 
-  console.log(`Building index from ${sources.length} source(s):`);
-  for (const src of sources) {
+  console.log(`Building index from ${parseSources().length} source(s):`);
+  for (const src of parseSources()) {
     console.log(`  [${src.source}] ${src.path}`);
   }
+  console.log(`  Provider: ${providerType}`);
   console.log('');
+
+  const sources = parseSources();
 
   // Load skills from each source (skip missing directories)
   const allEntries = [];
@@ -115,7 +141,7 @@ async function main() {
     allEntries.push(...skills);
   }
 
-  // Deduplicate by path (same file may be found via multiple source scans)
+  // Deduplicate by path
   const seenPaths = new Set();
   const uniqueEntries = [];
   for (const entry of allEntries) {
@@ -135,13 +161,24 @@ async function main() {
   await writeFile(INDEX_PATH, JSON.stringify(deduplicated, null, 2), 'utf-8');
 
   // Build and persist embedding index
-  const embeddingIndex = buildEmbeddingIndex(deduplicated);
-  // Convert Map to plain object for JSON serialization
-  const embeddingsForJson = {};
-  for (const [name, vec] of embeddingIndex) {
-    embeddingsForJson[name] = Array.from(vec);
+  if (providerType === 'onnx') {
+    const provider = createProvider('onnx');
+    const embeddingIndex = await provider.buildIndex(deduplicated);
+    const embeddingsForJson = {};
+    for (const [name, vec] of embeddingIndex) {
+      embeddingsForJson[name] = Array.from(vec);
+    }
+    await writeFile(EMBEDDINGS_384_PATH, JSON.stringify(embeddingsForJson, null, 2), 'utf-8');
+    console.log(`  Embeddings (384d): ${EMBEDDINGS_384_PATH}`);
+  } else {
+    const embeddingIndex = buildEmbeddingIndex(deduplicated);
+    const embeddingsForJson = {};
+    for (const [name, vec] of embeddingIndex) {
+      embeddingsForJson[name] = Array.from(vec);
+    }
+    await writeFile(EMBEDDINGS_256_PATH, JSON.stringify(embeddingsForJson, null, 2), 'utf-8');
+    console.log(`  Embeddings (256d): ${EMBEDDINGS_256_PATH}`);
   }
-  await writeFile(EMBEDDINGS_PATH, JSON.stringify(embeddingsForJson, null, 2), 'utf-8');
 
   // Auto-populate domain metadata for hierarchical routing
   populateDomainsFromSkills(deduplicated);
@@ -160,7 +197,6 @@ async function main() {
     console.log(`  ${source}:  ${count}`);
   }
   console.log(`  BM25 index:    ${INDEX_PATH}`);
-  console.log(`  Embeddings:    ${EMBEDDINGS_PATH}`);
   console.log(`  Domains:       data/domains/ (auto-populated)`);
 }
 

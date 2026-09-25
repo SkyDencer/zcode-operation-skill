@@ -6,7 +6,7 @@
  *  - Fnv1aProvider produces identical embeddings to the legacy engine
  *  - Fnv1aProvider dimensions match the configured default (256)
  *  - Unknown provider type throws UnknownProviderError
- *  - OnnxProvider throws ProviderNotAvailableError on embed() and buildIndex()
+ *  - OnnxProvider satisfies the Provider interface
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -96,25 +96,20 @@ try {
 }
 assert(threwUnknown, 'throws UnknownProviderError for unknown type');
 
-// 5. OnnxProvider is not available and throws on embed
-console.log('\n5. OnnxProvider stub throws');
+// 5. OnnxProvider satisfies Provider interface
+console.log('\n5. OnnxProvider interface');
 const onnx = new OnnxProvider();
 assert(onnx.name === 'onnx', 'name is "onnx"');
-assert(onnx.isAvailable() === false, 'isAvailable() is false');
-let onnxEmbedThrows = false;
-try {
-  onnx.embed('test');
-} catch (err) {
-  onnxEmbedThrows = err instanceof ProviderNotAvailableError;
-}
-assert(onnxEmbedThrows, 'embed() throws ProviderNotAvailableError');
-let onnxBuildThrows = false;
-try {
-  onnx.buildIndex(index);
-} catch (err) {
-  onnxBuildThrows = err instanceof ProviderNotAvailableError;
-}
-assert(onnxBuildThrows, 'buildIndex() throws ProviderNotAvailableError');
+assert(onnx.dimensions === 384, 'dimensions is 384');
+assert(typeof onnx.isAvailable() === 'boolean', 'isAvailable() returns boolean');
+assert(typeof onnx.embed === 'function', 'embed is a function');
+assert(typeof onnx.buildIndex === 'function', 'buildIndex is a function');
+assert(typeof onnx.downloadModel === 'function', 'downloadModel is a function');
+
+// 6. OnnxProvider with non-existent cache is not available
+console.log('\n6. OnnxProvider isAvailable() on cold start');
+const coldOnnx = new OnnxProvider({ cacheDir: '/nonexistent-cache-abc123' });
+assert(coldOnnx.isAvailable() === false, 'isAvailable() is false on cold start');
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 

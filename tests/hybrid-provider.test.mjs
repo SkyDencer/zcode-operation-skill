@@ -63,16 +63,17 @@ const fullResult = hybridRetrieve(prompts[0].prompt, index, { provider: fnv1a })
 assert(Array.isArray(fullResult), 'full corpus returns array');
 assert(fullResult.length > 0, 'full corpus non-empty');
 
-// 4. OnnxProvider throws ProviderNotAvailableError during retrieval
-console.log('\n4. OnnxProvider throws in hybridRetrieve');
-const onnx = new OnnxProvider();
+// 4. OnnxProvider throws ProviderNotAvailableError during retrieval when not available
+console.log('\n4. OnnxProvider throws in hybridRetrieve (cold start)');
+// Use a cold provider (non-existent cache) to ensure it throws
+const coldOnnx = new OnnxProvider({ cacheDir: '/nonexistent-cache-abc123' });
 let threwOnnx = false;
 try {
-  hybridRetrieve(prompts[0].prompt, leafIndex, { provider: onnx });
+  hybridRetrieve(prompts[0].prompt, leafIndex, { provider: coldOnnx });
 } catch (err) {
   threwOnnx = err instanceof ProviderNotAvailableError;
 }
-assert(threwOnnx, 'hybridRetrieve throws ProviderNotAvailableError with OnnxProvider');
+assert(threwOnnx, 'hybridRetrieve throws ProviderNotAvailableError with unavailable OnnxProvider');
 
 // 5. Pre-built embeddings still work alongside provider
 console.log('\n5. Pre-built embeddings with explicit provider');
