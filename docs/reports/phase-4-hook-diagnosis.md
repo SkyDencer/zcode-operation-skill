@@ -31,7 +31,12 @@ Plugin hooks in ZCode 3.14.1 are **not failing at the schema or discovery level*
 
 **Verdict:** Schema is valid. No structural diff from working format. The only drift is the stale installed copy's `statusMessage` (singular vs plural).
 
-## 4. Recommended Fix — `src/cli/hook-registrar.mjs`
+## 4. Recommended Fix — `src/deploy/hook-registrar.mjs`
+
+> **Resolved in Phase 4.** The recommendation below was implemented as
+> `src/deploy/hook-registrar.mjs` (not `src/cli/hook-registrar.mjs`, which does not
+> exist), and is invoked by `deploy` and by `verify --deep` / `health`. The section
+> is kept as the original diagnosis.
 
 Implement a CLI subcommand that programmatically ensures the plugin's hook is registered in user config:
 

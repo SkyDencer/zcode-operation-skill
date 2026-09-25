@@ -219,13 +219,13 @@ Configuration via `SKILL_ROUTER_SOURCES` env var (colon-separated paths) or `rei
 - Fallback: no strong signal -> plain flat retrieve
 - Multi-domain uses single hybrid pass with domain-distributed scoring
 
-### Router Selector (`src/core/routing/selector.mjs`)
+### Router Selector (`src/routing/selector.mjs`)
 
 - `selectRouter(corpusSize, options)` chooses between flat and hierarchical routing
 - Default: **flat** -- benchmark evidence shows flat is faster and equally/more accurate at all scales (N=50 to N=500)
 - `mode` option: force `"flat"` or `"hierarchical"`
-- `experimental` flag: enables deprecated hierarchical path
-- Hierarchical is NOT auto-enabled by corpus size anymore; it requires explicit flag
+- `experimental` option: enables the deprecated hierarchical path. It is a `selectRouter()` option only -- no `src/cli/` module parses `--experimental`
+- Hierarchical is NOT auto-enabled by corpus size; it requires an explicit option
 
 ### Context Budget Manager (`src/core/budget/manager.mjs`)
 
@@ -350,7 +350,7 @@ Phase 3 conducted a rigorous scale benchmark comparing flat BM25 against hierarc
 2. **Accuracy is tied or slightly better for flat.** Hierarchical never outperforms flat; at N=300 and N=500 flat edges ahead by 0.1-0.2%.
 3. **Fallback rate is higher for hierarchical** at larger scales (0.3% vs 0.0%).
 4. **The inflection point** where Top-1 drops below 95% is at N=50 on synthetic prompts. This is a corpus-distribution issue, not an algorithm failure -- the real 54-skill corpus achieves 96.9% Top-1.
-5. **Decision**: hierarchical routing is deprecated as the default. Flat is the primary path. Hierarchical remains available via `--experimental` flag for users who want it.
+5. **Decision**: hierarchical routing is deprecated as the default. Flat is the primary path. Hierarchical remains available to callers that pass `selectRouter(corpusSize, { mode: 'hierarchical' })` or `{ experimental: true }`; there is no `--experimental` CLI flag.
 
 Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-benchmark.md)
 

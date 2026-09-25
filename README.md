@@ -39,12 +39,15 @@ The script will:
 
 1. Verify Node.js >= 20
 2. Confirm it is running from the repository root
-3. Build the skill index (`hooks/build-index.mjs`)
+3. Build the skill index (`node hooks/build-index.mjs`)
 4. Preview the sync plan (`sync --dry-run`)
-5. Deploy router skills to your ZCode mirror (`deploy --dry-run`)
-6. Sync leaf skills to your ZCode mirror (`~/.zcode/skills`)
+5. Ask for confirmation (skipped with `--yes`)
+6. Sync skills to your ZCode mirror (`~/.zcode/skills`)
 7. Run a health check (`verify`)
 8. Print next steps
+
+The script does **not** run `deploy`. To deploy the router skills and register the
+hook as well, run `node bin/skill-router.mjs deploy` afterwards (see Quick Start).
 
 To preview without making changes:
 
@@ -57,13 +60,17 @@ node scripts/install.mjs --dry-run
 The fastest path from clone to working router:
 
 ```bash
-1. git clone the repo
-2. npm install
-3. node bin/skill-router.mjs deploy --with-hook
-4. Restart ZCode
-5. Test: send "$laravel fix N+1 query" in ZCode editor
-6. Use for a few weeks, then run: node bin/skill-router.mjs tune --auto --dry-run
+git clone https://github.com/SkyDencer/zcode-operation-skill.git
+cd zcode-operation-skill
+node scripts/install.mjs --yes
+node bin/skill-router.mjs deploy
 ```
+
+Then restart ZCode, and test by sending `$laravel fix N+1 query` in the ZCode
+editor. After a few weeks of use, run `node bin/skill-router.mjs tune --auto --dry-run`.
+
+There are no npm dependencies to install -- the project ships as plain ESM with
+zero `node_modules`, so `npm install` is unnecessary.
 
 After restart, every authoring prompt is routed automatically:
 - Prompts containing a `$` mention (e.g. `$laravel`, `$next`) dispatch to the matching router skill.
@@ -148,7 +155,15 @@ Only mirror directories bearing `.skill-router-meta.json` are touched. User-crea
 
 ### Two-Source Index
 
-The router supports skills from multiple sources. The default source is the project `data/skills/`. A secondary `zcode-user` source can be configured via `SKILL_ROUTER_SOURCES` environment variable or the `--sources` flag on `reindex`. When the same skill name appears in both sources, project-sourced skills always win (higher priority). Collisions are logged during rebuild.
+The router supports skills from multiple sources. The default source is the project `data/skills/`. A secondary `zcode-user` source is configured with the `--sources` flag on `reindex`:
+
+```bash
+node bin/skill-router.mjs reindex --sources all
+```
+
+The `SKILL_ROUTER_SOURCES` environment variable (colon-separated paths) is read **only** by `hooks/build-index.mjs`; it is not read by the `reindex` CLI or by `src/config/env.mjs`, and `src/cli/sources.mjs` only echoes its value. To add a secondary source from the CLI, use `--sources`.
+
+When the same skill name appears in both sources, project-sourced skills always win (higher priority). Collisions are logged during rebuild.
 
 ### Query Cache
 
@@ -367,14 +382,15 @@ node bin/skill-router.mjs doctor
 # Preview deploy changes without applying
 node bin/skill-router.mjs deploy --dry-run
 
-# Deploy router skills and register hook in ZCode config
-node bin/skill-router.mjs deploy --with-hook
+# Deploy router skills. Hook registration is ON by default; --no-hook opts out.
+node bin/skill-router.mjs deploy
+node bin/skill-router.mjs deploy --no-hook
 
 # List deployed snapshots for rollback reference
 node bin/skill-router.mjs deploy --list-snapshots
 
-# Restore from a previous snapshot
-node bin/skill-router.mjs deploy --restore ./logs/deploys/deploy-snapshot-YYYY-MM-DDTHH-mm-ss.json
+# Restore from a snapshot. --restore takes a TIMESTAMP PREFIX, not a file path.
+node bin/skill-router.mjs deploy --restore 2026-09-23T10-00-00
 ```
 
 ### Exit Codes
@@ -412,7 +428,7 @@ zcode-operation-skill/
 ├── .zcode-plugin/
 │   └── plugin.json           # Plugin manifest
 ├── bin/
-│   └── skill-router.mjs      # CLI entry point (20 subcommands)
+│   └── skill-router.mjs      # CLI entry point (18 subcommands)
 ├── hooks/
 │   ├── hooks.json            # Hook registration
 │   ├── route.mjs             # Main hook: stdin -> route -> output

@@ -81,12 +81,12 @@ SLM is **disabled by default**. If you see SLM errors, it means SLM was explicit
 # Ensure SLM is off (default)
 unset SKILL_ROUTER_SLM_ENABLED
 
-# Or explicitly disable via config
-node -e "
-const fs = require('fs');
-const cfg = JSON.parse(fs.readFileSync('src/config/defaults.mjs','utf8'));
-"
+# Read the effective value (defaults.mjs is an ES module, not JSON --
+# JSON.parse on it throws a SyntaxError, so import it instead)
+node -e "import('./src/config/defaults.mjs').then(m => console.log('slm.enabled =', m.getDefaults().slm.enabled))"
 ```
+
+Expected: `slm.enabled = false`.
 
 To enable SLM for experimentation:
 ```bash
@@ -175,8 +175,10 @@ node bin/skill-router.mjs verify
 
 **Fix:**
 ```bash
-# If a snapshot exists, restore from it
-node bin/skill-router.mjs deploy --restore ./logs/deploys/deploy-snapshot-<timestamp>.json
+# If a snapshot exists, restore from it.
+# --restore takes a TIMESTAMP PREFIX, not a file path — get it from:
+node bin/skill-router.mjs deploy --list-snapshots
+node bin/skill-router.mjs deploy --restore <timestamp>
 
 # If no snapshot, re-deploy from scratch
 node bin/skill-router.mjs deploy --verify

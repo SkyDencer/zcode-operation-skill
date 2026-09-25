@@ -50,18 +50,28 @@ observed today was refused or dry-run (sections 7 and 8).
 
 ## 2. Corpus reconciliation (before / after skill counts)
 
-Measured in this session:
+Measured in this session (the `node -e` lines below are **descriptions of what was
+run**, not literal commands — the session's ad-hoc one-liners were not recorded
+verbatim):
 
 ```
-$ node -e "<recursive SKILL.md walk of data/skills and router-skills>"
+# node -e "<recursive SKILL.md walk of data/skills and router-skills>"
 data/skills SKILL.md: 54
 router-skills SKILL.md: 6
 total 60
 
-$ node -e "<read data/skill-index.json>"
+# node -e "<read data/skill-index.json>"
 total docs 60
 by source {"project":60}
 routers 6  router-design, router-laravel, router-meta, router-next, router-react, router-test
+```
+
+The equivalent reproducible commands are:
+
+```bash
+node bin/skill-router.mjs stats        # corpus counts
+node bin/skill-router.mjs sources      # per-source counts
+node bin/skill-router.mjs doctor       # index entry count
 ```
 
 | Measure | Before Phase 5 (as recorded) | After (measured here) |

@@ -5,7 +5,7 @@
  * Usage:
  *   node bin/skill-router.mjs <subcommand> [options]
  *
- * Subcommands:
+ * Subcommands (18 total -- see `node bin/skill-router.mjs help`):
  *   list       List skills grouped by domain with quality scores
  *   add        Add a new skill from a SKILL.md file
  *   remove     Remove a skill by name
@@ -13,12 +13,20 @@
  *   reindex    Rebuild the skill index
  *   benchmark  Run the benchmark suite
  *   stats      Show corpus statistics
- *   import     Bulk import skills (placeholder)
+ *   analytics  Show usage analytics from routing logs
+ *   import     Bulk import skills from a directory
  *   sync       Sync project skills to the ZCode mirror
  *   deploy     Deploy router skills to the ZCode mirror
+ *   sources    List current sources and skill counts
  *   verify     Health check: sync drift, orphans, index integrity, thresholds
  *   doctor     Diagnostic report: environment, corpus, benchmarks, overrides
+ *   feedback   Show routing decision feedback summary
+ *   health     Run health checks on sync state and index integrity
+ *   tune       Adaptive BM25 weight tuning (analyze, apply, rollback, auto)
  *   help       Show this help message
+ *
+ * Note: no subcommand implements a --help flag. Unrecognised flags are ignored
+ * and the command runs normally, so `deploy --help` deploys. Use `help`.
  */
 
 import { resolve, dirname } from 'node:path';

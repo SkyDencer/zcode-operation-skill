@@ -38,7 +38,7 @@ possible, not performed as ad-hoc shell commands.
 A phase is complete only when ALL four criteria are met:
 
 1. **Code** — All source files for the phase are written and match the spec in `docs/implementation-plan.md`.
-2. **Tests/Benchmark** — The relevant test or benchmark suite passes (`npm run benchmark`).
+2. **Tests/Benchmark** — The relevant test or benchmark suite passes (`node tests/run-benchmark.mjs --mode bm25` for the frozen BM25 baseline, or `node scripts/run-all-tests.mjs` for the full suite). The `package.json` scripts `build-index` and `benchmark` exist, but per the Environment Gotcha below, invoke the underlying `node <file>` directly.
 3. **Docs** — `docs/current-state.md` is updated with an entry log line; any new decisions are recorded in `docs/decision-dictionary.md`.
 4. **No regressions** — Previously passing benchmarks still pass after the change.
 

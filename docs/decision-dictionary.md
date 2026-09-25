@@ -34,7 +34,7 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 ## D5 — Index is a build artifact, not runtime-generated
 
 - **Question:** Should the index be built on every hook call or cached?
-- **Decision:** Build once via `npm run build-index` and persist to `data/skill-index.json`. The hook reads the cached index. This avoids recomputing on every authoring event and keeps the hook fast (< 50 ms target).
+- **Decision:** Build once via `node hooks/build-index.mjs` and persist to `data/skill-index.json`. The hook reads the cached index. This avoids recomputing on every authoring event and keeps the hook fast (< 50 ms target).
 - **Date:** 2026-09-20
 - **Status:** Accepted
 

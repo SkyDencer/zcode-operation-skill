@@ -35,7 +35,7 @@ Add a single new skill from a SKILL.md file.
 node bin/skill-router.mjs add ./path/to/my-skill/SKILL.md
 ```
 
-Validates the skill against the 6-field quality rules, checks for name collisions, and writes it to `data/skills/`. Runs `reindex` automatically afterward to rebuild the index.
+Validates the skill against the 6-field quality rules, checks for name collisions, and writes it to `data/skills/`. It does **not** run `reindex` — it prints a tip telling you to. Run `node bin/skill-router.mjs reindex` yourself or the index stays stale.
 
 ---
 
@@ -47,7 +47,7 @@ Remove a skill by its frontmatter name.
 node bin/skill-router.mjs remove backend-laravel-eloquent
 ```
 
-Deletes the corresponding SKILL.md file from `data/skills/` and runs `reindex` to update the index.
+Deletes the corresponding SKILL.md file from `data/skills/`. Like `add`, it does **not** run `reindex` — it only prints a tip. Run `node bin/skill-router.mjs reindex` yourself.
 
 ---
 
@@ -103,7 +103,7 @@ This command:
 3. Deduplicates by path (removes duplicates from overlapping source scans)
 4. Tags each skill with its most-specific source (`project` or `zcode-user`)
 5. Resolves name collisions (project wins over zcode-user)
-6. Builds the BM25 inverted index -> `data/skill-index.json`
+6. Writes the flat array of skill objects -> `data/skill-index.json` (no inverted index; BM25 scores at query time)
 7. Computes FNV-1a n-gram embeddings -> `data/skill-embeddings.json`
 8. Auto-populates domain metadata in `data/domains/`
 
@@ -114,11 +114,11 @@ This command:
 Run the benchmark suite and report Top-1 accuracy, Recall@3, latency, and cache performance.
 
 ```bash
-# BM25 mode (default, recommended)
-node bin/skill-router.mjs benchmark
+# BM25 mode (the mode the frozen baseline in data/baseline.json was measured with)
+node bin/skill-router.mjs benchmark --mode bm25
 
-# Hybrid mode (BM25 + embeddings via RRF)
-node bin/skill-router.mjs benchmark --mode hybrid
+# Hybrid mode (BM25 + embeddings via RRF) -- this is the DEFAULT if you omit --mode
+node bin/skill-router.mjs benchmark
 
 # BM25 with synonym expansion
 node bin/skill-router.mjs benchmark --mode bm25 --expand on
@@ -126,7 +126,7 @@ node bin/skill-router.mjs benchmark --mode bm25 --expand on
 # BM25 with opt-in reranker
 node bin/skill-router.mjs benchmark --mode bm25 --rerank
 
-# Real corpus (54 skills)
+# Real corpus (60 index entries: 54 leaf skills + 6 router-* dispatchers)
 node bin/skill-router.mjs benchmark --corpus real
 
 # Synthetic corpus benchmarks (generated on first run)
@@ -137,10 +137,13 @@ node bin/skill-router.mjs benchmark --corpus synthetic-500
 ```
 
 **Options:**
-- `--mode <bm25|hybrid>` -- retrieval mode (default: bm25)
+- `--mode <bm25|hybrid>` -- retrieval mode. The default is **`hybrid`**, not `bm25` (`tests/run-benchmark.mjs:39`); hybrid scores far lower on this corpus, so pass `--mode bm25` explicitly to reproduce the baseline
 - `--rerank [on|off]` -- enable opt-in reranker (default: on)
 - `--expand [on|off]` -- enable synonym expansion (default: off)
 - `--corpus <real|synthetic-N>` -- which skill corpus to use (default: real)
+
+**Warning:** `benchmark` writes `logs/benchmark-YYYY-MM-DD.json` on every run, and
+it ignores `--help` (see [No subcommand implements `--help`](#no-subcommand-implements---help)).
 
 ---
 
@@ -253,19 +256,26 @@ node bin/skill-router.mjs deploy
 # Deploy and run post-deploy verification
 node bin/skill-router.mjs deploy --verify
 
-# Roll back from a snapshot file
-node bin/skill-router.mjs deploy --rollback ./path/to/deploy-backup-2026-09-23T10:00:00.json
+# Inspect a snapshot file (reads and prints metadata; changes nothing)
+node bin/skill-router.mjs deploy --rollback ./logs/deploys/deploy-snapshot-2026-09-23T10-00-00.json
 
-# Custom directories
-node bin/skill-router.mjs deploy --zcode-dir ~/.zcode/skills --project-dir /path/to/project
+# Actually restore the mirror from a snapshot (--restore takes a TIMESTAMP PREFIX)
+node bin/skill-router.mjs deploy --restore 2026-09-23T10-00-00
+
+# Custom directories. Do NOT use ~ -- Node's path.resolve() does not expand it,
+# so `~/.zcode/skills` resolves to <project>/~/.zcode/skills. Pass an absolute path.
+node bin/skill-router.mjs deploy --zcode-dir C:/Users/you/.zcode/skills --project-dir /path/to/project
 ```
 
 **Flags:**
 - `--dry-run` — Plan and display what would change without writing anything.
-- `--rollback <file>` — Restore the mirror from a previous deploy snapshot.
+- `--rollback <file>` — **Read-only.** Parses the snapshot file and prints how many routers it recorded, then exits. It does not restore anything; the output itself says "full rollback requires restoring from snapshot via `--restore`".
+- `--restore <timestamp>` — Actually restore the mirror. Matches on a **timestamp prefix** (or a substring of the snapshot path), not a file path. A `./logs/deploys/...` argument will not match, because the stored paths are absolute Windows paths with backslashes.
+- `--with-hook` / `--no-hook` — Hook registration is **on by default** for every non-dry-run deploy with no errors. `--with-hook` is a no-op restatement of the default; `--no-hook` is the opt-out.
+- `--list-snapshots` — List snapshots in `logs/deploys/` and exit.
 - `--verify` — Run post-deploy health checks after applying changes.
 - `--quiet` — Suppress intermediate console output.
-- `--zcode-dir <dir>` — Override the ZCode mirror directory.
+- `--zcode-dir <dir>` — Override the ZCode mirror directory (absolute path; no `~` expansion).
 - `--project-dir <dir>` — Override the project root directory.
 
 **Behavior:**
@@ -305,7 +315,7 @@ Health checks for sync state and index integrity. Exits 0 when all checks pass, 
 ```bash
 node bin/skill-router.mjs verify
 node bin/skill-router.mjs verify --skills-dir ./data/skills
-node bin/skill-router.mjs verify --zcode-dir ~/.zcode/skills
+node bin/skill-router.mjs verify --zcode-dir C:/Users/you/.zcode/skills  # absolute; no ~ expansion
 ```
 
 **Checks performed:**
@@ -402,6 +412,10 @@ node bin/skill-router.mjs feedback --json
 
 # Export decisions to CSV
 node bin/skill-router.mjs feedback --export ./decisions.csv
+
+# Correlate decisions with feedback signals -> positive / negative / unknown,
+# plus per-field BM25 attribution and a proposed weight update
+node bin/skill-router.mjs feedback --outcomes
 ```
 
 **Output fields:**
@@ -417,7 +431,19 @@ node bin/skill-router.mjs feedback --export ./decisions.csv
 
 ### `health`
 
-Alias for `verify`. Runs health checks on sync state, index integrity, and thresholds.
+**Not an alias for `verify`** — it is a separate command with its own checks and its
+own exit-code scheme. `verify` runs 5 checks (7 with `--deep`) and exits 0 or 1.
+`health` runs 8 checks and exits **0 / 1 / 2** (0 = all pass, 1 = warnings only,
+2 = at least one failure).
+
+`health` checks: plugin directory up to date, hook registered, index is fresh,
+routers installed, hook invocable, `llama-server` reachable, no forbidden files,
+thresholds file. `verify` checks: mirror sync status, orphan mirror dirs, meta
+files, index up to date, thresholds file (plus hook-registered under `--deep`).
+No check name overlaps.
+
+Note: the "hook invocable" check spawns `node hooks/route.mjs`, which writes
+`.zcode/output.json` in the current working directory.
 
 ```bash
 node bin/skill-router.mjs health
@@ -458,7 +484,7 @@ node bin/skill-router.mjs tune --report
 **Options:**
 - `--dry-run` — Preview changes without applying them (works with `--apply` and `--auto`)
 - `--threshold N` — Minimum attributions required before proposing a change (default: 20)
-- `--json` — Output results as JSON (where supported)
+- `--json` — Accepted but **not implemented**. `src/cli/tune.mjs:123` sets `opts.json = true` and no code path reads it, so `tune --json` prints the same human-readable text as `tune`
 
 **Subcommand behaviour:**
 
@@ -496,45 +522,68 @@ node bin/skill-router.mjs verify --deep
 
 ---
 
-### `deploy --with-hook`
+### `deploy --with-hook` / `--no-hook`
 
-Deploy router skills and also register the `UserPromptSubmit` hook in ZCode's CLI config so the hook fires on every authoring event. Combines `deploy` with automatic hook configuration.
+A plain `deploy` **already registers the `UserPromptSubmit` hook** in ZCode's CLI
+config. `src/cli/deploy.mjs:27` initialises `withHook = true`, and the
+registration block at `src/cli/deploy.mjs:182` runs whenever `withHook && !dryRun
+&& result.errors.length === 0`. So:
+
+| Invocation | Hook registered? |
+|---|---|
+| `deploy` | **Yes** (default) |
+| `deploy --with-hook` | Yes — the flag is a no-op restatement of the default |
+| `deploy --no-hook` | **No** — this is the real opt-out |
+| `deploy --dry-run` | No — dry-run never registers |
 
 ```bash
-# Deploy routers and register hook
+# Deploy routers and register the hook (identical to a bare `deploy`)
 node bin/skill-router.mjs deploy --with-hook
 
+# Deploy routers but leave ~/.zcode/cli/config.json untouched
+node bin/skill-router.mjs deploy --no-hook
+
 # Dry-run both operations
-node bin/skill-router.mjs deploy --with-hook --dry-run
+node bin/skill-router.mjs deploy --dry-run
 ```
 
 ---
 
 ### `deploy --list-snapshots`
 
-List all deploy snapshots stored in `logs/deploys/` with timestamps and router counts. Useful for choosing a snapshot to restore from.
+List all deploy snapshots stored in `logs/deploys/`. Useful for choosing a snapshot to restore from.
 
 ```bash
 node bin/skill-router.mjs deploy --list-snapshots
 ```
 
-**Output:**
+**Output:** three columns — `Timestamp | Mirror Root | Ops`. When the directory is
+empty (the state in a fresh checkout) it prints `No deploy snapshots found.`
 
-| Snapshot file | Timestamp | Routers | Status |
-|---|---|---|---|
-| `deploy-snapshot-2026-09-23T10-00-00.json` | 2026-09-23 10:00 | 6 | valid |
+```
+Deploy snapshots (2):
+
+  Timestamp                              | Mirror Root                              | Ops
+  --------------------------------------------------------------------------------
+  2026-09-23T10-00-00.000Z               | C:\Users\you\.zcode\skills               | 6
+```
 
 ---
 
-### `deploy --restore <file>`
+### `deploy --restore <timestamp>`
 
-Restore the ZCode mirror from a previous deploy snapshot. Performs the same verification as a normal deploy. Safe: only touches directories with `.skill-router-meta.json`.
+Restore the ZCode mirror from a previous deploy snapshot. Safe: only touches directories with `.skill-router-meta.json`.
+
+**The argument is a timestamp prefix, not a file path.** `src/cli/deploy.mjs:77`
+matches `s.timestamp.startsWith(arg) || s.path.includes(arg)`, and `s.path` is an
+absolute Windows path with backslashes — so a `./logs/deploys/...` string will not
+match and you get `Snapshot not found for: ...`.
 
 ```bash
-# Restore from a specific snapshot
-node bin/skill-router.mjs deploy --restore ./logs/deploys/deploy-snapshot-2026-09-23T10-00-00.json
+# Restore using the timestamp shown by --list-snapshots
+node bin/skill-router.mjs deploy --restore 2026-09-23T10-00-00
 
-# List snapshots first to find the right one
+# List snapshots first to find the right timestamp
 node bin/skill-router.mjs deploy --list-snapshots
 ```
 
@@ -542,20 +591,54 @@ node bin/skill-router.mjs deploy --list-snapshots
 
 ## Global Options
 
-| Option | Description |
+This table is a *reference index across commands*, not a set of flags every
+subcommand accepts. Each row names the command(s) that honour it.
+
+| Option | Commands | Description |
+|---|---|---|
+| `--skills-dir <dir>` | list, validate, reindex, verify, import | Override the default skills directory (`data/skills`) |
+| `--zcode-dir <dir>` | sync, deploy, verify, doctor | Override the ZCode mirror directory. Absolute path only — no `~` expansion |
+| `--dry-run` | add, remove, sync, deploy, tune, import | Preview changes without applying them |
+| `--json` | validate, verify, doctor, analytics, feedback | Output results as JSON. Note: `tune` accepts `--json` but never reads it |
+| `--force` | import, sync | Force overwrite existing skills |
+| `--quiet` | sync, deploy | Suppress console output |
+| `--sources <list>` | reindex | Source list (`project`, `zcode-user`, `all`, comma-separated) |
+| `--limit <n>` | feedback | Number of most recent decisions to read (default 300) |
+| `--export <path>` | feedback | Write the decision table to CSV |
+| `--outcomes` | feedback | Correlate decisions with signals into positive/negative/unknown |
+| `--since <n\|date>` | analytics, feedback | Analytics: N days back. Feedback: `YYYY-MM-DD` |
+| `--include-sync` / `--no-sync` | analytics | Include or exclude `sync` events. Documented nowhere else |
+| `--deep` | verify | Run the 2 extra checks (hook registered, hook invocable) |
+| `--with-hook` / `--no-hook` | deploy | Hook registration; ON by default, `--no-hook` opts out |
+| `--list-snapshots` | deploy | List snapshots in `logs/deploys/` and exit |
+| `--restore <timestamp>` | deploy | Restore the mirror from a snapshot. Timestamp prefix, not a file path |
+| `--rollback <file>` | deploy | **Read-only**; prints snapshot metadata, restores nothing |
+| `--project-dir <dir>` | deploy | Override the project root |
+| `--verify` | deploy | Run post-deploy health checks |
+| `--disable <name>` | sync | Disable a skill in the mirror |
+| `--enable <name>` | sync | Enable a previously disabled skill |
+| `--disable-mechanism <mirror\|shadow>` | sync | Disable strategy (default: mirror) |
+| `--threshold <n>` | tune | Minimum attributions before proposing a change (default 20) |
+
+## No subcommand implements `--help`
+
+`node bin/skill-router.mjs <command> --help` does **not** print help. No
+`src/cli/*.mjs` module inspects `--help`; unrecognised flags fall through and the
+command runs its real body. Verified in this session:
+
+| Command | What `--help` actually did |
 |---|---|
-| `--skills-dir <dir>` | Override the default skills directory (`data/skills`) |
-| `--zcode-dir <dir>` | Override the ZCode mirror directory (`~/.zcode/skills`) |
-| `--dry-run` | Preview changes without applying them |
-| `--json` | Output results as JSON (where supported) |
-| `--force` | Force overwrite existing skills (import, sync) |
-| `--quiet` | Suppress console output (sync) |
-| `--sources <list>` | Source list for reindex (`project`, `zcode-user`, `all`, comma-separated) |
-| `--disable <name>` | Disable a skill in the mirror (sync) |
-| `--enable <name>` | Enable a previously disabled skill (sync) |
-| `--disable-mechanism <mirror|shadow>` | Choose disable strategy (sync, default: mirror) |
-| `--since <n>` | Look back N days for analytics (analytics) |
-| `--rollback <file>` | Roll back deploy from snapshot (deploy) |
+| `list --help` | Printed the 54-row domain table, exit 0 |
+| `validate --help` | Ran the full quality report, exit 0 |
+| `stats --help`, `sources --help`, `doctor --help`, `analytics --help` | Ran the real command, exit 0 |
+| `help --help` | Printed the help text (because `help` ignores all args) |
+| `verify --help` | Ran the 5-check verify table, exit 1 |
+| `health --help` | Ran the 8-check health table, exit 2, and spawned the hook (wrote `.zcode/output.json`) |
+| `benchmark --help` | Ran the whole 130-prompt benchmark and wrote `logs/benchmark-2026-09-25.json` |
+| `deploy --help` | **Deploys.** `--help` is ignored, `withHook` defaults to true. Probed safely with `--dry-run --zcode-dir <temp>` |
+
+Use `node bin/skill-router.mjs help` for the command list, and the `docs/` files
+referenced above for per-command options.
 
 ## Skills Directory Structure
 
@@ -614,4 +697,10 @@ version: 1.0.0
 | 1 | One or more skills failed validation (validate, import) |
 | 1 | Unknown subcommand or missing required arguments |
 | 1 | Source directory not found |
-| 1 | Verify failed (one or more health checks did not pass) |
+| 1 | `verify` failed (one or more checks did not pass) |
+| 1 | `health` completed with warnings only |
+| 2 | `health` unhealthy — one or more checks failed |
+
+`health` is the only command that returns 2 (`src/cli/health.mjs:436`); `verify`
+returns 0 or 1 only. A CI gate that treats any non-zero as a generic failure will
+mis-handle `health`.

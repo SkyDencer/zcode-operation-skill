@@ -30,11 +30,14 @@ The install script will:
 
 1. Verify Node.js >= 20
 2. Confirm it is running from the repository root
-3. Build the skill index from `data/skills/`
+3. Build the skill index from `data/skills/` (`node hooks/build-index.mjs`)
 4. Preview the sync plan (`sync --dry-run`)
-5. Sync skills to your ZCode mirror at `~/.zcode/skills/`
-6. Run a health check (`verify`)
-7. Print next steps
+5. Ask for confirmation (skipped with `--yes`)
+6. Sync skills to your ZCode mirror at `~/.zcode/skills/`
+7. Run a health check (`verify`)
+8. Print next steps
+
+The script does not deploy the router skills. Run `node bin/skill-router.mjs deploy` afterwards to install the routers and register the hook.
 
 To preview without making changes:
 
@@ -151,49 +154,73 @@ node bin/skill-router.mjs deploy --verify
 
 ## Step 6: Add a New Skill
 
-Create a new skill by adding a SKILL.md file:
+Write the SKILL.md somewhere outside `data/skills/` and let `add` validate it and
+copy it in. Two rules make the difference between a skill that is accepted and one
+that is rejected:
+
+- The `domains:` list must name a directory that already exists under
+  `data/domains/`. Run `ls data/domains/` to see the registered set; there is no
+  `mydomain`.
+- The body must be at least 100 tokens. The validator counts the content after
+  the frontmatter, so a one-line "your skill content here" placeholder fails.
 
 ```bash
-# Create the skill directory
-mkdir -p data/skills/mydomain/my-skill
+# Stage the skill outside the corpus. The domain "testing" is registered.
+mkdir -p /tmp/my-skill
 
-# Write the SKILL.md with frontmatter
-cat > data/skills/mydomain/my-skill/SKILL.md << 'EOF'
+cat > /tmp/my-skill/SKILL.md << 'EOF'
 ---
-name: mydomain-my-skill
-description: "A concise description between 40 and 400 characters explaining what this skill does."
+name: testing-my-skill
+description: "Validates that an HTTP client handles retries, timeouts and error responses correctly in integration tests."
 keywords:
-  - keyword1
-  - keyword2
-  - keyword3
+  - http
+  - retries
+  - timeouts
+  - integration-test
 domains:
-  - mydomain
+  - testing
 version: 1.0.0
 ---
 
-# My Domain My Skill
+# Testing My Skill
 
-Your skill content here. At least 100 tokens of useful documentation.
+Use this skill when you need to write integration tests for an HTTP client.
 
 ## Usage
 
-How to use this skill in a workflow.
+Stub the transport layer, assert on the number of attempts, and assert on the
+final error shape. Always assert the timeout budget explicitly, because a test
+that only asserts the happy path will pass against a client that never times
+out at all. Keep each test focused on a single failure mode so that a red test
+names the broken behaviour without needing a debugger.
 
 ## Examples
 
-Concrete examples of the skill in action.
+```js
+it('retries twice before surfacing the error', async () => {
+  const client = new HttpClient({ retries: 2, timeoutMs: 50 });
+  await expect(client.get('/flaky')).rejects.toThrow('timeout');
+  expect(transport.calls).toBe(3);
+});
+```
 EOF
 ```
 
-Add and index it:
+Add it, then reindex:
 
 ```bash
-# Add the skill (validates + copies to data/skills/ + reindexes)
-node bin/skill-router.mjs add data/skills/mydomain/my-skill/SKILL.md
+# Validate and copy into data/skills/testing/my-skill/
+node bin/skill-router.mjs add /tmp/my-skill/SKILL.md
+
+# `add` does NOT reindex for you -- it prints this tip. Run it yourself.
+node bin/skill-router.mjs reindex
 
 # Verify
 node bin/skill-router.mjs verify
 ```
+
+See [docs/skill-authoring.md](skill-authoring.md) for the full six-field quality
+rules and the pitfall list.
 
 ## Step 7: Inspect the Index
 

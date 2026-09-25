@@ -137,7 +137,7 @@ calls, and no persistent state beyond the JSON skill index.
 │  │  skills      │  │  fingerprint │  │  verify, doctor,     │  │
 │  │  match-      │  │  keyed       │  │  help                │  │
 │  │  DomainsTo   │  │              │  │                      │  │
-│  │  Query()     │  │  Key:        │  │  20 subcommands      │  │
+│  │  Query()     │  │  Key:        │  │  18 subcommands      │  │
 │  └──────────────┘  │  sha256+fp   │  └──────────────────────┘  │
 │                     └──────────────┘                               │
 └──────────────────────┬──────────────────────────────────────────┘
@@ -208,12 +208,12 @@ calls, and no persistent state beyond the JSON skill index.
 ### Route Selector (`src/routing/selector.mjs`)
 
 - `selectRouter(corpusSize, options)` chooses between flat and hierarchical routing.
-- Priority order: explicit `mode` option > default flat. Hierarchical is available programmatically via `selectRouter(corpusSize, { mode: 'hierarchical' })`.
+- Priority order: explicit `mode` option > `experimental: true` > default flat. Hierarchical is available programmatically via `selectRouter(corpusSize, { mode: 'hierarchical' })` or `{ experimental: true }`.
 - Default is always **flat** based on Phase 3 benchmark findings:
   - Flat is faster at ALL corpus sizes (N=50 to N=500).
   - Flat has equal or slightly better Top-1 accuracy.
   - Hierarchical has equal or higher fallback rates.
-- Hierarchical remains available programmatically via `mode: 'hierarchical'` option to `selectRouter()`.
+- `experimental` is a `selectRouter()` option only. No `src/cli/` module parses a `--experimental` flag; `hooks/route.mjs` always calls the selector with defaults.
 
 ### Explicit Router Detection (`src/core/routing/explicit.mjs`)
 
@@ -261,7 +261,7 @@ calls, and no persistent state beyond the JSON skill index.
   2. **Domain-scoped BM25** -- runs `rankSkills()` within each candidate domain only.
   3. **Merge & rerank** -- takes best score per skill across domains; applies domain-confidence bonus (+10% primary, +5% secondary).
 - Returns `HierarchicalPlan` with merged ranked skills and domain metadata.
-- Deprecated as default; available programmatically via `mode: "hierarchical"` option to `selectRouter()`.
+- Deprecated as default; available programmatically via the `mode: "hierarchical"` or `experimental: true` option to `selectRouter()` (no CLI flag).
 
 ### Domain Registry (`src/core/routing/domain-registry.mjs`)
 
@@ -444,43 +444,48 @@ calls, and no persistent state beyond the JSON skill index.
 ### CLI (`bin/skill-router.mjs` + `src/cli/`)
 
 - Entry point at `bin/skill-router.mjs` routes to subcommand modules.
-- Subcommands (18 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `import`, `sync`, `sources`, `verify`, `doctor`, `analytics`, `feedback`, `health`, `tune`, `help`.
+- Subcommands (18 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `analytics`, `import`, `sync`, `deploy`, `sources`, `verify`, `doctor`, `feedback`, `health`, `tune`, `help`.
+- `src/cli/` holds 20 modules; `tune-core.mjs` and `tune-guard.mjs` are helpers of `tune.mjs`, not subcommands.
 - Each subcommand is a separate module in `src/cli/` with an exported `main(argv)` function.
 
 ## Skill Index Schema
 
-```jsonc
-{
-  "format": "tedgram-skill-index-v1",
-  "version": 1,
-  "builtAt": "2026-09-20T00:00:00.000Z",
-  "stats": {
-    "totalDocs": 42,
-    "totalTerms": 318,
-    "avgDocLen": 187
-  },
-  "index": {
-    "<term>": {
-      "df": 5,
-      "postings": [
-        { "docId": "skill-001", "tf": 3, "positions": [2, 7, 14] }
-      ]
-    }
-  },
-  "docs": {
-    "skill-001": {
-      "id": "skill-001",
-      "name": "Deploy to AWS",
-      "description": "Deploy a Lambda function to an AWS account.",
-      "tags": ["deploy", "aws", "lambda"],
-      "manifestPath": "data/mock-skills/deploy-aws.json",
-      "source": "project"
-    }
+`data/skill-index.json` is a **flat JSON array of skill objects** — one entry per
+`SKILL.md` — not an inverted index with postings. It is built by
+`hooks/build-index.mjs` / `src/cli/reindex.mjs` and read by
+`src/core/retriever/bm25.mjs`, which scores fields at query time rather than at
+build time.
+
+```json
+[
+  {
+    "name": "backend-api-resources",
+    "description": "Laravel API Resources for transforming model data into JSON responses, conditional field inclusion, resource collections, and nested resource responses",
+    "keywords": ["API Resources", "JSON transformation", "resource collections"],
+    "domains": ["backend", "api"],
+    "path": "<absolute path to the SKILL.md>",
+    "version": "0.1.0",
+    "source": "project"
   }
-}
+]
 ```
 
-Note: entries from multi-source builds include a `source` field (`"project"` or `"zcode-user"`) indicating origin.
+| Field | Type | Purpose |
+|---|---|---|
+| `name` | string | Skill name; also the `docId` used by the retrieval layer |
+| `description` | string | One-line summary, scored at weight x2 |
+| `keywords` | string[] | Scored at weight x1 |
+| `domains` | string[] | Domain membership; drives hierarchical routing and the validator |
+| `path` | string | Absolute path to the source `SKILL.md` |
+| `version` | string | From the manifest frontmatter |
+| `source` | `"project"` \| `"zcode-user"` | Origin, set only on multi-source builds |
+
+The current index holds 60 entries: 54 leaf skills plus 6 `router-*` dispatchers.
+The hook filters `router-*` out before implicit retrieval
+(`hooks/route.mjs:139`), so the effective retrieval corpus is 54.
+
+Note: the `path` field is absolute, which makes the file machine-specific (see
+`docs/problems.md` P6-H-009).
 
 ## Retrieval Algorithm (BM25 MVP)
 

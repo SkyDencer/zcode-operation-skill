@@ -10,7 +10,9 @@
  *     not a routing-mode boundary
  *
  * Decision: hierarchical is deprecated as default; flat is the primary path.
- * Hierarchical remains available via --experimental flag.
+ * Hierarchical remains reachable via the `mode: 'hierarchical'` or
+ * `experimental: true` option to selectRouter(). There is no --experimental
+ * CLI flag; no src/cli/ module parses one.
  */
 
 /**
