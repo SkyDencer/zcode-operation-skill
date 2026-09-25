@@ -3,7 +3,7 @@
 **Status:** Complete
 
 ## 1. Backup
-- Source: C:/Users/dex/.zcode
+- Source: %USERPROFILE%/.zcode
 - Destination: D:/www/local/operation-skill/.backup/zcode-20260921-20260921
 - File count: 10390
 - Total size: 1929.29 MB
@@ -57,8 +57,8 @@ The hooks.json is located at <plugin_dir>/hooks/hooks.json. It contains a single
 - **Added "skills": "data/mock-skills" field to .zcode-plugin/plugin.json**: The comparison flagged a partial match: skills exist at data/mock-skills/ instead of the conventional skills/ directory. The official browser-use plugin schema (from .backup/...) shows an optional 'skills' string path field in plugin.json. By adding 'skills': 'data/mock-skills', ZCode can explicitly locate the 10 skills (each with SKILL.md) without requiring a directory move. This mirrors the pattern used by official plugins like browser-use which declares 'skills': 'skills'.
 
 ## 6. Install Plan for Phase 0.5b
-1. Copy the project root (D:wwwlocaloperation-skill) to a versioned directory under C:Usersdex.zcodeclipluginscachezcode-plugins-official/ — e.g. C:Usersdex.zcodeclipluginscachezcode-plugins-officialzcode-skill-router .1.0\n2. Ensure the copied directory contains .zcode-plugin/plugin.json, hooks/hooks.json, hooks/route.mjs, src/, data/, and package.json at its root
-3. Register the plugin: open ZCode Settings UI (or edit C:Usersdex.zcodecliconfig.json) and add zcode-skill-router@zcode-plugins-official to plugins.enabledPlugins with value true
+1. Copy the project root (D:wwwlocaloperation-skill) to a versioned directory under %USERPROFILE%/.zcode/cli/plugins/cache/zcode-plugins-official/ — e.g. %USERPROFILE%/.zcode/cli/plugins/cache/zcode-plugins-officialzcode-skill-router .1.0\n2. Ensure the copied directory contains .zcode-plugin/plugin.json, hooks/hooks.json, hooks/route.mjs, src/, data/, and package.json at its root
+3. Register the plugin: open ZCode Settings UI (or edit %USERPROFILE%/.zcode/cli/config.json) and add zcode-skill-router@zcode-plugins-official to plugins.enabledPlugins with value true
 4. Restart ZCode completely (close and reopen the app) so the plugin loader rescans the cache directory
 5. Verify plugin loaded: check ZCode console/logs for zcode-skill-router initialization messages; confirm no error about missing .zcode-plugin/plugin.json
 6. Verify hook fired: open a workflow in the ZCode editor, trigger a UserPromptSubmit (send a message containing workflow-related terms), observe the console for "Routing skills..." status message

@@ -1,9 +1,9 @@
 # Phase 1.5 — Human Test Checklist
 
-> **Plugin installation note:** The plugin must first be deployed to the ZCode workspace before beginning these steps. The project root is `C:\Users\PC-1\Desktop\projects\zcode-operation-skill`. Copy or symlink the project contents into the ZCode plugin directory:
+> **Plugin installation note:** The plugin must first be deployed to the ZCode workspace before beginning these steps. The project root is `%USERPROFILE%\Desktop\projects\zcode-operation-skill`. Copy or symlink the project contents into the ZCode plugin directory:
 >
 > ```
-> C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router\
+> %USERPROFILE%\.zcode\workspace\default\plugins\zcode-skill-router\
 > ```
 >
 > The `.zcode-plugin/plugin.json` defines the plugin metadata (`name: zcode-skill-router`, `manifest_version: 1`). After copying, ensure `data/skill-index.json` is present (build it with `npm run build-index` from the project root if missing).
@@ -12,7 +12,7 @@
 
 - ZCode >= 3.14.1 installed
 - Node >= 20 available
-- Plugin deployed to `C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router\`
+- Plugin deployed to `%USERPROFILE%\.zcode\workspace\default\plugins\zcode-skill-router\`
 - `data/skill-index.json` built (54 skills indexed)
 
 ---
@@ -202,7 +202,7 @@ The plugin must remain installed for any follow-up testing. Do **not** remove it
 
 ## Notes for the Human Tester
 
-- **Log location:** Logs are written to the **project root** `logs/` directory (e.g. `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\2026-09-22.jsonl`), not to a `.zcode/routing.jsonl` file inside the plugin directory.
+- **Log location:** Logs are written to the **project root** `logs/` directory (e.g. `%USERPROFILE%\Desktop\projects\zcode-operation-skill\logs\2026-09-22.jsonl`), not to a `.zcode/routing.jsonl` file inside the plugin directory.
 - **Context block format:** The injected context is wrapped in `== SKILL CONTEXT ==` / `== END SKILL CONTEXT ==` delimiters (`hooks/route.mjs:31-39`). Ask the model specifically about a "SKILL CONTEXT block."
 - **Negative test caveat:** The current hook always injects a context block when `ranked.length > 0` (`hooks/route.mjs:123`). The weather prompt produces low-confidence matches — this is a known limitation. The human should note whether the injected skills feel clearly irrelevant.
 - **Output location:** The RoutePlan JSON is written to `{cwd}/.zcode/output.json` relative to the ZCode project root, not a fixed path.

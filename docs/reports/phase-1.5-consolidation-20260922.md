@@ -46,10 +46,10 @@
 
 ## Part D — Deployment
 
-- **Plugin deployed to:** `C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router`
-  - Note: deployment target differs from the human test checklist (`C:\Users\dex\...`); actual deploy ran under user `PC-1`
-- **Index rebuilt:** yes — `node hooks/build-index.mjs` reports "Indexed 54 skills in 67 ms"; `data/skill-index.json` is a 54-entry array at project root; deployed copy present at `C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router\data\skill-index.json`
-- **Marketplace entry:** verified — `marketplace.json` exists at `C:\Users\PC-1\.zcode\workspace\default\plugins\marketplace.json`
+- **Plugin deployed to:** `%USERPROFILE%\.zcode\workspace\default\plugins\zcode-skill-router`
+  - Note: the deployment target follows the current user's profile; the human test checklist used a different local username.
+- **Index rebuilt:** yes — `node hooks/build-index.mjs` reports "Indexed 54 skills in 67 ms"; `data/skill-index.json` is a 54-entry array at project root; deployed copy present at `%USERPROFILE%\.zcode\workspace\default\plugins\zcode-skill-router\data\skill-index.json`
+- **Marketplace entry:** verified — `marketplace.json` exists at `%USERPROFILE%\.zcode\workspace\default\plugins\marketplace.json`
 - **Hook simulations run:** 6
   - `tests/hook-edge-cases.mjs` — 16/16 passed (empty input, whitespace, invalid JSON, missing prompt, emoji, SQL injection, null bytes, unicode, long prompt, valid prompt, output.json validation, hookSpecificOutput structure)
   - `tests/routing.test.mjs` — 43/43 passed (domain detection, single/multi/fallback mode, primary domain selection, latency < 15 ms)

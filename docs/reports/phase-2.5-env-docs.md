@@ -76,7 +76,7 @@ SKIP tests/scale/gen-debug.mjs (no summary found)
 SKIP tests/scale/gen-debug2.mjs (no summary found)
 SKIP tests/scale/gen-debug3.mjs (no summary found)
 SKIP tests/scale/generate-synthetic.mjs (no summary found)
-ERR  tests/scale/run-synthetic-benchmark.mjs: Command failed: node C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tests\...
+ERR  tests/scale/run-synthetic-benchmark.mjs: Command failed: node %USERPROFILE%\Desktop\projects\zcode-operation-skill\tests\...
 OK   tests/scale/scale-benchmark.test.mjs: 21 passed, 0 failed
 OK   tests/tuning/optimizer.test.mjs: 36 passed, 0 failed
 

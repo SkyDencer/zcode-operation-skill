@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
-$src = "C:\Users\PC-1\Desktop\projects\zcode-operation-skill"
-$dst = "C:\Users\PC-1\.zcode\workspace\default\plugins\zcode-skill-router"
+$src = Join-Path $env:USERPROFILE "Desktop\projects\zcode-operation-skill"
+$dst = Join-Path $env:USERPROFILE ".zcode\workspace\default\plugins\zcode-skill-router"
 
 # Create directory structure (excluding forbidden dirs)
 Get-ChildItem -Path $src -Recurse -Directory | ForEach-Object {

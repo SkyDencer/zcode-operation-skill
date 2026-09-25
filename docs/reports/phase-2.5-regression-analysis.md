@@ -149,9 +149,9 @@ Note: IDs 125-127 (null expected, null actual) continue to pass correctly.
 
 ## Data Sources
 
-- Phase 1 benchmark: `C:/Users/PC-1/Desktop/projects/operation-skill-phase1/logs/benchmark-2026-09-22.json`
-- Phase 2 benchmark: `C:/Users/PC-1/Desktop/projects/zcode-operation-skill/logs/benchmark-2026-09-22.json`
-- Phase 1 index: `C:/Users/PC-1/Desktop/projects/operation-skill-phase1/data/skill-index.json` (54 skills, no domain prefixes)
-- Phase 2 index: `C:/Users/PC-1/Desktop/projects/zcode-operation-skill/data/skill-index.json` (60 skills, domain-prefixed names)
+- Phase 1 benchmark: `%USERPROFILE%/Desktop/projects/operation-skill-phase1/logs/benchmark-2026-09-22.json`
+- Phase 2 benchmark: `%USERPROFILE%/Desktop/projects/zcode-operation-skill/logs/benchmark-2026-09-22.json`
+- Phase 1 index: `%USERPROFILE%/Desktop/projects/operation-skill-phase1/data/skill-index.json` (54 skills, no domain prefixes)
+- Phase 2 index: `%USERPROFILE%/Desktop/projects/zcode-operation-skill/data/skill-index.json` (60 skills, domain-prefixed names)
 - Phase 2 expected routes: `tests/expected-routes.json`
 - Phase 2 prompts: `tests/prompts.json`

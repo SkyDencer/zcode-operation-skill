@@ -48,15 +48,15 @@ skill-router — Diagnostic Report
   Node version                 v26.8.2
   Platform                     win32 x64
   OS version                   v26.8.2
-  Process cwd                  C:\Users\PC-1\Desktop\projects\zcode-operation-skill
+  Process cwd                  %USERPROFILE%\Desktop\projects\zcode-operation-skill
 
 ── ZCode Integration ───────────────────────────────────────────────────────────
-  ZCode skills dir             C:\Users\PC-1\.zcode\skills
+  ZCode skills dir             %USERPROFILE%\.zcode\skills
   Exists                       yes
   Writable                     no
 
 ── Corpus ───────────────────────────────────────────────────────────
-  Skills directory             C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skills
+  Skills directory             %USERPROFILE%\Desktop\projects\zcode-operation-skill\data\skills
   SKILL.md count               54
   Index entries                54
   Index file size              30 KB
@@ -70,7 +70,7 @@ skill-router — Diagnostic Report
 
 ── Sync State ───────────────────────────────────────────────────────────
   Last sync                    2026-09-23T10:41:59.615Z
-  Mirror path                  C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tmp\install-test-home-...\.zcode\skills
+  Mirror path                  %USERPROFILE%\Desktop\projects\zcode-operation-skill\tmp\install-test-home-...\.zcode\skills
   Tracked skills               53
 
 ── Benchmark Baseline ───────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ No regression from Phase 3 baseline (previously 96.92% Top-1 / 2ms median). ✓
 
 ## 7. Anomalies & Notes
 
-1. **ZCode skills dir not writable** — `doctor` reports `Writable: no` for `C:\Users\PC-1\.zcode\skills`. This is expected on this Windows environment where the ZCode mirror is read-only; sync writes to a temp directory instead. Not a Phase 3.5 regression.
+1. **ZCode skills dir not writable** — `doctor` reports `Writable: no` for `%USERPROFILE%\.zcode\skills`. This is expected on this Windows environment where the ZCode mirror is read-only; sync writes to a temp directory instead. Not a Phase 3.5 regression.
 
 2. **verify exit code** — `node bin/skill-router.mjs verify` exits 0 (all checks pass). The test suite handles non-zero exits gracefully (catch block at `tests/cli/verify.test.mjs:66-73`).
 

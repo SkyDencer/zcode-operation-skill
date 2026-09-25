@@ -91,7 +91,7 @@ In a multi-source setup, this table would show breakdowns for `project` and `zco
 | Field | Value |
 |-------|-------|
 | Last sync | 2026-09-23T09:15:40.211Z |
-| Mirror path | `C:\Users\PC-1\.zcode\skills` |
+| Mirror path | `%USERPROFILE%\.zcode\skills` |
 | Synced skills | 53 |
 
 ### Recent Synced Skills (last 10)
