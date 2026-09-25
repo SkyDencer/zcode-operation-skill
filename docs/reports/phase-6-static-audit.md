@@ -366,7 +366,7 @@ $ node tests/run-benchmark.mjs --corpus synthetic-50      # generator path now r
   `src/core/slm/client.mjs:126,90` against the configured local endpoint, and the
   only sockets are the `health` port probe (`src/cli/health.mjs:285`).
 - **No hardcoded secrets/tokens** and no personal paths in tracked source: the
-  only `C:\Users\…` occurrence is the git-ignored generated index (**P6-H9**).
+  only absolute user-local path occurrence is the git-ignored generated index (**P6-H9**).
 - **No `eval`, `new Function`, or shell interpolation of untrusted input**; the
   CLI arg parser only resolves paths (`src/cli/sync.mjs:33-48`).
 - **Path-traversal guards in the importer are effective:**
