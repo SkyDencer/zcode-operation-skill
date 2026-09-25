@@ -1,605 +1,300 @@
-# Phase 6 — Test Coverage Audit Report (Sub-Phase 6.6)
+# Phase 6 — Test Coverage Audit (Sub-Phase 6.6, audit pass)
 
-- **Date:** 2026-09-25
-- **Scope:** all 86 `.mjs` modules under `src/` (82), `hooks/` (2), `bin/` (1), and
-  the 51 test files under `tests/`.
-- **Method:** read-only audit. Module-to-test mapping built from `import`
-  statements in every test file plus a direct-file-name match. Assertion counts
-  obtained by pattern-matching `passed++`, `assert.*` calls, and `test()`/`it()`
-  blocks in each test file. Determinism verified by running the full suite
-  three times and the six Phase 4–5 regression test files three times each.
-  No source code was edited.
+- **Date:** 2026-09-25. **Scope:** 86 `.mjs` modules under `src/` (82), `hooks/` (2),
+  `bin/` (1); 61 test files under `tests/`.
+- **HEAD at measurement time:** `a013aee`. No `src/`, `hooks/`, `bin/` or
+  `tests/**/*.mjs` file changed during the run window (verified, see §7).
+- **Method:** read-only; no source file was edited. Two independent evidence sources:
+  (1) a **static import map** — every `'./*.mjs'` specifier in all 61 test files
+  resolved against the 86 module paths; (2) a **runtime load graph** — a temporary
+  `--experimental-loader` hook written to `%TEMP%` (not the repo) appended every
+  resolved module URL to a log while the `package.json` `test` chain ran. The load
+  graph is how subprocess-exercised CLI modules (`src/cli/*.mjs`, `src/deploy/*`)
+  were detected: they are spawned, never imported. **Prior pass:** commits `5224c2c`
+  and `a013aee` already carry a `test: add test coverage audit for Phases 0-5`
+  report and a `coverage` script; this pass re-measured from scratch and §8 records
+  where it disagrees.
 
-## Verification runs executed for this report
+## 1. Verification runs executed for this report
 
-| Command (run from the repo root) | Result |
+| Command | Result |
 |---|---|
-| `node tests/run-benchmark.mjs --mode bm25` | Top-1 0.9231 (120/130), Recall@3 0.8923, Median 4 ms, exit 0 |
-| `node tests/embeddings.test.mjs` | Passed 75, Failed 0 |
-| `node tests/hybrid.test.mjs` | Passed 16, Failed 0 |
-| `node tests/reranker.test.mjs` | Passed 21, Failed 0 |
-| `node tests/routing.test.mjs` | Passed 43, Failed 0 |
-| `node tests/hook-edge-cases.mjs` | Passed 17, Failed 0 |
-| `node tests/cli/list.test.mjs` | Passed 28, Failed 0 |
-| `node tests/cli/reindex.test.mjs` | Passed 12, Failed 0 |
-| `node tests/cli/validate.test.mjs` | Passed 20, Failed 0 |
-| `node tests/cli/verify.test.mjs` | Passed 6, Failed 0 |
-| `node tests/cli/verify-deep.test.mjs` | Passed 17, Failed 0 |
-| `node tests/cli/doctor.test.mjs` | Passed 26, Failed 0 |
-| `node tests/cli/health.test.mjs` | Passed 17, Failed 0 |
-| `node tests/cli/tune-guard.test.mjs` | Passed 19, Failed 0 |
-| `node tests/cli/tune.test.mjs` | Passed 40, Failed 0 |
-| `node tests/cli/esm-require.test.mjs` | Passed 5, Failed 0 |
-| `node tests/analytics/reader.test.mjs` | Passed 17, Failed 0 |
-| `node tests/analytics/analyzer.test.mjs` | Passed 86, Failed 0 |
-| `node tests/retrieval/synonyms.test.mjs` | Passed 38, Failed 0 |
-| `node tests/cache/lru.test.mjs` | Passed 42, Failed 0 |
-| `node tests/cache/query-cache.test.mjs` | Passed 55, Failed 0 |
-| `node tests/import/scanner.test.mjs` | Passed 26, Failed 0 |
-| `node tests/import/importer.test.mjs` | Passed 49, Failed 0 |
-| `node tests/security/path-traversal.test.mjs` | Passed 20, Failed 0 |
-| `node tests/security/cli-path-traversal.test.mjs` | Passed 10, Failed 0 |
-| `node tests/quality/validator.test.mjs` | Passed 32, Failed 0 |
-| `node tests/tuning/optimizer.test.mjs` | Passed 44, Failed 0 (top1 0.9077) |
-| `node tests/budget/truncator.test.mjs` | Passed 22, Failed 0 |
-| `node tests/budget/manager.test.mjs` | Passed 32, Failed 0 |
-| `node tests/sync/planner.test.mjs` | Passed 38, Failed 0 |
-| `node tests/sync/writer.test.mjs` | Passed 34, Failed 0 |
-| `node tests/sync/disabler.test.mjs` | Passed 42, Failed 0 |
-| `node tests/index/dedupe.test.mjs` | Passed 9, Failed 0 |
-| `node tests/routing/selector.test.mjs` | Passed 15, Failed 0 |
-| `node tests/routing/explicit.test.mjs` | Passed 18 blocks, 0 failures |
-| `node tests/routing/hybrid.test.mjs` | Passed 7 blocks, 0 failures |
-| `node tests/install.test.mjs` | Passed 13, Failed 0 |
-| `node tests/e2e/full-pipeline.mjs` | Passed 80, Failed 0 |
-| `node tests/e2e/idempotency.mjs` | Passed 27, Failed 0 |
-| `node tests/e2e/orphan-cleanup.mjs` | Passed 50, Failed 0 |
-| `node tests/e2e/hook-process.mjs` | 144 assertions passed, 0 failed |
-| `node tests/e2e/full-loop.mjs` | Passed 33, Failed 0 |
-| `node tests/telemetry/feedback.test.mjs` | Passed 31, Failed 0 |
-| `node tests/deploy/hook-registrar.test.mjs` | Passed 25, Failed 0 |
-| `node tests/telemetry/signals.test.mjs` | Passed 19, Failed 0 |
-| `node tests/telemetry/session-tracker.test.mjs` | Passed 22, Failed 0 |
-| `node tests/telemetry/outcomes.test.mjs` | Passed 38, Failed 0 |
-| `node tests/retriever/attribution.test.mjs` | Passed 27, Failed 0 |
-| `node tests/retriever/weights.test.mjs` | Passed 30, Failed 0 |
-| `node tests/retriever/field-weight-safety.test.mjs` | Passed 19, Failed 0 |
-| `node tests/routing-hierarchical.test.mjs` | Passed 37, Failed 0 |
-| `node tests/slm/client.test.mjs` | Passed 7, Failed 0 |
-| `node tests/slm/parser.test.mjs` | Passed 20, Failed 0 |
-| `node tests/slm/prompt-builder.test.mjs` | Passed 7, Failed 0 |
+| every test file x3 via a `%TEMP%` driver script (§7) | 183 runs, 4884 assertions, 0 failed, 0 non-deterministic |
+| `node tests/run-coverage.mjs --single tests/cache/lru.test.mjs` | 1 module tracked; 100% line / branch / func |
+| `node tests/run-coverage.mjs --single tests/telemetry/outcomes.test.mjs` | 2 modules; `outcomes.mjs` 96.4% line, `feedback.mjs` 53.2% line |
+| `node tests/routing.test.mjs` (standalone, no instrumentation) | `Passed: 43  Failed: 0`, exit 0 |
+| `node tests/routing.test.mjs` (same file, ESM loader active) | **42 passed, 1 failed**: `max routing overhead < 80 ms (84.32 ms)` |
+| `find src hooks bin -name "*.mjs"` / `node bin/skill-router.mjs help` | 86 modules; 18 subcommands, 20 `src/cli/` modules |
 
-All commands were run individually with `node <file>` (npm not used per
-AGENTS.md). The full suite was not run as a single `npm test` invocation.
+`npm test` and `npm run coverage` were **not** invoked: `AGENTS.md` records that npm is not on the subprocess PATH on this host. Every check above is a `node <file>` run.
 
----
+## 2. Coverage matrix (module x test)
 
-## 1. Coverage matrix (module × has test)
+`xN` = imported by N test files. `(subprocess)` = only ever loaded by a spawned hook/CLI, never imported. **NONE** = no test reaches it.
 
-### 1.1 Modules with a dedicated test file
-
-| Source module | Test file |
-|---|---|
-| `src/analytics/analyzer.mjs` | `tests/analytics/analyzer.test.mjs` |
-| `src/analytics/reader.mjs` | `tests/analytics/reader.test.mjs` |
-| `src/core/budget/manager.mjs` | `tests/budget/manager.test.mjs` |
-| `src/core/budget/truncator.mjs` | `tests/budget/truncator.test.mjs` |
-| `src/core/cache/lru.mjs` | `tests/cache/lru.test.mjs` |
-| `src/core/cache/query-cache.mjs` | `tests/cache/query-cache.test.mjs` |
-| `src/cli/doctor.mjs` | `tests/cli/doctor.test.mjs` |
-| `src/cli/health.mjs` | `tests/cli/health.test.mjs` |
-| `src/cli/list.mjs` | `tests/cli/list.test.mjs` |
-| `src/cli/reindex.mjs` | `tests/cli/reindex.test.mjs` |
-| `src/cli/tune-core.mjs` | `tests/cli/tune.test.mjs` |
-| `src/cli/tune-guard.mjs` | `tests/cli/tune-guard.test.mjs` |
-| `src/cli/tune.mjs` | `tests/cli/tune.test.mjs` |
-| `src/cli/validate.mjs` | `tests/cli/validate.test.mjs` |
-| `src/cli/verify.mjs` | `tests/cli/verify.test.mjs` |
-| `src/core/reranker/engine.mjs` | `tests/reranker.test.mjs` |
-| `src/core/reranker/features.mjs` | `tests/reranker.test.mjs` |
-| `src/core/retrieval/synonyms.mjs` | `tests/retrieval/synonyms.test.mjs` |
-| `src/core/retriever/attribution.mjs` | `tests/retriever/attribution.test.mjs` |
-| `src/core/retriever/hybrid.mjs` | `tests/hybrid.test.mjs` |
-| `src/core/retriever/weights.mjs` | `tests/retriever/weights.test.mjs` |
-| `src/core/routing/explicit.mjs` | `tests/routing/explicit.test.mjs` |
-| `src/core/routing/hybrid.mjs` | `tests/routing/hybrid.test.mjs` |
-| `src/core/routing/hierarchical.mjs` | `tests/routing-hierarchical.test.mjs` |
-| `src/core/slm/client.mjs` | `tests/slm/client.test.mjs` |
-| `src/core/slm/parser.mjs` | `tests/slm/parser.test.mjs` |
-| `src/core/slm/prompt-builder.mjs` | `tests/slm/prompt-builder.test.mjs` |
-| `src/deploy/hook-registrar.mjs` | `tests/deploy/hook-registrar.test.mjs` |
-| `src/deploy/planner.mjs` | `tests/deploy/planner.test.mjs` |
-| `src/deploy/writer.mjs` | `tests/deploy/writer.test.mjs` |
-| `src/embeddings/engine.mjs` | `tests/embeddings.test.mjs` |
-| `src/import/importer.mjs` | `tests/import/importer.test.mjs` |
-| `src/import/scanner.mjs` | `tests/import/scanner.test.mjs` |
-| `src/index/dedupe.mjs` | `tests/index/dedupe.test.mjs` |
-| `src/quality/validator.mjs` | `tests/quality/validator.test.mjs` |
-| `src/routing/selector.mjs` | `tests/routing/selector.test.mjs` |
-| `src/sync/disabler.mjs` | `tests/sync/disabler.test.mjs` |
-| `src/sync/planner.mjs` | `tests/sync/planner.test.mjs` |
-| `src/sync/writer.mjs` | `tests/sync/writer.test.mjs` |
-| `src/telemetry/feedback.mjs` | `tests/telemetry/feedback.test.mjs` |
-| `src/telemetry/outcomes.mjs` | `tests/telemetry/outcomes.test.mjs` |
-| `src/telemetry/session-tracker.mjs` | `tests/telemetry/session-tracker.test.mjs` |
-| `src/telemetry/signals.mjs` | `tests/telemetry/signals.test.mjs` |
-| `src/tuning/optimizer.mjs` | `tests/tuning/optimizer.test.mjs` |
-| `src/cli/esm-require` (guard) | `tests/cli/esm-require.test.mjs` |
-| `src/retriever/field-weight-safety` | `tests/retriever/field-weight-safety.test.mjs` |
-| `security/path-traversal` | `tests/security/path-traversal.test.mjs` |
-| `security/cli-path-traversal` | `tests/security/cli-path-traversal.test.mjs` |
-| `hooks/hybrid-output` | `tests/hooks/hybrid-output.test.mjs` |
-
-### 1.2 Modules covered only indirectly (imported by integration or e2e tests)
-
-| Source module | Importing test |
-|---|---|
-| `src/index.mjs` | `tests/run-benchmark.mjs` |
-| `src/scorer.mjs` | `tests/telemetry/feedback.test.mjs` |
-| `src/core/retriever/bm25.mjs` | `tests/routing.test.mjs`, `tests/hybrid.test.mjs` |
-| `src/core/routing/detector.mjs` | `tests/routing.test.mjs` |
-| `src/core/routing/domain-registry.mjs` | `tests/routing-hierarchical.test.mjs` |
-| `src/core/routing/planner.mjs` | `tests/routing.test.mjs` |
-| `src/core/routing/hierarchical.mjs` | `tests/integration/phase-2.mjs` |
-| `src/core/retrieval/expander.mjs` | `tests/retrieval/synonyms.test.mjs` |
-| `src/core/slm/index.mjs` | `tests/slm/client.test.mjs` |
-| `src/utils/text.mjs` | `tests/routing-hierarchical.test.mjs` |
-| `src/import/reporter.mjs` | `tests/import/importer.test.mjs` |
-| `src/quality/reporter.mjs` | `tests/quality/validator.test.mjs` |
-| `src/sync/state.mjs` | `tests/sync/planner.test.mjs` |
-| `src/tuning/report.mjs` | `tests/tuning/optimizer.test.mjs` |
-| `src/config/defaults.mjs` | `tests/tuning/optimizer.test.mjs` |
-| `src/deploy/verifier.mjs` | `tests/deploy/e2e.mjs` |
-| `src/loader.mjs` | `tests/integration/phase-2.mjs` |
-| `src/utils/time.mjs` | `tests/run-benchmark.mjs` |
-
-### 1.3 Modules with NO test coverage (25)
-
-| Source module | Lines | Risk |
+| group | covered by test | unreachable |
 |---|---|---|
-| `src/logger.mjs` | 27 | Low — orphaned module (P6-H-019) |
-| `src/retriever.mjs` | 72 | Medium — legacy module kept alive by analytics |
-| `src/analytics/reporter.mjs` | 167 | Medium — markdown report generation untested |
-| `src/cli/add.mjs` | 117 | High — C2 fix target, no CLI-level test |
-| `src/cli/analytics.mjs` | 48 | Low — thin wrapper |
-| `src/cli/benchmark.mjs` | 27 | Low — thin wrapper |
-| `src/cli/deploy.mjs` | 223 | Medium — deploy CLI untested |
-| `src/cli/feedback.mjs` | 317 | High — feedback --outcomes logDir fix, no dedicated CLI test |
-| `src/cli/help.mjs` | 58 | Low |
-| `src/cli/import.mjs` | 262 | Medium — C3 fix target, tested via security tests only |
-| `src/cli/remove.mjs` | 68 | Medium |
-| `src/cli/sources.mjs` | 191 | Medium |
-| `src/cli/stats.mjs` | 179 | Medium |
-| `src/cli/sync.mjs` | 159 | Medium — C4 fix target, tested via security tests only |
-| `src/config/aliases.mjs` | 36 | Medium — alias map untested |
-| `src/config/env.mjs` | 118 | High — env-var parsing untested |
-| `src/index/sources.mjs` | 35 | Medium — corpus source resolution untested |
-| `src/utils/fs.mjs` | 96 | High — contains `isSafeName`/`isWithinRoot`, tested only via security tests |
-| `src/core/embeddings/engine.mjs` | 161 | Covered by `tests/embeddings.test.mjs` (75 assertions) |
-| `src/core/slm/errors.mjs` | 43 | Low — custom error types |
-| `src/core/telemetry/logger.mjs` | 71 | Medium — JSONL rotation untested |
-| `src/core/telemetry/metrics.mjs` | 63 | Medium — ring buffer untested |
-| `src/core/telemetry/reporter.mjs` | 46 | Low |
-| `hooks/build-index.mjs` | 171 | Medium — build pipeline untested |
-| `hooks/route.mjs` | 313 | High — entry point, tested via e2e only (no unit tests) |
-| `bin/skill-router.mjs` | 58 | Low — CLI router, thin dispatcher |
+| bin | skill-router.mjs (subprocess) | - |
+| hooks | build-index.mjs (subprocess), route.mjs (subprocess) | - |
+| src | index.mjs x1, loader.mjs (subprocess), retriever.mjs (subprocess), scorer.mjs x1 | logger.mjs |
+| src/analytics | analyzer.mjs x1, reader.mjs x2 | reporter.mjs |
+| src/cli | feedback.mjs x1, tune-guard.mjs x1; add, deploy, doctor, health, help, import, list, reindex, stats, sync, tune, tune-core, validate, verify (all subprocess) | analytics, benchmark, remove, sources |
+| src/config | defaults.mjs x1; aliases.mjs, env.mjs (subprocess) | - |
+| src/core/budget | manager.mjs x1, truncator.mjs x1 | - |
+| src/core/cache | lru.mjs x1, query-cache.mjs x1 | - |
+| src/core/embeddings | engine.mjs x2 | - |
+| src/core/reranker | engine.mjs x1, features.mjs x1 | - |
+| src/core/retrieval | expander.mjs x1, synonyms.mjs x1 | - |
+| src/core/retriever | attribution.mjs x1, bm25.mjs x9, hybrid.mjs x3, weights.mjs x1 | - |
+| src/core/routing | detector.mjs x2, domain-registry.mjs x1, explicit.mjs x1, hierarchical.mjs x1, hybrid.mjs x2, planner.mjs x1 | - |
+| src/core/slm | index.mjs x1, parser.mjs x1, prompt-builder.mjs x1; client.mjs, errors.mjs (subprocess) | - |
+| src/core/telemetry | logger.mjs, metrics.mjs, reporter.mjs (all subprocess) | - |
+| src/deploy | hook-registrar.mjs x1, planner.mjs x2, writer.mjs x1; verifier.mjs (subprocess) | - |
+| src/import | importer.mjs x2, reporter.mjs x1, scanner.mjs x2 | - |
+| src/index | dedupe.mjs x1; sources.mjs (subprocess) | - |
+| src/quality | reporter.mjs x1, validator.mjs x1 | - |
+| src/routing | selector.mjs x1 | - |
+| src/sync | disabler.mjs x2, planner.mjs x3, state.mjs x1, writer.mjs x2 | - |
+| src/telemetry | feedback.mjs x2, outcomes.mjs x1, session-tracker.mjs x1, signals.mjs x1 | - |
+| src/tuning | optimizer.mjs x1, report.mjs x1 | - |
+| src/utils | text.mjs x1; fs.mjs, time.mjs (subprocess) | - |
 
-Note: `src/core/embeddings/engine.mjs` IS covered by `tests/embeddings.test.mjs`
-(75 assertions). It is listed above because the direct-file-name mapping did not
-match; see Section 1.4 for the corrected count.
+**80 / 86 modules reachable by at least one test (93.0%). 6 unreachable.**
 
-### 1.4 Corrected coverage summary
+### 2a. Modules with no test at all
 
-| Category | Count |
-|---|---|
-| Total source modules | 86 |
-| Modules with a dedicated test file | 47 |
-| Modules covered only indirectly | 18 |
-| Modules with no test coverage | 21 |
-| **Total covered (direct + indirect)** | **65 (75.6%)** |
-| **Uncovered** | **21 (24.4%)** |
+- `src/logger.mjs` — zero importers repo-wide (grepping `src/logger.mjs` and
+  `../logger.mjs` across `src hooks bin tests scripts` returns nothing). Already
+  recorded as dead code (P6-H-019).
+- `src/cli/analytics.mjs` — `grep -rn "'analytics'" tests` outside `tests/cli/`
+  returns 0 hits and the module is absent from the load graph.
+- `src/cli/benchmark.mjs` — same; the `'benchmark'` at `tests/cli/list.test.mjs:66`
+  asserts `help` **output**, not an invocation.
+- `src/cli/remove.mjs` — same; `tests/cli/list.test.mjs:63` is likewise a
+  `help`-output assertion.
+- `src/cli/sources.mjs` — same; `tests/cli/reindex.test.mjs:110,124` pass
+  `--sources` to **reindex**, not to `sources`.
+- `src/analytics/reporter.mjs` — not imported by any test, never loaded. Pure
+  markdown-report writer.
 
-The 21 uncovered modules are:
+### 2b. Exported symbols no test imports
 
-```
-src/logger.mjs
-src/retriever.mjs
-src/analytics/reporter.mjs
-src/cli/add.mjs
-src/cli/analytics.mjs
-src/cli/benchmark.mjs
-src/cli/deploy.mjs
-src/cli/feedback.mjs
-src/cli/help.mjs
-src/cli/import.mjs
-src/cli/remove.mjs
-src/cli/sources.mjs
-src/cli/stats.mjs
-src/cli/sync.mjs
-src/config/aliases.mjs
-src/config/env.mjs
-src/index/sources.mjs
-src/utils/fs.mjs
-src/core/slm/errors.mjs
-src/core/telemetry/logger.mjs
-src/core/telemetry/metrics.mjs
-src/core/telemetry/reporter.mjs
-hooks/build-index.mjs
-hooks/route.mjs
-bin/skill-router.mjs
-```
+214 exported names across the 86 modules; **90 (42.1%)** are imported by a test.
+Neither imported nor reached indirectly:
+`src/core/telemetry/logger.mjs` (`logRecord`, `logRetrieve`, `logBuild`, `logError`);
+`src/core/telemetry/metrics.mjs` (`increment`, `recordTiming`, `getSnapshot`,
+`resetMetrics`); `src/core/telemetry/reporter.mjs` (`reportMetrics`, `reportBenchmark`);
+`src/core/retriever/bm25.mjs` (`readSkillContent`);
+`src/scorer.mjs` (`tokenize`, `computeIdf`, `bm25` — only `resolveFieldWeight` is
+tested); `src/loader.mjs` (`parseFrontmatter`, `loadSkills`);
+`src/utils/time.mjs` (`now`, `measure`, `percentile`);
+`src/deploy/writer.mjs` (`verifySnapshotIntegrity`, `listSnapshots`,
+`pruneSnapshots`, `restoreFromSnapshot`); `src/cli/tune-core.mjs` (all 8 exports);
+`src/index.mjs` (39 of its 40 re-exports).
 
-Of these, the highest-risk gaps are:
+### 2c. Test files that no npm script runs
 
-1. **`src/cli/feedback.mjs`** (317 lines) — the `feedback --outcomes` logDir fix
-   (P4 bug) is covered by `tests/telemetry/outcomes.test.mjs` at the library level,
-   but the CLI wrapper itself has no dedicated test. The CLI path
-   (`printOutcomes` → `correlateFromLogs` with `logDir: resolve('logs')`) is
-   exercised only by `tests/e2e/full-loop.mjs` step 3.
+`package.json` `scripts.test` currently holds 52 `node ...` steps. These test files
+exist, pass when run by hand, and are executed by **no** script:
+`tests/deploy/planner.test.mjs`, `tests/deploy/writer.test.mjs`,
+`tests/hooks/hybrid-output.test.mjs`, `tests/routing-hierarchical.test.mjs`,
+`tests/routing/explicit.test.mjs`, `tests/routing/hybrid.test.mjs`,
+`tests/scale/scale-benchmark.test.mjs`, `tests/slm/client.test.mjs`,
+`tests/slm/prompt-builder.test.mjs`, `tests/deploy/e2e.mjs`,
+`tests/deploy/idempotency.mjs`, `tests/deploy/rollback.mjs`,
+`tests/integration/phase-2.mjs`. All 13 were run manually for this audit (§7) and
+all pass, so a broken `tests/routing/explicit.test.mjs` would not turn the suite red.
 
-2. **`src/config/env.mjs`** (118 lines) — environment-variable parsing for all
-   15 `SKILL_ROUTER_*` variables is untested. A typo or missing variable would
-   silently fall back to defaults with no test catching it.
+## 3. Assertion density
 
-3. **`hooks/route.mjs`** (313 lines) — the main hook entry point is tested only
-   via the e2e spawn-based tests (`tests/e2e/hook-process.mjs`, 144 assertions,
-   `tests/hook-edge-cases.mjs`, 17 assertions). No unit test imports and
-   exercises individual functions inside the hook.
+"assertions" is the count each file reports itself (`Passed: N` for the custom
+harnesses, `pass N` for the `node:test` files, `Passed assertions: N` for
+`tests/e2e/hook-process.mjs`); "src fns" is the number of distinct `src/` exports
+the file imports. **1846 assertions across 60 files** (`tests/run-benchmark.mjs` is
+excluded — it reports no assertion count).
 
-4. **`src/utils/fs.mjs`** (96 lines) — `isSafeName()` and `isWithinRoot()`
-   (the C3/C4 path-traversal guards) are tested only through the security
-   integration tests. No unit test directly imports and exercises these two
-   functions.
+**Flagged (< 5 assertions per public function) — 5 files:**
 
----
+| test file | src fns | assertions | per fn |
+|---|---|---|---|
+| tests/slm/prompt-builder.test.mjs | 4 | 7 | 1.8 |
+| tests/slm/client.test.mjs | 3 | 7 | 2.3 |
+| tests/routing/hybrid.test.mjs | 2 | 7 | 3.5 |
+| tests/routing-hierarchical.test.mjs | 8 | 37 | 4.6 |
+| tests/retriever/field-weight-safety.test.mjs | 4 | 19 | 4.8 |
 
-## 2. Assertion density table
+**Not flagged (>= 5 per function), descending:** analytics/analyzer 43.0 ·
+cache/lru 42.0 · retriever/weights 39.0 · sync/planner 38.0 · cache/query-cache
+27.5 · import/scanner 26.0 · deploy/planner 23.0 · scale/scale-benchmark 21.0 ·
+telemetry/outcomes 19.0 · embeddings 18.8 · analytics/reader 17.0 ·
+routing/selector 16.0 · retriever/attribution 15.5 · deploy/writer 14.0 ·
+import/importer 12.3 · telemetry/session-tracker 11.0 · tuning/optimizer 11.0 ·
+routing 10.8 · budget/manager 10.7 · quality/validator 10.7 · sync/state 10.3 ·
+budget/truncator 10.0 · config/env 10.0 · telemetry/feedback 10.0 · utils/fs 9.7 ·
+retrieval/synonyms 9.5 · sync/writer 8.5 · sync/disabler 7.0 ·
+security/path-traversal 6.7 · cli/tune-guard 6.3 · telemetry/signals 6.3 ·
+hybrid 5.3 · reranker 5.3.
 
-Assertion counts are based on `passed++` counter increments (custom test
-harness), `assert.*` calls (Node built-in `node:assert/strict`), and
-`test()`/`it()` block counts. Files using the custom harness use a single
-`assert()` function that increments `passed++`.
+**Process-level suites** import zero `src/` symbols — they drive
+`bin/skill-router.mjs` as a subprocess and assert on stdout and exit codes only, so
+they have no per-function density: e2e/hook-process 144 · e2e/full-pipeline 80 ·
+e2e/orphan-cleanup 50 · install 43 · cli/tune 40 · e2e/full-loop 33 · cli/list 28 ·
+e2e/idempotency 27 · cli/doctor 26 · deploy/hook-registrar 25 · cli/validate 20 ·
+cli/tune-guard 19 · cli/health 17 · hook-edge-cases 17 · cli/verify-deep 17 ·
+cli/reindex 12 · security/cli-path-traversal 10 · cli/verify 6 · cli/esm-require 5.
+The `node:test` files report test counts rather than assertion counts: slm/parser 22, routing/explicit 18, index/dedupe 9, slm/client 7, routing/hybrid 7, slm/prompt-builder 7, hooks/hybrid-output 4.
 
-| Test file | Passed | Asserts | Tests | Total | Density |
-|---|---:|---:|---:|---:|---|
-| `tests/analytics/analyzer.test.mjs` | 71 | 0 | 0 | **71** | 8.5 |
-| `tests/analytics/reader.test.mjs` | 19 | 0 | 0 | **19** | 2.2 |
-| `tests/budget/manager.test.mjs` | 34 | 0 | 0 | **34** | 4.0 |
-| `tests/budget/truncator.test.mjs` | 22 | 0 | 0 | **22** | 2.6 |
-| `tests/cache/lru.test.mjs` | 42 | 0 | 0 | **42** | 5.0 |
-| `tests/cache/query-cache.test.mjs` | 55 | 0 | 0 | **55** | 6.5 |
-| `tests/cli/doctor.test.mjs` | 26 | 0 | 0 | **26** | 3.1 |
-| `tests/cli/esm-require.test.mjs` | 5 | 0 | 5 | **5** | 0.6 |
-| `tests/cli/health.test.mjs` | 17 | 0 | 0 | **17** | 2.0 |
-| `tests/cli/list.test.mjs` | 28 | 0 | 0 | **28** | 3.3 |
-| `tests/cli/reindex.test.mjs` | 12 | 0 | 1 | **12** | 1.4 |
-| `tests/cli/tune-guard.test.mjs` | 19 | 0 | 0 | **19** | 2.2 |
-| `tests/cli/tune.test.mjs` | 40 | 0 | 0 | **40** | 4.7 |
-| `tests/cli/validate.test.mjs` | 20 | 0 | 0 | **20** | 2.4 |
-| `tests/cli/verify-deep.test.mjs` | 17 | 0 | 0 | **17** | 2.0 |
-| `tests/cli/verify.test.mjs` | 6 | 0 | 0 | **6** | 0.7 |
-| `tests/deploy/hook-registrar.test.mjs` | 25 | 0 | 0 | **25** | 2.9 |
-| `tests/deploy/planner.test.mjs` | 38 | 0 | 0 | **38** | 4.5 |
-| `tests/deploy/writer.test.mjs` | 34 | 0 | 0 | **34** | 4.0 |
-| `tests/embeddings.test.mjs` | 75 | 0 | 0 | **75** | 8.9 |
-| `tests/hooks/hybrid-output.test.mjs` | 35 | 0 | 4 | **39** | 4.6 |
-| `tests/hybrid.test.mjs` | 18 | 0 | 0 | **18** | 2.1 |
-| `tests/import/importer.test.mjs` | 49 | 0 | 0 | **49** | 5.8 |
-| `tests/import/scanner.test.mjs` | 26 | 0 | 0 | **26** | 3.1 |
-| `tests/index/dedupe.test.mjs` | 9 | 0 | 0 | **9** | 1.1 |
-| `tests/install.test.mjs` | 13 | 0 | 0 | **13** | 1.5 |
-| `tests/quality/validator.test.mjs` | 32 | 0 | 0 | **32** | 3.8 |
-| `tests/reranker.test.mjs` | 21 | 0 | 0 | **21** | 2.5 |
-| `tests/retrieval/synonyms.test.mjs` | 38 | 0 | 0 | **38** | 4.5 |
-| `tests/retriever/attribution.test.mjs` | 27 | 0 | 0 | **27** | 3.2 |
-| `tests/retriever/field-weight-safety.test.mjs` | 19 | 0 | 0 | **19** | 2.2 |
-| `tests/retriever/weights.test.mjs` | 30 | 0 | 0 | **30** | 3.5 |
-| `tests/routing-hierarchical.test.mjs` | 37 | 0 | 0 | **37** | 4.4 |
-| `tests/routing.test.mjs` | 43 | 0 | 0 | **43** | 5.1 |
-| `tests/routing/explicit.test.mjs` | 0 | 50 | 18 | **68** | 8.1 |
-| `tests/routing/hybrid.test.mjs` | 0 | 27 | 7 | **34** | 4.0 |
-| `tests/routing/selector.test.mjs` | 0 | 2 | 16 | **18** | 2.1 |
-| `tests/security/cli-path-traversal.test.mjs` | 0 | 10 | 2 | **12** | 1.4 |
-| `tests/security/path-traversal.test.mjs` | 0 | 20 | 0 | **20** | 2.4 |
-| `tests/slm/client.test.mjs` | 0 | 18 | 7 | **25** | 3.0 |
-| `tests/slm/parser.test.mjs` | 0 | 32 | 20 | **52** | 6.1 |
-| `tests/slm/prompt-builder.test.mjs` | 0 | 25 | 7 | **32** | 3.8 |
-| `tests/sync/disabler.test.mjs` | 42 | 0 | 0 | **42** | 5.0 |
-| `tests/sync/planner.test.mjs` | 38 | 0 | 0 | **38** | 4.5 |
-| `tests/sync/writer.test.mjs` | 34 | 0 | 0 | **34** | 4.0 |
-| `tests/telemetry/feedback.test.mjs` | 31 | 0 | 0 | **31** | 3.7 |
-| `tests/telemetry/outcomes.test.mjs` | 38 | 0 | 0 | **38** | 4.5 |
-| `tests/telemetry/session-tracker.test.mjs` | 22 | 0 | 0 | **22** | 2.6 |
-| `tests/telemetry/signals.test.mjs` | 19 | 0 | 0 | **19** | 2.2 |
-| `tests/tuning/optimizer.test.mjs` | 44 | 0 | 0 | **44** | 5.2 |
-| **E2E tests** | | | | | |
-| `tests/e2e/full-pipeline.mjs` | 80 | 0 | 0 | **80** | 9.5 |
-| `tests/e2e/idempotency.mjs` | 27 | 0 | 0 | **27** | 3.2 |
-| `tests/e2e/orphan-cleanup.mjs` | 50 | 0 | 0 | **50** | 6.0 |
-| `tests/e2e/hook-process.mjs` | 144 | 0 | 0 | **144** | 17.1 |
-| `tests/e2e/full-loop.mjs` | 33 | 0 | 0 | **33** | 3.9 |
+## 4. Edge-case gaps (happy / empty / invalid / boundary)
 
-**Totals:** 51 test files, 1,113 assertions across all patterns, 86 source
-modules. Average density: 5.0 assertions per test file.
+| public API | happy | empty | invalid | boundary | evidence of the gap |
+|---|---|---|---|---|---|
+| `rankSkills` (`src/core/retriever/bm25.mjs:62`) | Y | **N** | **N** | **N** | `tests/routing.test.mjs` is corpus-driven happy path only; no `rankSkills('')`, no null prompt, no empty-index case anywhere in the suite |
+| `detectDomains` / `planRoutes` | Y | **N** | **N** | **N** | `tests/routing.test.mjs:44-64` — no empty or invalid input |
+| `readSkillContent` (`bm25.mjs:110`) | **N** | N | N | N | not imported by any test (§2b) |
+| `applySync` (`src/sync/writer.mjs`) | Y | **N** | **N** | Y | `tests/sync/writer.test.mjs:1-12` lists 10 scenarios, none with an empty `SyncPlan` or an unresolvable path |
+| `applyDeploy` (`src/deploy/writer.mjs`) | Y | **N** | **N** | **N** | `tests/deploy/writer.test.mjs:1-9` — 6 scenarios, no empty plan |
+| `registerHook` / `unregisterHook` | Y | **N** | **N** | **N** | `tests/deploy/hook-registrar.test.mjs:1-8` — 5 scenarios; no malformed existing `config.json`, no missing `hooks.events` key |
+| `correlate` / `correlateFromLogs` | Y | Y | **N** | Y | `tests/telemetry/outcomes.test.mjs` covers 5 time windows + fixtures + the `logDir` regression; no null / non-array `decisions` argument |
+| `trackPrompt` | Y | Y | Y | **N** | `tests/telemetry/session-tracker.test.mjs` — no case at exactly the 5-minute boundary |
+| `recordSignal` | Y | Y | Y | **N** | `tests/telemetry/signals.test.mjs` — no unknown-signal-type or oversized-payload boundary |
+| `computeWeights` | Y | Y | **N** | Y | `tests/retriever/weights.test.mjs:1-11` — `[0.5, 5.0]` clamping covered; no NaN / missing-field attribution |
+| `resolveCollisions` | Y | Y | **N** | **N** | `tests/index/dedupe.test.mjs` — 9 tests, no empty index, no same-source collision |
+| `optimizeThresholds` | Y | **N** | Y | Y | `tests/tuning/optimizer.test.mjs:1-11` — no empty `prompts` or empty `expected` |
+| `selectRouter` | Y | Y | Y | Y | `tests/routing/selector.test.mjs:57-63` — `corpusSize` 0/1/10000, `mode:'unknown'` |
+| `fitWithinBudget`, `truncateAtParagraph`, `LRUCache`, `QueryCache`, `validateSkill`, `scanSource`, `importSkills`, `hooks/route.mjs` | Y | Y | Y | Y | `tests/budget/manager.test.mjs:36-40` (empty + null), `:120-122` (tight-budget overflow); 42 `maxSize` and TTL boundaries in `tests/cache/query-cache.test.mjs`; 32 assertions over the 6 field rules in `tests/quality/validator.test.mjs`; `tests/e2e/hook-process.mjs` (20 payloads) + `tests/hook-edge-cases.mjs` (17) |
 
-Files flagged (< 5 assertions per source module they test):
+## 5. Missing regression tests for Phase 4-5 bugs
 
-| Test file | Assertions | Flagged |
-|---|---:|---|
-| `tests/cli/esm-require.test.mjs` | 5 | Yes (5 modules scanned, 1 assertion per module) |
-| `tests/cli/verify.test.mjs` | 6 | Yes |
-| `tests/index/dedupe.test.mjs` | 9 | No (adequate for 9 collision scenarios) |
-| `tests/security/cli-path-traversal.test.mjs` | 12 | No (10 CLI-level + 2 setup) |
-| `tests/security/path-traversal.test.mjs` | 20 | No |
-
-No test file has fewer than 5 total assertions, so the "< 5 assertions per
-function" threshold is met at the file level. However, at the function level,
-`tests/cli/esm-require.test.mjs` (5 assertions scanning 85+ modules for
-`require(`) is thin: one assertion per file group, not per module.
-
----
-
-## 3. Edge case gap list
-
-For each public API, edge-case coverage is assessed across four categories:
-happy path, empty input, invalid input, and boundary conditions.
-
-### 3.1 APIs with full edge-case coverage
-
-| Public API | Happy | Empty | Invalid | Boundary |
+| # | Bug | Fixed in | Regression test | Status |
 |---|---|---|---|---|
-| `detectExplicitSkill(prompt, knownSkills)` | Y | Y (`$foo` → null) | Y (non-string) | Y (case) |
-| `correlate(decisions, signals, opts)` | Y | Y (empty arrays) | Y (stale) | Y (windows) |
-| `correlateFromLogs(decisions, opts)` | Y | Y | Y | Y |
-| `rankSkills(prompt, index, options)` | Y | Y | Y | Y |
-| `QueryCache.getOrSet(query, factory)` | Y | Y | Y (TTL) | Y (capacity) |
-| `fitWithinBudget(skills, options)` | Y | Y | Y | Y (min/max) |
-| `truncateAtParagraph(text, maxChars)` | Y | Y | Y | Y |
-| `validateSkill(filePath, domains)` | Y | Y | Y | Y (40/400) |
-| `planSync(projectDir, zcodeDir)` | Y | Y | Y | Y (5 classes) |
-| `applySync(plan, projectDir)` | Y | Y | Y | Y |
-| `disableSkill(mirrorPath, entry)` | Y | Y | Y (path) | Y |
-| `expandQuery(query, synonymMap)` | Y | Y | Y | Y (IDF) |
-| `buildSynonymMap(index)` | Y | Y | Y | Y |
-| `computeIndexFingerprint(index)` | Y | Y | Y | Y |
-| `resolveCollisions(entries)` | Y | Y | Y | Y |
-| `optimizeThresholds(prompts, index, expected)` | Y | N | N | Y |
+| 1-5 | ZCode 3.14.1 does not load plugin `hooks/hooks.json`; `verify --deep` had no `hook_registered` check; no structured routing-decision log; no `health` command; hook must fail open on bad stdin | Phase 3.5 / 4 | `tests/deploy/hook-registrar.test.mjs` (25), `tests/cli/verify-deep.test.mjs` (17), `tests/telemetry/feedback.test.mjs` (40), `tests/cli/health.test.mjs` (17), `tests/hook-edge-cases.mjs` (17) + `tests/e2e/hook-process.mjs` (144) | present |
+| 6 | **`router-*` entries polluted implicit retrieval** | Phase 4.1 | `tests/routing.test.mjs:26-29`, `tests/hybrid.test.mjs`, `tests/reranker.test.mjs` filter to `leafIndex` **inside the test** | **GAP** — nothing asserts the *hook* does it. `hooks/route.mjs:139` filters, but `tests/e2e/hook-process.mjs:87-88` only asserts the index *contains* >= 6 routers. No assertion anywhere that an implicit `output.json` never lists a `router-*` skill |
+| 7 | `feedback --outcomes` called `correlateFromLogs()` with no `logDir` | Sub-Phase 6.1 | `tests/telemetry/outcomes.test.mjs` section 7 (`:201-255`) and section 8 fixed-clock replay (`:262-287`) | present |
+| 8 | `tests/tuning/optimizer.test.mjs` `top1 0.8615 >= 0.89` corpus drift | Sub-Phase 6.1 | the test itself (44 assertions) now pins the leaf-only corpus and asserts the router gap | present |
+| 9 | Two index builders disagreed on the default corpus (`reindex` 54 vs `build-index` 60) | Sub-Phase 6.4-repair | `tests/cli/reindex.test.mjs` (12 assertions; 7 fail without the fix) | present |
+| 10 | `readSignalFiles()` swallows every error and marks the whole corpus positive | open (P6-H-016) | none | **missing** |
+| 11 | `tune --analyze` ignores live signals; attributions come from the benchmark dataset | open (`docs/reports/phase-5-final-report.md:378-380`) | none | **missing** |
+| 12 | Attribution counters disagree: `tune --status` 130 vs `tune --analyze` 127 | open (`phase-5-final-report.md:381-383`) | none | **missing** |
+| 13 | Post-benchmark auto-rollback never exercised (no proposal ever passed the guard) | open (`phase-5-final-report.md:357-365`) | `tests/cli/tune-guard.test.mjs` (19) covers the *static* guard only | **partial** |
+| 14 | No log rotation / disk monitoring for `routing-*`, `signals-*`, `session-*` | never implemented (`phase-5-final-report.md:394-396`) | none | **missing** (feature absent) |
+| 15 | Adaptation loop never exercised against real user data | n/a | no test can supply this | **not testable** |
 
-### 3.2 APIs with partial or missing edge-case coverage
+Items 10-12 are open defects, so "missing regression test" is the right label; 13-14 need the feature before a regression test can exist.
 
-| Public API | Missing edge cases |
-|---|---|
-| `SlmClient.request(url, prompt)` | No mock-fetch tests for offline/timeout; no test for empty skill list |
-| `SlmClient.parseResponse(json)` | No test for empty JSON array `[]`; no test for `null` body |
-| `attributeOutcome(decision, outcome, index)` | No test for empty `index` (zero documents); no test for missing `selectedSkills` in decision |
-| `computeWeights(attributions, currentWeights, opts)` | No test for attributions below `minOutcomes` (default 20) returning `changed: false`; no test for all-positive or all-negative attribution sets |
-| `readDecisions(filters)` | No test for `since` date beyond the log range; no test for `limit: 0` |
-| `summarize(decisions)` | No test for empty decisions array |
-| `scanSource(path, options)` | No test for `maxDepth: 0`; no test for source root being a file (not directory) |
-| `importSkills(sourceDir, skillsDir, options)` | No test for `--force` overwriting an existing skill; no test for collision with `--force` |
-| `registerHook(configPath)` | No test for config file being unwritable (permission denied) |
-| `planDeploy(projectDir, zcodeDir)` | No test for empty `router-skills/` directory; no test for non-existent mirror |
-| `selectRouter(corpusSize, options)` | No test for `corpusSize: 0`; no test for `mode: 'unknown'` |
-| `matchDomainsToQuery(tokens, domains)` | No test for empty token array; no test for zero domains |
+## 6. Integration coverage — the two confirmations the ask names
 
-### 3.3 APIs with no edge-case tests at all
+### 6a. Hook stdin-to-stdout end-to-end test — **PARTIAL**
 
-| Public API | Notes |
-|---|---|
-| `getDefaults()` | Only tested indirectly via `tests/tuning/optimizer.test.mjs` section 10 |
-| `getConfig()` (env.mjs) | No test file. All 15 `SKILL_ROUTER_*` env vars untested |
-| `parseFrontmatter(content)` | No dedicated test; exercised implicitly by all loader tests |
-| `loadSkillsSync(dir)` | No dedicated test; exercised by `tests/integration/phase-2.mjs` |
-| `readSkillContent(ranked)` | No test for I/O error (missing SKILL.md file); no test for empty `ranked` array |
-| `logDecision(decision)` | No test for `decision.prompt` being empty; no test for missing `sessionId` |
-| `recordSignal(signal)` | No test for malformed signal type string |
-| `readSignals(filters)` | No test for `since` beyond signal log range |
-| `trackPrompt(prompt, promptHash)` | No test for empty prompt; no test for non-ASCII-only prompts |
-| `readSyncState(projectRoot)` | No test file. `src/sync/state.mjs` untested |
-| `writeSyncState(state, projectRoot)` | No test file |
-| `mergeSyncResult(state, syncResult)` | No test file |
-| `isSafeName(name)` | No unit test; tested only via `tests/security/path-traversal.test.mjs` (integration) |
-| `isWithinRoot(target, root)` | No unit test; tested only via `tests/security/cli-path-traversal.test.mjs` |
-| `projectSources()` | No test file. `src/index/sources.mjs` untested |
-| `verifyDeploy(projectDir, zcodeDir)` | No dedicated test; exercised only via `tests/deploy/e2e.mjs` |
-| `registerHook()` / `unregisterHook()` | No test for permission-denied on config write |
+`tests/e2e/hook-process.mjs` exists and is in the `test:e2e` chain. It spawns the
+real hook and writes the payload to the child's stdin (`:63-65`), but the hook writes
+**nothing to stdout**: `grep -n "console.log\|process.stdout" hooks/route.mjs` returns
+0 hits, and the contract at `docs/ai-context.md:539` says the hook must write
+`.zcode/output.json`. The test therefore reads stdout into `stdoutBuf` (`:62`) and
+returns it (`:75`) but **never asserts on it**; every assertion reads
+`.zcode/output.json` (`:66-71`). `tests/hook-edge-cases.mjs:28` goes further and
+passes `stdio: ['pipe', 'ignore', 'pipe']`, discarding stdout entirely. What exists
+is therefore **stdin -> `.zcode/output.json`**, which is the correct contract; a
+literal "stdin-to-stdout" test does not exist and, under the current hook contract,
+could not.
 
----
+### 6b. Full decision -> signal -> outcome loop — **DOES NOT EXIST as one test**
 
-## 4. Missing regression tests for Phase 4–5 bugs
+`tests/e2e/full-loop.mjs` (33 assertions, in `test:e2e`) is the closest. It runs the
+hook, asserts `logs/YYYY-MM-DD.jsonl` (the *runtime event* log) grew, then runs
+`skill-router feedback --json` and asserts `summary.totalCount > 0` (`:200-203`). It
+never mentions `routing-`, `signals-`, `session-` or `--outcomes` (grep over the file:
+0 hits), and `totalCount > 0` is satisfied by decisions already on disk — it does not
+prove the hook wrote one. The three legs are covered separately but never chained:
 
-Each bug fixed in Phases 4–5 is checked for a regression test:
+- **Hook wiring exists**: `hooks/route.mjs:227` `logDecision`, `:240` `trackPrompt`,
+  `:242` `recordSignal`. No test spawns the hook and then asserts on
+  `logs/routing-*.jsonl` or `logs/signals-*.jsonl` — the only matches for those
+  filenames across `tests/` are the in-process writer tests
+  (`tests/telemetry/feedback.test.mjs` 40, `tests/telemetry/signals.test.mjs` 19).
+- **Correlator**: `tests/telemetry/outcomes.test.mjs` sections 6/7/8 — fixtures, the
+  `logDir` regression, and a fixed-clock replay of the *on-disk* logs.
 
-| Bug ID | Description | Fix location | Regression test | Status |
-|---|---|---|---|---|
-| P4-01 | `feedback --outcomes` passes no `logDir` to `correlateFromLogs` (src/cli/feedback.mjs:93) | `src/cli/feedback.mjs:97` (fixed in 6.1) | `tests/telemetry/outcomes.test.mjs` sections 7–8 (logDir default + fixed-clock replay) | **Covered** |
-| P5-01 | `tests/tuning/optimizer.test.mjs` threshold drift (0.8615 vs 0.89) | `tests/tuning/optimizer.test.mjs:120` (fixed in 6.1) | `tests/tuning/optimizer.test.mjs` sections 4 + 14 (leaf-only corpus pinned) | **Covered** |
-| C1 | Fractional BM25 weights crash `rankSkills` with `RangeError` | `src/scorer.mjs:31-45` `resolveFieldWeight()` (fixed in 6.4) | `tests/retriever/field-weight-safety.test.mjs` (19 assertions) | **Covered** |
-| C2 | `require()` inside ESM modules breaks `add`/`doctor` | `src/cli/add.mjs`, `src/cli/doctor.mjs` (fixed in 6.4) | `tests/cli/esm-require.test.mjs` (5 assertions, scans all 85 modules) | **Covered** |
-| C3 | Import/add path traversal writes `SKILL.md` outside `data/skills` | `src/import/importer.mjs`, `src/cli/add.mjs` (fixed in 6.4) | `tests/security/path-traversal.test.mjs` (20 assertions) | **Covered** |
-| C4 | Disable/sync path traversal writes outside mirror root | `src/sync/disabler.mjs`, `src/sync/writer.mjs` (fixed in 6.4) | `tests/security/cli-path-traversal.test.mjs` (10 assertions) | **Covered** |
-| P4-02 | `INDEX_PATH` in `hooks/route.mjs` resolved from `cwd` instead of `import.meta.url` | `hooks/route.mjs` (fixed in Phase 3.5) | `tests/hook-edge-cases.mjs` check #17 (cwd-independent from `os.tmpdir()`) | **Covered** |
+**Gap**: no single test (a) runs the hook with prompt A, (b) runs it again with a
+near-identical prompt so `trackPrompt` emits a `retry` signal, and (c) asserts
+`feedback --outcomes` classifies decision A as `negative`.
 
-All Phase 4–5 bugs have regression tests. No missing regression tests found.
+## 7. Determinism
 
----
+**Result: fully deterministic. 0 non-deterministic tests, 0 failures.**
 
-## 5. Determinism result
-
-Each of the following test files was run three times. Results are identical
-across all three runs. No non-deterministic tests were found.
-
-| Test file | Run 1 | Run 2 | Run 3 | Deterministic |
-|---|---|---|---|---|
-| `node tests/run-benchmark.mjs --mode bm25` | Top-1=0.9231, Recall=0.8923, Median=5 ms | Top-1=0.9231, Recall=0.8923, Median=5 ms | Top-1=0.9231, Recall=0.8923, Median=5 ms | **Yes** |
-| `node tests/telemetry/outcomes.test.mjs` | 38/38 | 38/38 | 38/38 | **Yes** |
-| `node tests/tuning/optimizer.test.mjs` | 44/44 | 44/44 | 44/44 | **Yes** |
-| `node tests/security/path-traversal.test.mjs` | 20/20 | 20/20 | 20/20 | **Yes** |
-| `node tests/security/cli-path-traversal.test.mjs` | 10/10 | 10/10 | 10/10 | **Yes** |
-| `node tests/retriever/field-weight-safety.test.mjs` | 19/19 | 19/19 | 19/19 | **Yes** |
-| `node tests/cli/esm-require.test.mjs` | 5/5 | 5/5 | 5/5 | **Yes** |
-| `node tests/e2e/full-loop.mjs` | 33/33 | 33/33 | 33/33 | **Yes** |
-
-The BM25 median latency varied between 4 ms and 5 ms across runs (measured
-wall-clock timing, not algorithmic output). The Top-1 and Recall@3 numbers are
-deterministic (identical across all three runs). This is expected for timing
-measurements and does not constitute a non-deterministic test.
-
-No non-deterministic tests were found. No fixes needed.
-
----
-
-## 6. Integration test confirmation
-
-### 6.1 Hook stdin-to-stdout end-to-end test
-
-**Confirmed.** `tests/e2e/hook-process.mjs` spawns `node hooks/route.mjs` as a
-real subprocess for 20 payloads (10 normal prompts, 5 explicit $mention
-prompts, 1 empty prompt, 1 malformed JSON, 1 very long prompt >5000 chars,
-1 prompt with special characters, 1 prompt containing `</script>`). For each
-payload it verifies:
-
-- Exit code is 0 (fail-open behavior) — `tests/e2e/hook-process.mjs:14`
-- `.zcode/output.json` is valid JSON (or absent for fail-open cases) —
-  `tests/e2e/hook-process.mjs:15`
-- For valid prompts: `additionalContext` is present and non-empty —
-  `tests/e2e/hook-process.mjs:16`
-- For empty/malformed: fail-open (no output.json) —
-  `tests/e2e/hook-process.mjs:17`
-
-Total: 144 assertions, 0 failures. **Exists and passing.**
-
-### 6.2 Full decision-signal-outcome loop test
-
-**Confirmed.** `tests/e2e/full-loop.mjs` simulates the complete routing loop:
-
-1. Send a prompt to the hook via subprocess — `tests/e2e/full-loop.mjs:47-62`
-2. Verify hook produces valid `output.json` — `tests/e2e/full-loop.mjs:128-153`
-3. Verify a decision was logged in `logs/YYYY-MM-DD.jsonl` — `tests/e2e/full-loop.mjs:160-188`
-4. Run `skill-router feedback --json` and verify it reports the decision — `tests/e2e/full-loop.mjs:192-210`
-5. Clean up created log/output files — `tests/e2e/full-loop.mjs:234-272`
-
-The pipeline validated: hook → log → feedback. 33 assertions, 0 failures.
-**Exists and passing.**
-
-Note: the full loop test does NOT exercise signal → outcome correlation.
-Signal-to-outcome correlation is tested at the library level in
-`tests/telemetry/outcomes.test.mjs` (sections 1–8) and
-`tests/telemetry/signals.test.mjs`. A true decision→signal→outcome loop
-(e2e test that generates a signal, then runs `feedback --outcomes` to verify
-the classification) is not present as a single e2e test. The closest coverage
-is `tests/e2e/full-loop.mjs` step 4 (feedback CLI) plus
-`tests/telemetry/outcomes.test.mjs` section 8 (fixed-clock replay). This is
-documented as a gap, not a blocker.
-
----
-
-## 7. Critical gaps requiring action
-
-The following gaps are critical enough to warrant test additions before Phase 7:
-
-### 7.1 Missing `npm run coverage` script
-
-`package.json` had no `coverage` script. The mission requires:
-
-> Add `npm run coverage` script that runs all tests and reports module
-> coverage (using Node's built-in `--experimental-test-coverage`).
-
-**Status: Added.** New script entry in `package.json`:
-
-```json
-"coverage": "node tests/run-coverage.mjs"
-```
-
-New file `tests/run-coverage.mjs` runs each test file from the `test` chain
-via `node --test --experimental-test-coverage <file>`, parses the
-per-module line/branch/function coverage table emitted by Node's test
-runner, takes the maximum percentage seen for each module across all test
-files, and writes an aggregated JSON report to
-`logs/coverage-YYYY-MM-DD.json`.
-
-Verified in this session:
-- `node tests/run-coverage.mjs --single tests/embeddings.test.mjs`
-  → PASS, 2 modules tracked (defaults.mjs 72.4% lines, engine.mjs 90.0%)
-- `node tests/run-coverage.mjs --single tests/tuning/optimizer.test.mjs`
-  → PASS, 6 modules tracked (scorer.mjs 100% lines, optimizer.mjs 63.9%)
-
-Full-suite run of all 47 test files takes ~90 s and is not run in this
-audit session; the runner is verified on individual files.
-
-### 7.2 Missing unit tests for high-risk untested modules
-
-| Module | Why critical | Suggested test |
-|---|---|---|
-| `src/config/env.mjs` | 15 env vars parsed with comma-separated lists; a typo silently falls back to default | Unit test: set/unset each `SKILL_ROUTER_*` var, verify `getConfig()` returns expected values; test comma-separated list parsing |
-| `src/utils/fs.mjs` | `isSafeName()` / `isWithinRoot()` guard all C3/C4 path-traversal fixes; tested only via integration tests | Unit test: table of safe/unsafe names, edge cases (single-dot, `..`, absolute paths, symlink escape) |
-| `src/core/telemetry/metrics.mjs` | Ring buffer overflow, percentile calculation correctness | Unit test: fill 1001 entries, verify p50/p95/p99; verify eviction |
-| `src/sync/state.mjs` | `mergeSyncResult` mutates state; no test for removed-skill deletion | Unit test: add/update/remove/merge cycle on a fixture state file |
-
-### 7.3 Missing edge-case tests for critical public APIs
-
-| API | Missing edge case | Suggested test |
-|---|---|---|
-| `computeWeights()` | `attributions.length < minOutcomes` (default 20) must return `changed: false` | Add to `tests/retriever/weights.test.mjs` |
-| `attributeOutcome()` | Empty `index` (zero documents) | Add to `tests/retriever/attribution.test.mjs` |
-| `SlmClient.parseResponse()` | Empty JSON array `[]` and `null` body | Add to `tests/slm/parser.test.mjs` |
-| `readDecisions()` | `since` date beyond log range; `limit: 0` | Add to `tests/telemetry/feedback.test.mjs` |
-| `selectRouter()` | `corpusSize: 0`; `mode: 'unknown'` | Add to `tests/routing/selector.test.mjs` |
-| `registerHook()` | Config file unwritable (permission denied) | Add to `tests/deploy/hook-registrar.test.mjs` |
-
-### 7.4 Decision→Signal→Outcome e2e loop gap
-
-`tests/e2e/full-loop.mjs` covers decision→log→feedback but does NOT cover
-the full decision→signal→outcome→attribution→weight cycle. The signal
-generation, outcome correlation, attribution computation, and weight
-adjustment are all tested in isolation but never in a single e2e pipeline.
-
-**Suggested test:** `tests/e2e/adaptation-loop.mjs` —
-1. Run hook with a prompt, capture the decision from the log
-2. Simulate a retry signal (write to `logs/signals-YYYYMMDD.jsonl`)
-3. Run `node bin/skill-router.mjs tune --analyze`
-4. Verify attribution count > 0 and weight delta within guardrail bounds
-5. Verify `tune --status` shows the proposed change
-6. Clean up
-
----
-
-## 8. Test infrastructure notes
-
-- **Test framework:** Node.js built-in `node:test` + `node:assert/strict`
-  (newer tests) and a custom `passed++`/`failed++` counter (older tests).
-  No external test runner.
-- **Entry point:** `package.json` `test` script chains 47 test files
-  sequentially with `&&`. Each file runs with `node <file>`.
-- **Windows gotcha:** npm is not on the subprocess PATH. All tests must be
-  invoked with `node <file>` directly (per AGENTS.md).
-- **Coverage:** No `--experimental-test-coverage` script exists. Node v24
-  supports `node --experimental-test-coverage <file>` for per-file coverage
-  reports, but no aggregated runner is in place.
-- **Benchmarks:** `tests/run-benchmark.mjs` (BM25 mode),
-  `tests/slm-benchmark/runner.mjs` (SLM comparison), and
-  `tests/two-mode-benchmark/runner.mjs` (routing mode detection). These are
-  benchmark harnesses, not assertion-based tests, and are not included in
-  the `test` script chain.
-- **Determinism:** All deterministic. No tests depend on wall-clock time
-  (except `full-loop.mjs` which uses `todayLogPath()` for log file naming,
-  but this is deterministic within a calendar day).
-
----
-
-## 9. Summary
+Method (mission item 6.6.6, at the scale the ask named): a driver script written to
+`%TEMP%` (not the repo) enumerated the 52-step `package.json` `test` chain **plus the
+13 test files no script runs** = 61 targets, and ran each **3 times** as its own
+process, recording exit code and the pass/fail counts each file reports itself.
 
 | Metric | Value |
 |---|---|
-| Total source modules | 86 |
-| Modules with any test coverage | 65 (75.6%) |
-| Modules with no test coverage | 21 (24.4%) |
-| Total test files | 51 |
-| Total assertions | 1,113 |
-| Average assertions per test file | 5.0 |
-| Phase 4–5 bugs without regression tests | 0 |
-| Non-deterministic tests found | 0 |
-| Hook stdin-to-stdout e2e test | **Exists** (`tests/e2e/hook-process.mjs`, 144 assertions) |
-| Decision→signal→outcome e2e loop | **Exists partially** (`tests/e2e/full-loop.mjs`, 33 assertions; signal→outcome covered at library level in `tests/telemetry/outcomes.test.mjs`) |
-| `npm run coverage` script | **Added** (`tests/run-coverage.mjs`, `package.json "coverage"` entry) |
-| Critical gaps requiring test additions | 4 high-risk untested modules + 6 missing edge cases |
+| Distinct test targets | 61 |
+| Repetitions each | 3 |
+| Total runs | 183 |
+| Total assertions reported | 4884 (sum over all runs) |
+| Failures | 0 |
+| Targets whose (exit, pass, fail) triple differed across the 3 runs | **0** |
+| Runs with a non-zero exit | 0 |
+
+Per-file results are stable, e.g. `tests/tuning/optimizer.test.mjs` 44/0/0 three
+times, `tests/retriever/attribution.test.mjs` 31/0/0, `tests/retriever/weights.test.mjs`
+39/0/0, `tests/routing/selector.test.mjs` 16/0/0, `tests/telemetry/feedback.test.mjs`
+40/0/0, `tests/e2e/hook-process.mjs` 144/0/0.
+
+**Concurrent-modification caveat, and how it was handled.** A first determinism
+attempt showed five files with varying pass counts plus a `tests/routing.test.mjs`
+failure. Both artifacts trace to a concurrent agent editing the same sub-phase, not
+to the code: (a) `git log` advanced from `5224c2c` to `a013aee` mid-run, and that
+commit rewrites `tests/retriever/attribution.test.mjs`, `weights.test.mjs`,
+`tests/routing/selector.test.mjs`, `tests/telemetry/feedback.test.mjs`,
+`tests/slm/parser.test.mjs` and adds three test files; (b) the `routing.test.mjs`
+failure was caused by **my own** instrumentation — with the `--experimental-loader`
+hook active its wall-clock assertion `max routing overhead < 80 ms` measured
+84.32 ms, while the same file standalone with no loader reports
+`Passed: 43  Failed: 0`, exit 0. The reported run was therefore executed on a
+settled tree and verified afterwards: `find src hooks bin tests -name "*.mjs"
+-newermt "2026-09-25 20:38"` returns nothing, i.e. **no source or test file changed
+during the run window**. The only files that did change are test-generated artifacts
+(`logs/*`, `data/*`, `tests/scale/synthetic-*.json`, `tests/deploy/tmp-debug*`).
+
+## 8. Defects found in the coverage tooling and the suite
+
+1. **Brittle latency assertion — already fixed in the working tree, uncommitted.**
+   At `a013aee`, `tests/routing.test.mjs` asserted `max routing overhead < 80 ms` on
+   wall-clock time; it was the only assertion in the suite that failed when the
+   machine ran ~5% slower. While this report was being written (21:08) the working
+   copy was changed to add a warm-up iteration, sort the samples and assert the
+   **median** against a 200 ms ceiling — the remedy §8 recommended. Measured
+   behaviour in §1 and §7 reflects the 80 ms version.
+2. **`npm run coverage` keys modules by basename, not path.**
+   `tests/run-coverage.mjs:56-58` captures the module name from Node's coverage table
+   and `:141` keys the aggregation map on it; run against
+   `tests/telemetry/outcomes.test.mjs` it reports `feedback.mjs` and `outcomes.mjs`
+   with no directory. The repo has three `planner.mjs`, three `writer.mjs` and four
+   `reporter.mjs` modules and `:135-137` takes the **max** across them, so a
+   well-covered module masks an uncovered one. Any project-wide coverage percentage
+   from this script is untrustworthy.
+3. **The full-suite coverage report is near-empty, and its pass counter is wrong.**
+   `logs/coverage-2026-09-25.json` (written 20:32 by the prior pass) records
+   `totalModulesTracked: 1` for a whole-suite run because the per-file table regex
+   matched one row; single-file runs are accurate (`lru.mjs` 100%/100%/100%;
+   `outcomes.mjs` 96.4% line, 88.9% branch, 100% func; `feedback.mjs` 53.2% line).
+   `run-coverage.mjs:107` matches `/pass\s+(\d+)/`, which reports "1 tests" for every
+   custom-harness file because those suites do not use `node:test`.
+4. **13 test files run by no script** (§2c); a broken `tests/routing/explicit.test.mjs`
+   would not turn the suite red. **6 modules unreachable** (§2a).
+
+## 9. What this pass did not do
+
+- No source file was edited — this is the audit half of Sub-Phase 6.6 — and no new
+  test was written; the gaps in §4, §5 and §6b are the input for the fix half.
+- `npm test` and `npm run coverage` were not invoked (npm is not on the subprocess
+  PATH here, per `AGENTS.md`); every check is a `node <file>` run named in §1.
+- The edge-case classification in §4 was read from each test file's scenario list and
+  assertion bodies, not from an instrumented branch-coverage run, because §8.2 shows
+  the available coverage script cannot produce one.
+- §2 and §3 were measured on the 48-step chain present when the load-graph pass ran
+  and on the 52-step chain for the determinism pass. The 4 extra steps
+  (`tests/config/env.test.mjs`, `tests/sync/state.test.mjs`, `tests/utils/fs.test.mjs`,
+  `tests/slm/parser.test.mjs`) only add coverage; they cannot remove any row.
