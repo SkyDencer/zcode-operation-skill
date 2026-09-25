@@ -16,8 +16,9 @@ import { tokenize } from '../../utils/text.mjs';
 import { computeIdf, bm25 } from '../../scorer.mjs';
 import { embed, cosineSimilarity, buildEmbeddingIndex } from '../embeddings/engine.mjs';
 import { getDefaults } from '../../config/defaults.mjs';
+import { buildWeightedDocTokens } from '../retriever/bm25.mjs';
 
-const { k1, b, nameWeight, descriptionWeight, keywordWeight } = getDefaults().bm25;
+const { k1, b } = getDefaults().bm25;
 
 /**
  * A single domain match result.
@@ -41,17 +42,13 @@ export function detectDomains(query, index) {
   if (queryTokens.length === 0) return [];
 
   // ── Compute per-skill BM25 scores ────────────────────────────────────────
-  const docs = index.map((skill) => {
-    const nameTokens = tokenize(skill.name);
-    const descTokens = tokenize(skill.description);
-    const kwTokens = tokenize(skill.keywords.join(' '));
-    const combined = [
-      ...Array(nameTokens.length * nameWeight).fill(null).flatMap((_, i) => nameTokens),
-      ...Array(descTokens.length * descriptionWeight).fill(null).flatMap((_, i) => descTokens),
-      ...kwTokens.map((t) => t.repeat(keywordWeight > 1 ? keywordWeight : 1)),
-    ];
-    return { skill, combinedTokens: combined };
-  });
+  // buildWeightedDocTokens normalises fractional field weights, so a
+  // data/weights.json value such as 2.71 cannot throw a RangeError here.
+  const fieldWeights = getDefaults().bm25;
+  const docs = index.map((skill) => ({
+    skill,
+    combinedTokens: buildWeightedDocTokens(skill, fieldWeights),
+  }));
 
   const allDocs = docs.map((d) => d.combinedTokens);
   const idf = computeIdf(allDocs);

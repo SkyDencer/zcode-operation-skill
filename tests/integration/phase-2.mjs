@@ -12,6 +12,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { rankSkills } from '../../src/core/retriever/bm25.mjs';
 import { routeHierarchical } from '../../src/core/routing/hierarchical.mjs';
 import { loadSkills } from '../../src/loader.mjs';
@@ -127,7 +128,6 @@ function ensureSyntheticCorpus(count) {
     return;
   }
   console.log(`  Generating synthetic corpus (${count} skills)...`);
-  const { spawnSync } = require('node:child_process');
   const result = spawnSync('node', [GENERATOR_PATH, String(count)], {
     cwd: BASE,
     stdio: 'inherit',

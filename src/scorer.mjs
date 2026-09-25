@@ -29,6 +29,25 @@ export function tokenize(text) {
 }
 
 /**
+ * Normalise a BM25 field weight into a positive integer token-multiplicity.
+ *
+ * Field weights are applied by repeating a field's tokens (see
+ * buildWeightedDocTokens in src/core/retriever/bm25.mjs), so the weight must
+ * be an integer >= 1. Adaptive tuning (src/core/retriever/weights.mjs) and
+ * data/weights.json can produce fractional values (e.g. 2.71 / 0.57); passing
+ * those straight into `Array(n * w)` or `String.repeat(w)` throws a RangeError
+ * and takes retrieval down with it.
+ *
+ * @param {number|string|undefined} weight — configured field weight
+ * @returns {number} integer >= 1 (non-numeric / non-positive values fall back to 1)
+ */
+export function resolveFieldWeight(weight) {
+  const n = typeof weight === 'number' ? weight : Number(weight);
+  if (!Number.isFinite(n)) return 1;
+  return Math.max(1, Math.round(n));
+}
+
+/**
  * Compute IDF for each term across an array of document token arrays.
  * IDF(q) = ln((N - df(q) + 0.5) / (df(q) + 0.5) + 1)
  * @param {string[][]} docs  — array of token arrays

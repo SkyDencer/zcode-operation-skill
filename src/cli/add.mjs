@@ -3,8 +3,8 @@
  *
  * Usage: node bin/skill-router.mjs add <path-to-SKILL.md> [--dry-run]
  */
-import { resolve, dirname, basename } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { existsSync, readFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { validateSkill } from '../quality/validator.mjs';
 import { parseFrontmatter } from '../loader.mjs';
 
@@ -93,7 +93,7 @@ function getRegisteredDomains() {
   const domainsDir = resolve('data/domains');
   if (!existsSync(domainsDir)) return [];
   try {
-    const entries = require('node:fs').readdirSync(domainsDir, { withFileTypes: true });
+    const entries = readdirSync(domainsDir, { withFileTypes: true });
     return entries.filter((e) => e.isDirectory()).map((e) => e.name);
   } catch {
     return [];

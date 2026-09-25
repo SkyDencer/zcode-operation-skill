@@ -5,13 +5,42 @@
  * for lexical skill ranking using the BM25 scoring algorithm.
  * Supports optional synonym expansion via src/core/retrieval/expander.mjs.
  */
-import { tokenize, computeIdf, bm25 } from '../../scorer.mjs';
+import { tokenize, computeIdf, bm25, resolveFieldWeight } from '../../scorer.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { getDefaults } from '../../config/defaults.mjs';
 import { expandQuery, toWeightedTokenArray } from '../retrieval/expander.mjs';
 
-const { k1, b, nameWeight, descriptionWeight, keywordWeight } = getDefaults().bm25;
+const { k1, b } = getDefaults().bm25;
+
+/**
+ * Build the weighted token array for one skill.
+ *
+ * Field weights are applied as token multiplicity, so the weight is normalised
+ * to a positive integer first (see resolveFieldWeight). Without that step a
+ * fractional weight — which data/weights.json and src/core/retriever/weights.mjs
+ * can both produce — makes `Array(n * w)` / `String.repeat(w)` throw a
+ * RangeError and takes the whole ranking down.
+ *
+ * @param {{name:string, description:string, keywords:string[]}} skill
+ * @param {{nameWeight?:number, descriptionWeight?:number, keywordWeight?:number}} weights
+ * @returns {string[]}
+ */
+export function buildWeightedDocTokens(skill, weights = {}) {
+  const nameReps = resolveFieldWeight(weights.nameWeight);
+  const descReps = resolveFieldWeight(weights.descriptionWeight);
+  const keywordReps = resolveFieldWeight(weights.keywordWeight);
+
+  const nameTokens = tokenize(skill.name);
+  const descTokens = tokenize(skill.description);
+  const kwTokens = tokenize(Array.isArray(skill.keywords) ? skill.keywords.join(' ') : '');
+
+  return [
+    ...Array(nameTokens.length * nameReps).fill(null).flatMap(() => nameTokens),
+    ...Array(descTokens.length * descReps).fill(null).flatMap(() => descTokens),
+    ...kwTokens.flatMap((t) => Array(keywordReps).fill(t)),
+  ];
+}
 
 /**
  * Build a scored, sorted ranking of skills for a given prompt.
@@ -32,20 +61,13 @@ const { k1, b, nameWeight, descriptionWeight, keywordWeight } = getDefaults().bm
  */
 export function rankSkills(prompt, index, options = {}) {
   const synonymMap = options.synonymMap;
+  const fieldWeights = getDefaults().bm25;
 
   // Build per-doc token arrays with field weights
-  const docs = index.map((skill) => {
-    const nameTokens = tokenize(skill.name);
-    const descTokens = tokenize(skill.description);
-    const kwTokens = tokenize(skill.keywords.join(' '));
-    // Combine with multiplicity per field weight
-    const combined = [
-      ...Array(nameTokens.length * nameWeight).fill(null).flatMap((_, i) => nameTokens),
-      ...Array(descTokens.length * descriptionWeight).fill(null).flatMap((_, i) => descTokens),
-      ...kwTokens.map((t) => t.repeat(keywordWeight > 1 ? keywordWeight : 1)),
-    ];
-    return { skill, combinedTokens: combined };
-  });
+  const docs = index.map((skill) => ({
+    skill,
+    combinedTokens: buildWeightedDocTokens(skill, fieldWeights),
+  }));
 
   const allDocs = docs.map((d) => d.combinedTokens);
   const idf = computeIdf(allDocs);

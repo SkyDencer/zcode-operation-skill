@@ -15,7 +15,7 @@ import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
 import { QueryCache } from '../src/core/cache/query-cache.mjs';
 import { buildSynonymMap } from '../src/core/retrieval/synonyms.mjs';
 import { now, percentile } from '../src/utils/time.mjs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const exec = promisify(spawn);
@@ -158,7 +158,6 @@ function ensureSyntheticCorpus(count) {
     return;
   }
   console.log(`  Generating synthetic corpus (${count} skills)...`);
-  const { spawnSync } = require('node:child_process');
   const result = spawnSync('node', [GENERATOR_PATH, String(count)], {
     cwd: BASE,
     stdio: 'inherit',

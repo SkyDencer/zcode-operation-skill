@@ -14,9 +14,8 @@
  * This command is READ-ONLY — it never modifies any files.
  */
 import { resolve, join } from 'node:path';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { loadSkills } from '../loader.mjs';
 import { getDefaults } from '../config/defaults.mjs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -58,8 +57,8 @@ function isWritable(dir) {
   if (!existsSync(dir)) return 'N/A (does not exist)';
   try {
     const testPath = join(dir, '.doctor-write-test.tmp');
-    require('node:fs').writeFileSync(testPath, '', 'utf-8');
-    require('node:fs').unlinkSync(testPath);
+    writeFileSync(testPath, '', 'utf-8');
+    unlinkSync(testPath);
     return 'yes';
   } catch {
     return 'no';
