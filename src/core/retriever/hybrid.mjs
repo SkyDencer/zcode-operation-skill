@@ -7,20 +7,23 @@
  * preserve lexical precision while gaining semantic recall.
  * An optional reranking stage blends RRF scores with feature-based
  * lexical signals for improved top-K precision.
+ *
+ * The embedding backend is abstracted via the Provider interface
+ * (see src/core/embeddings/provider.mjs). A provider instance can be
+ * passed through `options.provider`; when omitted the retriever falls
+ * back to Fnv1aProvider for backward compatibility.
  */
 import { rankSkills } from './bm25.mjs';
-import { buildEmbeddingIndex, cosineSimilarity, embed } from '../embeddings/engine.mjs';
 import { rerank } from '../reranker/engine.mjs';
-import { getDefaults } from '../../config/defaults.mjs';
+import { createProvider } from '../embeddings/provider.mjs';
 
-const { rrf } = getDefaults();
+const DEFAULT_PROVIDER_TYPE = 'fnv1a';
 
 /**
  * Hybrid retrieve — BM25 + embedding similarity fused by Reciprocal Rank Fusion.
  *
  * 1. Run BM25 retrieval via rankSkills(prompt, index).
- * 2. Run embedding similarity: embed the query, compute cosine similarity
- *    against every skill embedding.
+ * 2. Run embedding similarity using the configured provider.
  * 3. Fuse using RRF: score = Σ (1 / (k + rank_i)) across both sources.
  * 4. When RRF scores are tied, prefer the higher BM25 rank.
  * 5. Optionally re-rank with feature blending for improved top-K precision.
@@ -28,15 +31,19 @@ const { rrf } = getDefaults();
  * @param {string} prompt
  * @param {Array<{name:string, description:string, keywords:string[], domains:string[], path:string, version:string}>} index
  * @param {object} [options]
+ * @param {object} [options.provider] — embedding provider instance (default: Fnv1aProvider)
  * @param {number} [options.k=60] — RRF constant
  * @param {boolean} [options.rerank=true] — apply reranking stage
  * @param {Map<string, Float32Array>} [options.embeddings] — pre-built embedding index (optional)
  * @returns {Array<{skill: object, score: number, bm25Score: number, embeddingScore: number}>}
  */
 export function hybridRetrieve(prompt, index, options = {}) {
-  const k = options.k ?? rrf.k;
+  const k = options.k ?? 60;
   const doRerank = options.rerank !== false;
   const topK = options.topK ?? 5;
+
+  // Resolve provider: explicit option > default factory
+  const provider = options.provider ?? createProvider(DEFAULT_PROVIDER_TYPE);
 
   // ── BM25 retrieval ────────────────────────────────────────────────────────
   const bm25Results = rankSkills(prompt, index);
@@ -47,8 +54,8 @@ export function hybridRetrieve(prompt, index, options = {}) {
   });
 
   // ── Embedding retrieval ───────────────────────────────────────────────────
-  const embeddings = options.embeddings ?? buildEmbeddingIndex(index);
-  const queryVec = embed(prompt);
+  const embeddings = options.embeddings ?? provider.buildIndex(index);
+  const queryVec = provider.embed(prompt);
 
   const simScores = index.map((skill) => {
     const skillVec = embeddings.get(skill.name);
@@ -107,7 +114,6 @@ export function hybridRetrieve(prompt, index, options = {}) {
   });
 
   // ── Optional reranking stage ──────────────────────────────────────────────
-  // Reranking is opt-in to avoid degrading hybrid retrieval accuracy on larger corpora.
   if (options.rerank === true && results.length > 1) {
     const reranked = rerank(prompt, results, { topK });
     return reranked.map((r) => ({
@@ -125,4 +131,23 @@ export function hybridRetrieve(prompt, index, options = {}) {
     bm25Score: r.bm25Score,
     embeddingScore: r.embeddingScore,
   }));
+}
+
+/**
+ * Compute cosine similarity between two unit vectors.
+ *
+ * Since both inputs are expected to be normalized to unit length,
+ * this is equivalent to the dot product, bounded to [0, 1].
+ *
+ * @param {Float32Array} a
+ * @param {Float32Array} b
+ * @returns {number} cosine similarity in [0, 1]
+ */
+function cosineSimilarity(a, b) {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+  }
+  return Math.max(0, Math.min(1, dot));
 }

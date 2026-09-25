@@ -15,6 +15,13 @@ export { extractFeatures } from './core/reranker/features.mjs';
 
 // Embeddings
 export { embed, cosineSimilarity, buildEmbeddingIndex } from './core/embeddings/engine.mjs';
+export { createProvider } from './core/embeddings/provider.mjs';
+export {
+  ProviderNotAvailableError,
+  UnknownProviderError,
+} from './core/embeddings/errors.mjs';
+export { Fnv1aProvider } from './core/embeddings/providers/fnv1a.mjs';
+export { OnnxProvider } from './core/embeddings/providers/onnx.mjs';
 
 // Routing
 export { detectDomains } from './core/routing/detector.mjs';
