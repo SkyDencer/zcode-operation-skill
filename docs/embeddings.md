@@ -1,70 +1,126 @@
-/**
- * Embedding providers — FNV-1a and ONNX.
- *
- * The Skill Router supports two embedding backends, selected via the
- * SKILL_ROUTER_EMBEDDING_PROVIDER environment variable (default: `fnv1a`).
- *
- * | Provider   | Dims | Dependency | Cached | Speed     | Quality      |
- * |------------|------|------------|--------|-----------|--------------|
- * | `fnv1a`    | 256  | none       | N/A    | instant   | lexical only |
- * | `onnx`     | 384  | @huggingface/transformers (~50 MB) + model (~22 MB) | on first use | ~1.5 s cold, ~10 ms warm | semantic + lexical |
- *
- * ## FNV-1a Provider (default)
- *
- * Zero-dependency character n-gram hasher. Produces deterministic 256-dim
- * unit vectors from name/description/keywords text. Fast, offline, but
- * purely lexical — does not capture semantic similarity.
- *
- * ```
- * set SKILL_ROUTER_EMBEDDING_PROVIDER=fnv1a   # default
- * node hooks/build-index.mjs --provider fnv1a
- * ```
- *
- * ## ONNX Provider (opt-in)
- *
- * Uses the [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2)
- * model via `@huggingface/transformers`. Downloads the ~22 MB ONNX model on
- * first use and caches it in `node_modules/@huggingface/transformers/.cache/`.
- * Subsequent builds reuse the cache.
- *
- * ```
- * set SKILL_ROUTER_EMBEDDING_PROVIDER=onnx
- * node hooks/build-index.mjs --provider onnx
- * ```
- *
- * The ONNX provider writes `data/skill-embeddings-384.json` (384-dim vectors);
- * the Fnv1a provider writes `data/skill-embeddings.json` (256-dim vectors).
- *
- * ### Dependency justification
- *
- * | Item               | Value                                              |
- * |--------------------|----------------------------------------------------|
- * | Package            | @huggingface/transformers                          |
- * | Version            | 4.3.0 (latest stable)                              |
- * | Install size       | ~96 MB (includes ONNX runtime + transformers code) |
- * | Model              | Xenova/all-MiniLM-L6-v2 (~22 MB, downloaded once)  |
- * | Why needed         | FNV-1a embeddings underperform BM25 on Set Recall; real embeddings capture semantic similarity required for multi-skill routing on ambiguous prompts |
- * | Fallback           | Fnv1aProvider remains the default; set FNN1A to disable the real model |
- *
- * ### Disk usage
- *
- * - Package: ~96 MB under `node_modules/@huggingface/transformers/`
- * - Model cache: ~90 MB for `model.onnx` under `.cache/Xenova/all-MiniLM-L6-v2/onnx/`
- * - Total first-run overhead: ~186 MB
- *
- * ### Offline / cold-start behaviour
- *
- * - `OnnxProvider.isAvailable()` returns `false` until the model is cached.
- * - `downloadModel()` attempts to fetch the model; if the network is offline
- *   it throws `ProviderNotAvailableError` with a clear message.
- * - `embed()` and `buildIndex()` throw `ProviderNotAvailableError` when the
- *   model is not yet cached, preventing silent fallback to zero vectors.
- *
- * ## When to use which
- *
- * - **FNV-1a** — fast builds, no extra disk, good lexical match; use as
- *   default or when disk/network constraints are tight.
- * - **ONNX** — best Set Recall and semantic recall; use when the ~186 MB
- *   overhead is acceptable and semantic similarity matters (ambiguous
- *   multi-skill prompts).
- */
+# Embeddings
+
+The Skill Router supports two embedding backends, selected with the
+`SKILL_ROUTER_EMBEDDING_PROVIDER` environment variable (default: `fnv1a`) or
+the `--provider` flag of `hooks/build-index.mjs`.
+
+| Provider | Dims | Dependency | Cached | Speed | Quality |
+|----------|------|------------|--------|-------|---------|
+| `fnv1a` (default) | 256 | none | n/a | 0.1 s for 60 skills (measured) | lexical only |
+| `onnx` (opt-in) | 384 | `@huggingface/transformers` | yes, 122 MB | 2.0 s for 60 skills with a warm cache (measured) | semantic + lexical |
+
+Measured on Windows 10 / Node 24, corpus of 60 skills (54 leaf + 6 routers),
+`hooks/build-index.mjs`. Cold-start timing (first download included) is not
+recorded here; Sub-Phase 6.10 measures it.
+
+## FNV-1a provider (default)
+
+Zero-dependency character n-gram hasher
+(`src/core/embeddings/engine.mjs`, wrapped by
+`src/core/embeddings/providers/fnv1a.mjs`). It produces deterministic 256-dim
+unit vectors from name/description/keywords text. Fast, offline, and byte-for-byte
+identical to the Phase 1 implementation, but purely lexical: it cannot tell that
+"add a login page" and "implement user authentication" are related.
+
+```
+node hooks/build-index.mjs --provider fnv1a     # default
+```
+
+Writes `data/skill-embeddings.json` (256-dim).
+
+## ONNX provider (opt-in)
+
+Uses the [Xenova/all-MiniLM-L6-v2](https://huggingface.co/Xenova/all-MiniLM-L6-v2)
+sentence-transformer through `@huggingface/transformers`, producing 384-dim
+mean-pooled, L2-normalised vectors.
+
+```
+node hooks/build-index.mjs --provider onnx
+```
+
+Writes `data/skill-embeddings-384.json` (384-dim).
+
+### Enabling
+
+1. The package must be installed (`@huggingface/transformers` is a runtime
+   dependency, so a plain `npm install` already provides it).
+2. The model is fetched on first use. `hooks/build-index.mjs` downloads it
+   automatically when it is not cached, or fetch it explicitly:
+
+   ```
+   node -e "import('./src/core/embeddings/providers/onnx.mjs').then(m => new m.OnnxProvider().downloadModel())"
+   ```
+
+### Model cache
+
+The library's default cache directory is inside the installed package, not the
+user profile: `node_modules/@huggingface/transformers/.cache/`. Measured on
+this machine after one download:
+
+| File | Size |
+|------|------|
+| `Xenova/all-MiniLM-L6-v2/onnx/model.onnx` | 90.4 MB |
+| `Xenova/all-MiniLM-L6-v2/tokenizer.json` | 0.7 MB |
+| `config.json` + `tokenizer_config.json` | < 1 KB |
+| Cache total | ~122 MB |
+
+`OnnxProvider.isAvailable()` reports `true` only when a `model.onnx` file is
+present in that cache tree. Delete the `.cache` directory to force a clean
+re-download.
+
+### Offline and cold-start behaviour
+
+- `isAvailable()` returns `false` until the model is cached.
+- `downloadModel()` triggers a real model load (the library builds its pipeline
+  lazily, so the method runs a one-word warm-up inference), and throws
+  `ProviderNotAvailableError` for **every** failure mode — offline network,
+  remote models disabled, corrupt cache entry — with a message naming the
+  model, the cause, and the fallback. No raw library error ever reaches the
+  caller.
+- `embed()` and `buildIndex()` throw `ProviderNotAvailableError` when the model
+  is not cached, so a cold provider can never silently return zero vectors.
+- `hooks/build-index.mjs --provider onnx` attempts the download *before* writing
+  any file; on failure it prints the reason and exits 1 with the previous index
+  untouched. It does not silently downgrade to FNV-1a.
+
+## When to use which
+
+- **FNV-1a** — the default. No disk, no network, no startup cost, and the
+  frozen BM25 baseline (92.31% Top-1) does not depend on it.
+- **ONNX** — when semantic similarity matters (ambiguous, multi-skill prompts
+  phrased in different words than the skill description) and ~713 MB of disk
+  (591 MB package + 122 MB model) is acceptable.
+
+The choice is benchmarked in Sub-Phase 6.10; the default stays `fnv1a` until
+that data says otherwise.
+
+## Dependency justification
+
+Required by the Phase 6 hard rules for every new runtime dependency.
+
+| Item | Value |
+|------|-------|
+| Package | `@huggingface/transformers` |
+| Version | 4.3.0 (latest stable) — declared as `^4.3.0` in `package.json` |
+| Install size | **591 MB** measured (`du -sm node_modules`): `@huggingface/transformers` 135 MB, `onnxruntime-node` 288 MB, `onnxruntime-web` 141 MB, plus `@huggingface/tokenizers`, `jinja`, `sharp`, `protobufjs` |
+| Model | `Xenova/all-MiniLM-L6-v2`, 90.4 MB `model.onnx` + 0.7 MB tokenizer, downloaded on first use into the library cache |
+| Why needed | The FNV-1a n-gram embeddings underperform BM25 on Set Recall. Real sentence embeddings capture semantic similarity, which multi-skill routing needs on prompts whose wording differs from the skill description. `@huggingface/transformers` is the maintained successor to `@xenova/transformers` and ships the ONNX runtime, so no separate runtime is required. |
+| Fallback | `Fnv1aProvider` remains the default and is always available. Set `SKILL_ROUTER_EMBEDDING_PROVIDER=fnv1a` (the default) to disable the model entirely; removing the dependency only costs the opt-in provider, because nothing else imports it. |
+| Offline impact | None while the default is `fnv1a`: the hook and index builder load the ONNX provider only when `--provider onnx` or `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` is set. |
+
+## API
+
+`createProvider(type, options)` in `src/core/embeddings/provider.mjs` returns a
+provider with a uniform interface:
+
+| Member | FNV-1a | ONNX |
+|--------|--------|------|
+| `name` | `'fnv1a'` | `'onnx'` |
+| `dimensions` | 256 | 384 |
+| `isAvailable()` | always `true` | `true` only when the model is cached |
+| `embed(text)` | `Float32Array` | `Promise<Float32Array>` |
+| `buildIndex(skills)` | `Map<string, Float32Array>` | `Promise<Map<string, Float32Array>>` |
+| `downloadModel()` | not present | `Promise<void>`, throws `ProviderNotAvailableError` on failure |
+
+Callers that use both providers must handle the async variants
+(`await` works for both a value and a promise).

@@ -8,28 +8,17 @@
  * The provider is opt-in: set SKILL_ROUTER_EMBEDDING_PROVIDER=onnx to
  * enable it. The default remains Fnv1aProvider for backward compatibility.
  */
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { resolve, join } from 'node:path';
-import { createRequire } from 'node:module';
 import { ProviderNotAvailableError } from '../errors.mjs';
+import { isModelCached, resolveCacheDir } from './onnx-cache.mjs';
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
 
 /**
- * Resolve the transformers library cache directory synchronously.
- *
- * @returns {string}
+ * Text used to force the lazy model load in `downloadModel()`.
+ * Never embedded; its only job is to make the library fetch the weights.
  */
-function resolveCacheDir() {
-  try {
-    const req = createRequire(import.meta.url);
-    const mod = req('@huggingface/transformers');
-    return mod.env.cacheDir || resolve('node_modules/@huggingface/transformers/.cache');
-  } catch {
-    return resolve('node_modules/@huggingface/transformers/.cache');
-  }
-}
+const WARMUP_TEXT = 'warmup';
 
 /**
  * ONNX embedding provider.
@@ -49,13 +38,18 @@ export class OnnxProvider {
   #loadPromise = null;
   /** @private {string} */
   #cacheDir;
+  /** @private {string|null} */
+  #cacheDirOverride = null;
 
   /**
    * @param {object} [options] — provider options
-   * @param {string} [options.cacheDir] — override the default cache directory
+   * @param {string} [options.cacheDir] — override the default cache directory.
+   *   Applied to the transformers library as `env.cacheDir` when the pipeline
+   *   is created, so the availability probe and the loader agree.
    */
   constructor(options = {}) {
     this.#cacheDir = options.cacheDir || resolveCacheDir();
+    this.#cacheDirOverride = options.cacheDir || null;
   }
 
   /** @returns {string} */
@@ -71,17 +65,13 @@ export class OnnxProvider {
   /**
    * Check whether the ONNX model is cached locally.
    *
-   * Looks for model.onnx inside the transformers cache directory.
+   * Looks for a `model.onnx` file anywhere under the transformers cache
+   * directory.
+   *
    * @returns {boolean}
    */
   isAvailable() {
-    if (!this.#cacheDir || !existsSync(this.#cacheDir)) return false;
-    try {
-      const entries = this.#findModelOnnx(this.#cacheDir);
-      return entries.length > 0;
-    } catch {
-      return false;
-    }
+    return isModelCached(this.#cacheDir);
   }
 
   /**
@@ -127,23 +117,25 @@ export class OnnxProvider {
   /**
    * Explicitly trigger model download.
    *
-   * Resolves when the model is loaded (cached or freshly downloaded).
-   * Rejects gracefully with a informative message when offline.
+   * The transformers library builds the pipeline lazily: creating it fetches
+   * nothing, and the model files are only requested on the first inference
+   * call. A one-sentence warm-up run is therefore what actually triggers the
+   * download; without it this method would resolve on a machine that has no
+   * network at all.
+   *
+   * Rejects with ProviderNotAvailableError for every failure mode — offline
+   * network, missing remote access, or a corrupt cache entry — so callers
+   * never see a raw library error.
    *
    * @returns {Promise<void>}
+   * @throws {ProviderNotAvailableError} when the model cannot be loaded
    */
   async downloadModel() {
     try {
       const pipeline = await this.#ensurePipeline();
-      void pipeline; // pipeline is cached in #pipeline
+      await pipeline(WARMUP_TEXT, { pooling: 'mean' });
     } catch (err) {
-      if (err.message.includes('fetch') || err.message.includes('network')) {
-        throw new ProviderNotAvailableError(
-          `ONNX model download failed: ${err.message}. ` +
-            'Ensure internet connectivity and retry.'
-        );
-      }
-      throw err;
+      throw this.#unavailable(err);
     }
   }
 
@@ -156,7 +148,7 @@ export class OnnxProvider {
    * @returns {Float32Array}
    */
   async #embedAsync(text) {
-    const pipeline = await this.#ensurePipeline();
+    const pipeline = await this.#loadPipeline();
     const result = await pipeline(text, { pooling: 'mean' });
     const cd = result.ort_tensor.cpuData;
     const vec = new Float32Array(EMBEDDING_DIM);
@@ -173,7 +165,7 @@ export class OnnxProvider {
    * @returns {Promise<Map<string, Float32Array>>}
    */
   async #buildIndexAsync(skills) {
-    const pipeline = await this.#ensurePipeline();
+    const pipeline = await this.#loadPipeline();
     const texts = skills.map(
       (s) => `${s.name} ${s.description} ${(s.keywords || []).join(' ')}`
     );
@@ -192,46 +184,65 @@ export class OnnxProvider {
   }
 
   /**
+   * Load the pipeline, converting any library error into a
+   * ProviderNotAvailableError with actionable guidance.
+   *
+   * @returns {Promise<object>}
+   * @throws {ProviderNotAvailableError}
+   */
+  async #loadPipeline() {
+    try {
+      return await this.#ensurePipeline();
+    } catch (err) {
+      throw this.#unavailable(err);
+    }
+  }
+
+  /**
+   * Wrap a library error into a ProviderNotAvailableError.
+   *
+   * The underlying library throws a variety of messages depending on the
+   * failure (fetch errors, `local_files_only` rejections, tokenizer
+   * problems). Callers only need to handle one error type.
+   *
+   * @param {unknown} err
+   * @returns {ProviderNotAvailableError}
+   */
+  #unavailable(err) {
+    return new ProviderNotAvailableError(
+      `ONNX model "${MODEL_ID}" could not be loaded: ${err?.message ?? err}. ` +
+        'The first load needs network access; if the model is already ' +
+        'cached this indicates a corrupt cache entry (delete the cache ' +
+        'directory under node_modules/@huggingface/transformers/.cache). ' +
+        'Set SKILL_ROUTER_EMBEDDING_PROVIDER=fnv1a to stay offline.'
+    );
+  }
+
+  /**
    * Ensure the transformers pipeline is loaded, caching the promise.
+   *
+   * An explicit `cacheDir` is pushed into the library environment before the
+   * pipeline is created; otherwise the library keeps its own default and the
+   * provider's availability probe would be looking in a different place from
+   * the loader.
    *
    * @returns {Promise<object>}
    */
   async #ensurePipeline() {
     if (this.#pipeline) return this.#pipeline;
     if (this.#loadPromise) return this.#loadPromise;
-    this.#loadPromise = import('@huggingface/transformers').then(
-      (mod) => mod.pipeline('feature-extraction', MODEL_ID)
-    );
+    this.#loadPromise = import('@huggingface/transformers').then((mod) => {
+      if (this.#cacheDirOverride) {
+        mod.env.cacheDir = this.#cacheDirOverride;
+      }
+      return mod.pipeline('feature-extraction', MODEL_ID);
+    });
     try {
       this.#pipeline = await this.#loadPromise;
     } finally {
       this.#loadPromise = null;
     }
     return this.#pipeline;
-  }
-
-  /**
-   * Recursively search for model.onnx files under a directory.
-   *
-   * @param {string} dir
-   * @returns {string[]}
-   */
-  #findModelOnnx(dir) {
-    const results = [];
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      try {
-        const isDirectory = existsSync(full) && statSync(full).isDirectory();
-        if (entry === 'model.onnx' && existsSync(full) && !isDirectory) {
-          results.push(full);
-        } else if (isDirectory && readdirSync(full).length > 0) {
-          results.push(...this.#findModelOnnx(full));
-        }
-      } catch {
-        // Skip entries that cannot be stat'd
-      }
-    }
-    return results;
   }
 
   /**

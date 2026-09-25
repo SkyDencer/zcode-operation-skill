@@ -115,6 +115,35 @@ function tagSkillsBySource(skills, sources) {
   });
 }
 
+// ─── Provider readiness ───────────────────────────────────────────────────────
+
+/**
+ * Return a ready ONNX provider, downloading the model on first use.
+ *
+ * Exits 1 with an actionable message when the model cannot be loaded
+ * (offline, remote models disabled, corrupt cache). The build is aborted
+ * before any file is written.
+ *
+ * @returns {Promise<object|null>} provider, or null after the failure exit
+ */
+async function ensureOnnxReady() {
+  const provider = createProvider('onnx');
+  if (provider.isAvailable()) return provider;
+
+  console.log('  ONNX model is not cached — attempting download on first use.');
+  try {
+    await provider.downloadModel();
+    return provider;
+  } catch (err) {
+    console.error(
+      `  Embedding build aborted: ${err.message}\n` +
+        '  No files were written. Re-run with --provider fnv1a to build the ' +
+        '256-dim index.'
+    );
+    process.exit(1);
+  }
+}
+
 // ─── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -157,12 +186,20 @@ async function main() {
   // Deduplicate by name: project source wins on collisions
   const deduplicated = resolveCollisions(tagged);
 
+  // Resolve the embedding provider before writing anything, so a provider
+  // that cannot be loaded (e.g. ONNX offline, model never cached) leaves the
+  // existing index untouched instead of half-rebuilding it.
+  let provider = null;
+  if (providerType === 'onnx') {
+    provider = await ensureOnnxReady();
+    if (!provider) return;
+  }
+
   // Build BM25 index (list of skill objects)
   await writeFile(INDEX_PATH, JSON.stringify(deduplicated, null, 2), 'utf-8');
 
   // Build and persist embedding index
-  if (providerType === 'onnx') {
-    const provider = createProvider('onnx');
+  if (provider) {
     const embeddingIndex = await provider.buildIndex(deduplicated);
     const embeddingsForJson = {};
     for (const [name, vec] of embeddingIndex) {
