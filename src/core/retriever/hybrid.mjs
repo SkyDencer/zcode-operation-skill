@@ -16,7 +16,9 @@
 import { rankSkills } from './bm25.mjs';
 import { rerank } from '../reranker/engine.mjs';
 import { createProvider } from '../embeddings/provider.mjs';
+import { getDefaults } from '../../config/defaults.mjs';
 
+const { rrf } = getDefaults();
 const DEFAULT_PROVIDER_TYPE = 'fnv1a';
 
 /**
@@ -32,13 +34,13 @@ const DEFAULT_PROVIDER_TYPE = 'fnv1a';
  * @param {Array<{name:string, description:string, keywords:string[], domains:string[], path:string, version:string}>} index
  * @param {object} [options]
  * @param {object} [options.provider] — embedding provider instance (default: Fnv1aProvider)
- * @param {number} [options.k=60] — RRF constant
+ * @param {number} [options.k] — RRF constant (default: getDefaults().rrf.k)
  * @param {boolean} [options.rerank=true] — apply reranking stage
  * @param {Map<string, Float32Array>} [options.embeddings] — pre-built embedding index (optional)
  * @returns {Array<{skill: object, score: number, bm25Score: number, embeddingScore: number}>}
  */
 export function hybridRetrieve(prompt, index, options = {}) {
-  const k = options.k ?? 60;
+  const k = options.k ?? rrf.k;
   const doRerank = options.rerank !== false;
   const topK = options.topK ?? 5;
 
