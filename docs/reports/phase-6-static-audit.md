@@ -1,414 +1,309 @@
-# Phase 6 — Static Audit Report (Sub-Phase 6.4)
+# Phase 6 — Static Code Audit Report (Sub-Phase 6.4)
 
-- **Date:** 2026-09-24
-- **Agent:** static-audit lead
-- **Scope:** `src/**` (82 modules), `hooks/**` (2), `bin/**` (1) — 85 `.mjs`
-  modules in total — plus the test harness files the DoD depends on
-  (`tests/run-benchmark.mjs`, `tests/integration/phase-2.mjs`).
-- **Method:** full read of every module listed in `find src hooks bin -type f`
-  (13,358 lines), plus deterministic probes executed in this session (commands and
-  output quoted inline). No finding below is inferred from memory.
+- **Date:** 2026-09-25 (report rewritten; first pass 2026-09-24)
+- **Scope:** `src/**` (82 modules), `hooks/**` (2), `bin/**` (1) plus the test
+  harness files the DoD depends on.
+- **Method:** three independent read-only passes (dead code / unused exports /
+  duplicates; conventions, hardcoded values, cross-platform; security and
+  silent failures) over the 82 `.mjs` modules in `src/`, plus `hooks/`, `bin/`,
+  `tests/`, `scripts/`, followed by a verification pass that re-read every file
+  cited here and re-ran every check quoted below. Entry points (`hooks/*`,
+  `bin/skill-router.mjs`, and the 13 modules with an `import.meta.url` +
+  `process.argv` self-execution guard) are excluded from "dead code".
 - **Rule applied:** Critical items fixed immediately with regression tests; High
-  items recorded in `docs/problems.md` with `P6-H` identifiers and left unfixed.
+  items recorded in `docs/problems.md` as `P6-H-0NN` and left unfixed.
+- **Prior work:** the first pass of this report and commit `30a7968` (security
+  remediation) are treated as prior work. Every claim below was re-verified
+  against the source at `30a7968`; two prior claims were corrected (Section 4).
 
 ---
 
-## 0. Verification runs executed in this session
+## 0. Verification runs executed for this report
 
-| Command | Result |
+| Command (run from the repo root) | Result |
 |---|---|
-| `node tests/run-benchmark.mjs` (package `test`/`benchmark` entry) | Top-1 **0.4385** (57/130) — runs in **hybrid** mode by default |
-| `node tests/run-benchmark.mjs --mode bm25` | Top-1 **0.9231** (120/130), Recall@3 0.8923, median 2 ms |
-| `node tests/two-mode-benchmark/runner.mjs` | 40/40 overall, implicit Top-1 25/25 |
-| full `package.json` `test` chain (45 commands, run one-by-one via `node <file>` per AGENTS.md) | **45/45 commands exit 0, 0 failing** after the fixes |
-| `node tests/retriever/field-weight-safety.test.mjs` (new) | 19/19 pass |
-| `node tests/cli/esm-require.test.mjs` (new) | 5/5 pass |
+| `node tests/security/path-traversal.test.mjs` | Passed 20, Failed 0 |
+| `node tests/security/cli-path-traversal.test.mjs` | Passed 10, Failed 0 |
+| `node tests/retriever/field-weight-safety.test.mjs` | Passed 19, Failed 0 |
+| `node tests/cli/esm-require.test.mjs` | Passed 5, Failed 0 |
+| `grep -rn "catch\s*{" src hooks bin --include="*.mjs"` | 39 modules; each one is listed in 3.7 |
+| `grep -rn "\.catch(" src hooks bin` / `grep -rn "{any}" src` | 3 `.catch(` hits, all with a real handler (no `.catch(() => {})`); 4 `{any}` hits, all in the two cache modules |
+| `diff <(sed -n '393,414p' src/cli/health.mjs) <(sed -n '402,423p' src/cli/verify.mjs)` | identical (DUP-4 check-table renderer) |
+| `awk '/function parseFrontmatter/,/^}/' … \| md5sum` (5 files) and `… loadSkillsSync …` (3 files) | 4 of 5 `parseFrontmatter` bodies identical (`src/loader.mjs` differs only in comments); the 3 `loadSkillsSync` bodies identical except one comment |
+| secret regex, `grep -rnE "[A-Za-z]:\\\\\|[A-Za-z]:/" src hooks bin`, `grep -rn "shell: *true" src hooks bin` | no matches; the only `execSync` is a fixed literal (`src/cli/health.mjs:311`) |
 
-`npm` was not used anywhere (AGENTS.md environment gotcha).
-
----
-
-## 1. Module inventory
-
-### 1.1 Counts
-
-`find src hooks bin -type f` → 86 files, of which 85 are `.mjs` (`src` 82,
-`hooks` 2, `bin` 1) and 1 is `hooks/hooks.json`; 13,358 `.mjs` lines at the
-pre-fix commit `ffb8424`, 13,395 after the C1/C2 fixes in this sub-phase.
-Largest modules: `src/deploy/writer.mjs` (502), `src/cli/verify.mjs` (466),
-`src/cli/health.mjs` (442), `src/cli/tune-core.mjs` (346), `src/quality/validator.mjs` (328),
-`src/analytics/analyzer.mjs` (324), `src/cli/feedback.mjs` (316), `hooks/route.mjs` (312).
-
-### 1.2 Entry points and their dispatch
-
-- `bin/skill-router.mjs:38-47` — dynamic `import(pathToFileURL(cliDir/<subcommand>.mjs))`,
-  requires an exported `main()`. Verified working for all 18 subcommands via the
-  `test:cli` / `test:e2e` chains above.
-- `hooks/route.mjs` (UserPromptSubmit), `hooks/build-index.mjs` (reindex),
-  `node src/tuning/optimizer.mjs`, `node src/quality/validator.mjs`,
-  `node src/import/scanner.mjs` all carry their own "am I the entry point?" guard.
-
-### 1.3 Public surface (`src/index.mjs`)
-
-Re-exports retrieval, reranker, embeddings, routing, telemetry, config, utils,
-cache and loader symbols (`src/index.mjs:8-46`). It does **not** re-export
-`selectRouter`, `detectExplicitSkill`, `routeHybrid`/`routeWithExplicit`, the
-budget manager, the query-expander, or any `src/cli/*` module — consumers must
-reach into internal paths for those (see Finding **DUP-1**).
+`npm` was not used (AGENTS.md environment gotcha). The full test suite was not
+run; the run script gates on it.
 
 ---
 
-## 2. Critical findings (fixed in this sub-phase)
+## 1. Summary by category
+
+| # | Category | Findings | Critical | High | Medium | Low |
+|---|----------|---------:|---------:|-----:|-------:|----:|
+| 1 | Dead code / unreachable modules | 5 | 0 | 2 | 2 | 1 |
+| 2 | Unused exports | 9 | 0 | 0 | 1 | 8 |
+| 3 | Duplicate logic | 8 | 0 | 1 | 3 | 4 |
+| 4 | Inconsistent conventions (errors, config) | 6 | 0 | 2 | 2 | 2 |
+| 5 | Hardcoded values | 10 | 0 | 0 | 1 | 9 |
+| 6 | Cross-platform issues | 5 | 0 | 2 | 0 | 3 |
+| 7 | Silent failures | 11 | 0 | 4 | 2 | 5 |
+| 8 | Type safety / JSDoc | 7 | 0 | 0 | 1 | 6 |
+| S | Security (separate track) | 5 | 2 | 1 | 0 | 2 |
+
+Critical total: 4 (C1–C4, all fixed in this phase, each with a regression test).
+High total: 19 open (`P6-H-001`–`P6-H-019` in `docs/problems.md`).
+
+---
+
+## 2. Critical findings — fixed in this phase
+
+All four were fixed in the 6.4 code steps (commit `30a7968` for C3/C4); the
+regression tests below were re-run in this session and pass.
 
 ### C1 — Fractional BM25 field weights crash retrieval (`RangeError`)
 
-**Severity:** Critical — total retrieval outage, reachable from the project's own
-tuning output and from any hand-edited `data/weights.json`.
+- **Where:** `src/core/retriever/bm25.mjs:20-49` (`buildWeightedDocTokens`),
+  `src/scorer.mjs:31-45` (`resolveFieldWeight`), used by
+  `src/core/routing/detector.mjs:43-53`.
+- **Description:** field weights were passed straight into `Array(n)` /
+  `String.repeat(n)`, so any fractional value from `data/weights.json` (which
+  `src/core/retriever/weights.mjs` produces and `src/cli/tune-core.mjs:245`
+  writes) threw `RangeError: Invalid array length`. The hook catches the error
+  and exits 0 without writing `output.json`, so routing silently stops.
+- **Fix:** weights are normalised to a positive integer before use.
+- **Regression test:** `node tests/retriever/field-weight-safety.test.mjs` → 19/19.
 
-**Code:** `src/core/retriever/bm25.mjs:41-44` (pre-fix) and
-`src/core/routing/detector.mjs:47-50` (pre-fix) built each document's token array as
+### C2 — `require()` inside ESM modules broke two CLI commands
 
-```js
-...Array(nameTokens.length * nameWeight)     // non-integer → RangeError
-...kwTokens.map((t) => t.repeat(keywordWeight > 1 ? keywordWeight : 1))
-```
+- **Where:** `src/cli/add.mjs:5-8`, `src/cli/doctor.mjs:15-19`,
+  `tests/run-benchmark.mjs:17`, `tests/integration/phase-2.mjs:14`.
+- **Description:** `require('node:fs')` is undefined in ESM; both calls were
+  wrapped in `catch { return [] / 'no' }`, so `add` rejected every valid skill
+  (empty domain registry) and `doctor` always reported the mirror non-writable.
+- **Fix:** static `node:` imports.
+- **Regression test:** `node tests/cli/esm-require.test.mjs` → 5/5 (scans every
+  `.mjs` in `src/ hooks/ bin/ tests/ scripts/` for `require(`).
 
-`Array(n)` requires an integer and `String.prototype.repeat` requires an integer
-count, so any fractional weight throws. Fractional weights are exactly what
-`src/core/retriever/weights.mjs:76-92` produces (delta math + sum-preserving
-normalisation, no rounding) and what `src/cli/tune-core.mjs:245` writes to
-`data/weights.json`. `src/config/defaults.mjs:45-60` accepts any JSON number.
+### C3 — Arbitrary file write via path traversal in the import/add path (security blocker)
 
-**Evidence (this session, before the fix):**
+- **Where:** `src/import/importer.mjs:87-98,207`, `src/cli/import.mjs:90-100,208`,
+  `src/cli/add.mjs:45,83`, guards in `src/utils/fs.mjs:74-95`.
+- **Description:** the destination directory was derived from the untrusted
+  SKILL.md frontmatter `name` via `name.split('-')` + `path.join`. A name like
+  `backend-../../../../pwned` passes `validateSkill()` (domain `backend` is
+  registered, name starts with `backend-`) and writes `SKILL.md` outside
+  `data/skills`. The previous `hasTraversal()` guard could never fire: it ran
+  on an already-`resolve()`d absolute skills directory (always false) and on
+  `candidate.sourcePath`, never on the name. The auditor's sandbox
+  reproduction returned `status: "imported"`, `score: 100` with `targetPath`
+  outside the skills directory.
+- **Fix:** `isSafeName()` rejects separators and `..`; `isWithinRoot()` checks
+  the resolved target on path segments; `resolveTargetDir()` returns `null` and
+  the candidate is rejected with `field: "path"`; `add` rejects the name before
+  validation and re-checks containment before writing.
+- **Regression tests:** `node tests/security/path-traversal.test.mjs` → 20/20
+  (importer + disabler); `node tests/security/cli-path-traversal.test.mjs` →
+  10/10 (CLI `add` + `import`). Both include legitimate-name cases proving the
+  guard is not over-broad. Recorded in `docs/problems.md` rows 9–10 (P6-C3, P6-C4).
 
-```
-$ printf '{"name":2.71,"description":2.71,"keywords":0.57}' > data/weights.json
-$ node --input-type=module -e "... rankSkills('eloquent relationship', idx) ..."
-THREW: RangeError: Invalid array length
-```
+### C4 — Path traversal in the disable/sync path (security blocker, same class)
 
-Impact path: the hook catches the error and exits 0 without writing
-`output.json` (`hooks/route.mjs:143-178` → `process.exit(0)`), so the plugin
-silently stops routing; `node tests/run-benchmark.mjs` dies with
-`Failed to load index: ...`.
-
-**Fix:** new `resolveFieldWeight()` in `src/scorer.mjs:31-45` normalises a weight
-to a positive integer (`max(1, round(w))`, non-numeric → 1), and the duplicated
-token-building code now lives once in `buildWeightedDocTokens()`
-(`src/core/retriever/bm25.mjs:20-49`) and is shared by `rankSkills()`
-(`src/core/retriever/bm25.mjs:55-62`) and `detectDomains()`
-(`src/core/routing/detector.mjs:43-53`).
-
-**Tests:** `tests/retriever/field-weight-safety.test.mjs` (19 assertions) —
-normalisation rules, hostile-weight token construction, and a child process whose
-`data/weights.json` is fractional asserting `rankSkills` + `detectDomains` still rank
-correctly. Added to `package.json` `test`.
-
-**Verification after fix:** the same fractional-weights probe prints
-`fractional weights OK, top: backend-eloquent n= 60` and
-`detectDomains top: database 0.71`.
-
----
-
-### C2 — `require()` inside ESM modules: two CLI commands silently wrong
-
-**Severity:** Critical — a shipped CLI command is 100 % broken, and a health
-command reports a false negative; both defects were hidden by `catch` blocks.
-
-**Code:**
-- `src/cli/add.mjs:96` (pre-fix) — `require('node:fs').readdirSync(...)` inside
-  `getRegisteredDomains()`, wrapped by `catch { return []; }` (`src/cli/add.mjs:97-99`).
-- `src/cli/doctor.mjs:61-62` (pre-fix) — `require('node:fs').writeFileSync/unlinkSync`
-  inside `isWritable()`, wrapped by `catch { return 'no'; }` (`src/cli/doctor.mjs:63-65`).
-- `tests/run-benchmark.mjs:161` and `tests/integration/phase-2.mjs:130` (pre-fix) —
-  `require('node:child_process')` in the synthetic-corpus generator path.
-
-`package.json:3` declares `"type": "module"` and every module is `.mjs`, so
-`require` is not defined. (Node 26 does expose a `require` binding in some
-non-entry contexts, which is why the first probe looked green; running the real
-entry point reproduces the failure — see below.)
-
-**Evidence (this session, before the fix):**
-
-```
-$ node bin/skill-router.mjs add tmp-audit/SKILL2.md          # a valid backend SKILL.md, score 100 when domains resolve
-Validation failed for backend-audit-probe:
-  • [domains] Unknown domain(s): backend
-  Score: 83/100
-EXIT=1
-skill NOT written
-
-$ node bin/skill-router.mjs doctor | grep -i writ
-  Writable                     no          # while a direct write to that same directory succeeded ("manual write OK")
-
-$ node tests/run-benchmark.mjs --corpus synthetic-500
-  Generating synthetic corpus (500 skills)...
-Failed to load index: require is not defined
-```
-
-**Fix:** static `node:fs` imports in `src/cli/add.mjs:5-8` and
-`src/cli/doctor.mjs:15-19`; static `node:child_process` imports in
-`tests/run-benchmark.mjs:17` and `tests/integration/phase-2.mjs:14`.
-
-**Tests:** `tests/cli/esm-require.test.mjs` (5 assertions) — a static scan asserting
-no `require(` call exists in any `.mjs` under `src/ hooks/ bin/ tests/ scripts/`,
-plus functional checks that `add --dry-run` scores a valid backend skill `100/100`
-and that `doctor` reports the mirror as writable. Added to `package.json`
-`test` and `test:cli`.
-
-**Verification after fix:**
-
-```
-$ node bin/skill-router.mjs add tmp-audit/SKILL2.md --dry-run
-[dry-run] Would add skill: backend-audit-probe (score: 100/100)
-EXIT=0
-$ node bin/skill-router.mjs doctor | grep -i writ
-  Writable                     yes
-$ node tests/run-benchmark.mjs --corpus synthetic-50      # generator path now reachable
-... (benchmark completes)
-```
+- **Where:** `src/sync/disabler.mjs:110,221`, `src/sync/writer.mjs:169,201,239`,
+  shared guard `src/utils/fs.mjs:74-79`.
+- **Description:** `entry.path` from `.skill-router-disabled.json` (populated
+  verbatim from `--disable <name>`, `src/cli/sync.mjs:40`) was joined onto the
+  mirror root with no containment check; shadow mode wrote `SKILL.md` and
+  `.skill-router-meta.json` outside the root and mirror mode `rmSync`-ed a
+  sibling directory. `src/sync/writer.mjs` used a string-prefix check that
+  accepted sibling directories such as `<root>/evil2` for `<root>/evil`.
+- **Fix:** `disableSkill()` / `enableSkill()` fail closed on out-of-root paths;
+  `applySync()` checks both source and mirror targets for add/update/remove
+  before any filesystem probe.
+- **Regression test:** `node tests/security/path-traversal.test.mjs` sections
+  4–6 → 20/20.
 
 ---
 
-## 3. High findings (recorded in `docs/problems.md`, not fixed here)
+## 3. Findings by category
 
-| ID | Finding | Evidence |
-|---|---|---|
-| **P6-H1** | **Route hook injects the entire 54-skill corpus into every prompt.** `hooks/route.mjs:152-165` calls `rankSkills(query, idx)` with no `topK` and no score floor; `rankSkills` returns *every* document sorted, including zero-score ones, so `decision.skills` is 54 entries and `readSkillContent` (`hooks/route.mjs:259`) reads all 54 files. Violates the documented shortlist contract (`docs/ai-context.md:502` "truncated to `topK` (default 5)" and `:521` "If zero results match, the hook returns an empty suggestion list") and burns 28 KB of context per prompt. | `echo '{"prompt":"zzzz qqqq wwww","cwd":"."}' \| node hooks/route.mjs` → `skillsInContext 54`, `ctxLen 28183`, `Confidence: 0`. Same for a normal prompt (`fix N+1 query in Laravel` → 54 skills). Not fixed: the E2E suite (`tests/e2e/hook-process.mjs:118-119`) explicitly asserts non-empty context for prompts that score **0.000**, so a threshold would flip an existing test — a product decision, not an audit-only fix. |
-| **P6-H2** | **Context budget can be exceeded by design.** `src/core/budget/manager.mjs:56-57` takes `max(quota, minPerSkill)`, so `minPerSkill × skillCount` may exceed `maxChars`. | Hook budget log: `{"event":"budget","totalSkills":54,"rawTotalChars":216000,"injectedChars":24972,"budgetMaxChars":24000}` — 972 chars over a 24,000 budget. `tests/budget/manager.test.mjs:117-122` asserts the overflow, so it is intentional in the tests but contradicts the module's own docstring (`manager.mjs:2-6`). |
-| **P6-H3** | **Raw prompts are persisted, contradicting the stated privacy invariant.** `hooks/route.mjs:191,200,213,270` pass `query: trimmedPrompt` to `logRetrieve`/`logRecord`; `src/telemetry/session-tracker.mjs:118` stores `prompt.slice(0, 60)` as `fingerprint` in `logs/session-*.json`. | After a hook run in a temp cwd: `grep -rl "quantum blockchain" .` → `logs/2026-09-24.jsonl`, `logs/session-20260924.json`; `"fingerprint": "implement a quantum blockchain ledger"`. `docs/ai-context.md:423,618` states "Never logs raw query text" / "Raw prompts are never stored or displayed". `session-tracker.mjs:194` also documents "first 20 chars" while the code slices 60. |
-| **P6-H4** | **The default benchmark mode contradicts the frozen baseline.** `tests/run-benchmark.mjs:38` defaults `--mode` to `hybrid`; `package.json:14` runs it with no mode. | `node tests/run-benchmark.mjs` → Top-1 **0.4385** (57/130). `node tests/run-benchmark.mjs --mode bm25` → Top-1 **0.9231** (120/130), matching `data/baseline.json`. `src/cli/tune-core.mjs:150` therefore passes `--mode bm25` explicitly. |
-| **P6-H5** | **Deploy snapshot/rollback is broken on Windows path separators.** `src/deploy/writer.mjs:127` stores `join(entry.name, 'SKILL.md')` (backslashes), while `rollbackMirror` matches `f.path.startsWith(entry.name + '/')` (`writer.mjs:154`) and `restoreFromSnapshot` does `file.path.split('/')` (`writer.mjs:347`). On Windows the match never succeeds and the split never separates, so `deploy` rollback deletes newly created router directories and `--restore` cannot rebuild them. | Static evidence only — the destructive path needs a live deploy error to trigger; no deploy was executed in this audit. |
-| **P6-H6** | **`feedback --outcomes` attribution is structurally dead.** `src/cli/feedback.mjs:110-112` requires `decision.prompt`, but decision logs only persist `promptHash` (`src/telemetry/feedback.mjs:61`), so every attribution is `null` and no weight recommendation is ever produced. | `node bin/skill-router.mjs feedback --outcomes --json` → `{"positive":0,"negative":0,"unknown":300,"total":300,"negatives":[]}` with no `attributions` key. |
-| **P6-H7** | **Documented `SKILL_ROUTER_BM25_*` env overrides never reach the scorer.** `src/core/retriever/bm25.mjs:7,55`, `src/core/routing/detector.mjs:19`, `src/core/retriever/attribution.mjs:9,11`, `src/core/retriever/hybrid.mjs:13,15` and `src/core/routing/hybrid.mjs:25,28` read `getDefaults()`, not `getConfig()`; only `src/core/routing/hierarchical.mjs:16-20` uses `getConfig()`, and its destructured `k1/b/nameWeight/...` are never used. | `SKILL_ROUTER_BM25_NAME_WEIGHT=1` vs `=10` produce byte-identical top-5 (`design-color-theory:1.000 | design-accessibility:0.807 | ...`) while `getConfig().bm25.nameWeight` reports 10. `docs/ai-context.md:588-592` documents these variables. |
-| **P6-H8** | **cwd-relative data paths, inconsistent with the Phase 3.5 fix.** `hooks/route.mjs:26-27` resolves the index from `import.meta.url`, but `src/core/telemetry/logger.mjs:9`, `src/telemetry/{feedback,signals,session-tracker}.mjs:10/15/19`, `src/analytics/{reader,analyzer}.mjs:10,19-20`, `src/config/defaults.mjs:25,46`, `src/core/routing/domain-registry.mjs:14`, `hooks/build-index.mjs:27-28`, `src/cli/reindex.mjs:15-16` all use `resolve('logs'|'data/…')`. Running the hook from a foreign cwd writes telemetry into the user's project and makes `data/weights.json` / `data/thresholds.json` invisible (silent fallback to hardcoded 3/2/1). | Hook run from `/tmp/ht3` created `/tmp/ht3/logs/{2026-09-24.jsonl,routing-20260924.jsonl,session-20260924.json,signals-20260924.jsonl}`. |
-| **P6-H9** | **Generated index stores absolute personal paths.** `data/skill-index.json` entries carry absolute user-local paths to `SKILL.md` files. The file is git-ignored (`.gitignore:10`), but the artifact is non-portable and `readSkillContent` (`src/core/retriever/bm25.mjs:105-115`) silently skips any file it can no longer resolve. | `node -e "...console.log(JSON.parse(fs.readFileSync('data/skill-index.json'))[0].path)"` → `%USERPROFILE%\\\\Desktop\\\\projects\\\\zcode-operation-skill\\\\data\\\\skills\\\\backend\\\\laravel\\\\api-resources\\\\SKILL.md`; `git check-ignore -v data/skill-index.json` → `.gitignore:10`. |
-| **P6-H10** | **Symlink-containment checks are dead code in three modules.** `src/sync/planner.mjs:84-90`, `src/import/scanner.mjs:105-108` and `src/cli/import.mjs:33-34` use `stat()` (which follows symlinks) and then test `isSymbolicLink()`, which is always `false`; `src/cli/import.mjs:34` additionally resolves the link *target's file contents* as a path. The documented guarantee (`docs/ai-context.md:330-331`) is therefore not actually enforced. | Static evidence (`fs.stat` follows links; `fs.lstat` does not). Runtime reproduction was not possible on this host — `fs.symlinkSync` returns `EPERM` here — so no runtime claim is made. |
-| **P6-H11** | **`mergeWithEnv` can corrupt scalar config into arrays.** `src/config/defaults.mjs:141-152` assigns a parsed array whenever the env value contains a comma, so `SKILL_ROUTER_BM25_K1=1,2` yields `cfg.bm25.k1 = [1,2]`; `src/config/env.mjs:66` repeats the same behaviour inside the schema-validated path. The "list parameters" convention is applied to scalar fields. | `SKILL_ROUTER_BM25_K1=1,2 node -e "...getConfig().bm25.k1"` → `bm25.k1 = [1,2] typeof object`. |
-| **P6-H12** | **`RoutePlan.mode` violates its own contract.** `hooks/route.mjs:286` writes `decision.mode ?? tier`, producing `"bm25"`, `"none"` or `"explicit"`; `docs/ai-context.md:542` declares the union `"flat" | "hierarchical" | "single" | "multi" | "fallback"`. | Hook output for an implicit prompt: `RoutePlan.mode === "bm25"`. |
-| **P6-H13** | **The query cache can never hit in production.** `hooks/route.mjs:141` constructs a fresh `QueryCache` per hook invocation, and each invocation is a new process; the "cache" telemetry event (`hooks/route.mjs:197-208`) is therefore always 0 hits. | `node tests/run-benchmark.mjs --mode bm25` (single process) reports `Cache Hits: 1 / Cache Misses: 129`; hook runs spawn one process each. |
+Severity key: **C** Critical (fixed), **H** High (`docs/problems.md`),
+**M** Medium, **L** Low.
+
+### 3.1 Dead code / unreachable modules
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| DEAD-1 | `src/logger.mjs:1-25` | Fully orphaned legacy logger (`logs/routing.jsonl`, old schema). Zero importers; the only other reference is the string `'src/logger.mjs'` in the file-existence list at `src/cli/health.mjs:114`. Also the only module in `src/` with no JSDoc file header. | H | Delete the module and drop the entry from the `src/cli/health.mjs:110-118` list. |
+| DEAD-2 | `src/retriever.mjs:1-71` | Legacy duplicate of `src/core/retriever/bm25.mjs:62,110`; kept alive only by `src/analytics/analyzer.mjs:18`, which therefore computes `top10Skills` with hardcoded 3/2/1 field weights while the hook uses the configured weights from `data/weights.json`. | H | Repoint the analyzer at `src/core/retriever/bm25.mjs` and delete this file. |
+| DEAD-3 | `src/import/scanner.mjs:133`, `src/import/importer.mjs:165`, `src/import/reporter.mjs:32` | The whole tested import subsystem is test-only; `src/cli/import.mjs:59` re-implements the scan/validate/write pipeline inline. The two copies have already diverged on symlink handling. | M | Make `src/cli/import.mjs` call the tested modules and delete the inline copies. |
+| DEAD-4 | `src/core/routing/hierarchical.mjs:45`, `src/routing/selector.mjs:25` | Neither is reachable from `hooks/route.mjs` or any CLI (verified: no importer under `src/`, `hooks/`, `bin/`). `docs/ai-context.md:208-216,257-264` still documents the hook as choosing between them. | M | Wire behind the documented `--experimental` flag or delete; correct the doc either way. |
+| DEAD-5 | `src/core/slm/index.mjs:9-12` | Barrel with no production importer (`src/core/routing/hybrid.mjs:22-24` imports the concrete modules); only `tests/slm/client.test.mjs:13` uses it. | L | Delete and point the test at the concrete modules. |
+
+### 3.2 Unused exports
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| UNUSED-1 | `src/utils/fs.mjs:16,27,39,58` | `readFileJson`, `writeFileJson`, `walkDir`, `resolvePath` have zero consumers; the file is kept alive only by the re-export at `src/index.mjs:39`. | L | Delete the four functions and the re-export line. |
+| UNUSED-2 | `src/telemetry/signals.mjs:26` | `hashText` exported, never called anywhere. | L | De-export. |
+| UNUSED-3 | `src/core/telemetry/metrics.mjs:40,59`, `src/core/telemetry/reporter.mjs:13,35` | `getSnapshot`, `resetMetrics`, `reportMetrics`, `reportBenchmark` are re-exported at `src/index.mjs:30-31` but never called; `src/cli/stats.mjs` recomputes inline. | L | Wire `stats`/`doctor` to them or de-export. |
+| UNUSED-4 | `src/sync/state.mjs:67`, `src/analytics/analyzer.mjs:39,55,77,322`, `src/cli/tune-core.mjs:148,178` | `writeSyncState`, `loadIndex`, `getDocs`, `resolveTopSkills`, `runBenchmark`, `logTuningDecision` are only called inside their own module; `loadIndexFromPath` (`analyzer.mjs:322`) is a one-line wrapper around `loadIndex`. | L | Remove `export` and delete the wrapper. |
+| UNUSED-5 | `src/config/env.mjs:76`, `src/core/slm/client.mjs:183` | `mergeEnvOverrides` is re-exported at `src/index.mjs:35` and only called by its own top-level `const _config = …` (`:114`); `export { SlmClient as default }` has no default-import consumer. | L | De-export both. |
+| UNUSED-6 | `src/core/retrieval/synonyms.mjs:22` | `buildSynonymMap` has no production consumer; `hooks/route.mjs:153` never passes a `synonymMap`, although `docs/ai-context.md:308-314` documents the map as usable by `expandQuery()`. | M | Expose through a documented flag or delete module and test. |
+| UNUSED-7 | `src/cli/list.mjs:9`, `src/cli/stats.mjs:8` | Both import async `loadSkills` from `src/loader.mjs` but call their private `loadSkillsSync`. | L | Remove the dead imports. |
+| UNUSED-8 | `src/core/budget/truncator.mjs:57`, `src/tuning/optimizer.mjs:37`, `src/core/cache/query-cache.mjs:20,209` | `charCount`, `evaluate`, `sha256hex`, `_origGetOrSet` have no referencing import. | L | De-export or delete. |
+| UNUSED-9 | `src/index.mjs:8-46` | The public barrel omits `selectRouter`, `detectExplicitSkill`, `routeHybrid`, `routeWithExplicit`, `fitWithinBudget`, `expandQuery`, `buildSynonymMap`, `attributeOutcome`, `computeWeights`; every consumer reaches into internal paths. | L | Extend the barrel or document it as internal-only. |
+
+### 3.3 Duplicate logic
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| DUP-1 | `src/loader.mjs:17`, `src/quality/validator.mjs:59`, `src/cli/list.mjs:131`, `src/cli/sources.mjs:150`, `src/cli/stats.mjs:138` | `parseFrontmatter` implemented five times; four bodies are byte-identical (verified by md5), `src/quality/validator.mjs:53` even comments that it "mirrors" the loader. | M | Keep one implementation in `src/loader.mjs`; import it in the other four. |
+| DUP-2 | `src/cli/list.mjs:96`, `src/cli/stats.mjs:103`, `src/cli/sources.mjs:116` | Three synchronous `loadSkillsSync` copies (identical except one comment), plus a fourth async implementation in `src/loader.mjs:90`. | M | Export one `loadSkillsSync` from the loader. |
+| DUP-3 | `src/cli/import.mjs:190-236` vs `src/import/importer.mjs:191-239` | The CLI import command re-implements validate → collision → mkdir/write → status verbatim. The symlink paths have diverged: `src/cli/import.mjs:33-38` reads a link target's file contents as a path, `src/import/scanner.mjs:105-108` uses `realpath`. | M | Call the tested modules from the CLI. |
+| DUP-4 | `src/cli/health.mjs:393-414` vs `src/cli/verify.mjs:402-423` | Check-table renderer (header, separator, PASS/FAIL/WARN colouring, summary) is byte-identical (verified with `diff`). | L | Extract `renderCheckTable(results)`. |
+| DUP-5 | `src/cli/add.mjs:107`, `src/import/importer.mjs:106`, `src/quality/validator.mjs:120` | `getRegisteredDomains` copy-pasted three times. | L | Export once from a domain-registry module. |
+| DUP-6 | `src/deploy/planner.mjs:47`, `src/deploy/verifier.mjs:57`, `src/sync/planner.mjs:48`, `src/sync/writer.mjs:77` | `hashContent` in four modules. | L | One shared helper. |
+| DUP-7 | `src/deploy/{planner,verifier,writer}.mjs`, `src/sync/{writer,disabler}.mjs` | `readMeta` in five modules (the `sync/` copies return `null` on malformed JSON, which `src/sync/writer.mjs` then treats as "user-managed, never touch") and the `META_FILENAME` constant in the same five files. | L | One shared reader with a documented error contract, and one shared constant. |
+| DUP-8 | `src/retriever.mjs:14,59` vs `src/core/retriever/bm25.mjs:62,110` | `rankSkills` / `readSkillContent` duplicated; the legacy copy is the one the analytics CLI uses (see DEAD-2). | H | Delete the legacy copy. |
+
+### 3.4 Inconsistent conventions (errors, config)
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| CONF-1 | `src/core/retriever/bm25.mjs:14,64`, `src/core/routing/detector.mjs:21,47`, `src/core/retriever/attribution.mjs:12`, `src/core/retriever/hybrid.mjs:16`, `src/core/routing/hybrid.mjs:29` vs `src/core/routing/hierarchical.mjs:19`, `src/core/routing/planner.mjs:16` | Two config sources: `getDefaults()` (no env) in the scoring/routing core, `getConfig()` (env-merged) in two routing modules whose destructured weights are never used. Documented `SKILL_ROUTER_BM25_*` overrides therefore never reach the scorer. | H | Make `getConfig()` authoritative everywhere. |
+| CONF-2 | `src/core/routing/hybrid.mjs:29` | This module uses `getDefaults()`, so `SKILL_ROUTER_SLM_ENABLED` and every SLM env override never reach `_slmCfg`; the flag documented in `docs/ai-context.md:248` is inert on this path. | H | Switch to `getConfig()`. |
+| CONF-3 | `src/deploy/planner.mjs:89`, `src/deploy/verifier.mjs:85`, `src/deploy/writer.mjs:397`, `src/sync/planner.mjs:161`; CLIs at `src/cli/deploy.mjs:24`, `src/cli/sync.mjs:21`, `src/cli/verify.mjs:90,121,149`, `src/cli/doctor.mjs:86`, `src/cli/sources.mjs:42` | `process.env.SKILL_ROUTER_ZCODE_DIR` is read directly in nine places and is absent from the `env.mjs` schema (`:16-34`), bypassing the validated override path. | M | Add a config accessor and use it in all sites. |
+| CONF-4 | `src/core/cache/lru.mjs:23`, `src/core/cache/query-cache.mjs:67`, `src/import/importer.mjs:173`, `src/import/scanner.mjs:141,144` vs `src/core/slm/errors.mjs:7-39` | Plain `Error` everywhere except the SLM subsystem, which defines `SlmError` / `SlmTimeoutError` / `SlmUnavailableError`. Callers cannot distinguish failure classes. | L | Introduce a shared domain-error base. |
+| CONF-5 | `src/config/defaults.mjs:136-180` vs `src/config/env.mjs:76-110` | Two overlapping env parsers; `mergeEnvOverrides` calls `mergeWithEnv` and then re-applies the same overrides with range checks. | M | Collapse into one validated path. |
+| CONF-6 | `src/cli/health.mjs:433-440` (0/1/2) vs `src/cli/verify.mjs:464` (0/1) and every other CLI (0/1) | Inconsistent exit-code contract. | L | Document or unify. |
+
+### 3.5 Hardcoded values
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| HC-1 | `src/core/routing/hybrid.mjs:38-41` and `src/core/slm/client.mjs:21-27` | `http://127.0.0.1:8080`, `qwen2.5` and `2000` are hardcoded in both modules even though `src/config/defaults.mjs:116-122` already defines them. A defaults change would not propagate. | M | Read from config; keep one source of truth. |
+| HC-2 | `src/core/routing/hybrid.mjs:77-81` | `20`, `7`, `0.35`, `0.5`, `2000` restated as inline fallbacks already present in `config.slm`. | L | Drop the fallbacks. |
+| HC-3 | `src/cli/health.mjs:286-300` | Port `8080` and the `2000` ms socket timeout hardcoded for the SLM probe, including the message text. | L | Derive from `config.slm.endpoint` / `slmTimeoutMs`. |
+| HC-4 | `src/core/routing/detector.mjs:67,119`, `src/core/routing/domain-registry.mjs:191` | Scoring weights (`0.5/0.3/0.2`, `0.4/0.6`) and the `0.3` score threshold are not configurable. | L | Move to config. |
+| HC-5 | `src/core/retrieval/expander.mjs:12,18,24`, `src/core/reranker/engine.mjs:13` | `EXPAND_WEIGHT 0.5`, `MIN_IDF_THRESHOLD 0.8`, `MAX_EXPANDED_TOKENS 3`, `BLEND 0.01`. | L | Move to config with env overrides. |
+| HC-6 | `src/core/retriever/weights.mjs:15-18`, `src/cli/tune-guard.mjs:17-18,59,70` | Adaptation constants `20 / 0.05 / 0.5 / 5.0` and a hardcoded baseline fallback `0.9231`. | L | Read from config / `data/baseline.json`. |
+| HC-7 | `src/tuning/optimizer.mjs:18,23,122-123`, `src/tuning/report.mjs:25-26,118-119` | Grid `0.70–0.95 / 0.40–0.75 step 0.05` and the `0.85 / 0.60` defaults re-hardcoded instead of reading `config.confidence`. | L | Read from the config module. |
+| HC-8 | `src/cli/import.mjs:14`, `src/import/importer.mjs:60`, `src/import/scanner.mjs:36`, `src/sync/planner.mjs:62`; `src/core/retriever/hybrid.mjs:39`, `src/core/reranker/engine.mjs:33`, `src/core/routing/hierarchical.mjs:46`, `src/core/routing/planner.mjs:45` | `MAX_DEPTH = 10` declared four times and `options.topK ?? 5` in four retrievers; config has no `topK` key. | L | One shared constant each. |
+| HC-9 | `src/core/telemetry/metrics.mjs:30`, `src/cli/feedback.mjs:43,62` | Capacity `1000` samples and `300` records hardcoded. | L | Config with env override. |
+| HC-10 | `src/cli/health.mjs:311` | `execSync('git status --porcelain', …)` — fixed literal, no interpolation, so safe; recorded so the single `execSync` in the codebase is documented. | L | None (no change needed). |
+
+### 3.6 Cross-platform issues
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| XP-1 | `src/deploy/writer.mjs:128,155,347` | Snapshot paths are stored with `path.join` (backslashes on Windows) but matched with `f.path.startsWith(entry.name + '/')` and split with `file.path.split('/')`. On Windows the match never succeeds and the split never separates, so automatic rollback deletes newly created router directories and `--restore` cannot rebuild them. | H | Normalise snapshot paths to POSIX form before writing. |
+| XP-2 | `src/core/telemetry/logger.mjs:9`, `src/telemetry/feedback.mjs:10`, `src/telemetry/signals.mjs:15`, `src/telemetry/session-tracker.mjs:19`, `src/analytics/reader.mjs:10`, `src/analytics/analyzer.mjs:19-20`, `src/config/defaults.mjs:25,46`, `src/core/routing/domain-registry.mjs:14`, `hooks/build-index.mjs:27-28`, `src/cli/reindex.mjs:15-16` | `resolve('logs' | 'data/…')` is cwd-relative while `hooks/route.mjs:26-27` resolves the index from `import.meta.url`; running the hook from a foreign cwd writes telemetry into that cwd and hides `data/weights.json` / `data/thresholds.json`. | H | Resolve all data paths from the plugin root. |
+| XP-3 | `src/cli/reindex.mjs:66`, `src/cli/sources.mjs:24`, `hooks/build-index.mjs:93`, `src/cli/import.mjs:39-42,111`, `src/import/importer.mjs:70,182` | One-character separator probe (`skill.path[src.path.length] === '\\'`) and hand-rolled backslash→slash normalisation plus `/[\\/]/` splitting instead of `path.relative` / `path.resolve`. | L | Use `node:path` helpers. |
+| XP-4 | `src/cli/health.mjs:161` | `argsStr.includes('hooks/route.mjs')` cannot match a Windows-registered path; only the `'route.mjs'` fallback saves the check. | L | Normalise args before matching. |
+| XP-5 | `src/sync/planner.mjs:130` | `dirname()` is called on a forward-slash-normalised relative path; correct on win32 but mixes two conventions in one expression. | L | Use one convention. |
+
+### 3.7 Silent failures
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| SIL-1 | `src/deploy/writer.mjs:110-143` (`catch {}` at `:139`), rollback at `:146-176` | The whole mirror scan inside `snapshotMirror()` is swallowed. A partial/empty `files` array is written unconditionally, `applyDeploy()` reports success, and rollback then deletes every mirror directory not in that empty snapshot. | H | Distinguish "mirror missing" from "read failed"; abort the deploy on a partial snapshot. |
+| SIL-2 | `src/sync/planner.mjs:66-71,138-140`, consumer `src/sync/writer.mjs:239-263` | A `readdir` error in `walkSkillFiles` returns silently, producing an empty project index; every mirror skill is then classified `remove` and `rmSync`-ed. | H | Fail the plan when either tree cannot be indexed. |
+| SIL-3 | `src/telemetry/outcomes.mjs:132-155` (`:152-154`) | The readdir/read loop is wrapped in one `catch { // Directory doesn't exist }` that also swallows permission errors and mid-loop read failures. Zero signals makes `correlate()` classify every decision `positive` (`:87-90`) — the exact failure mode Sub-Phase 6.1 addressed. | H | Branch on `err.code === 'ENOENT'`; surface other errors. |
+| SIL-4 | `src/config/defaults.mjs:23-35,45-61` | A malformed `data/thresholds.json` or `data/weights.json` is indistinguishable from a missing file, so BM25 weights silently revert to 3/2/1. `data/weights.json` is written by the tune CLI, so a failed write is invisible to retrieval. | M | Log a warning on parse failure. |
+| SIL-5 | `src/cli/tune-core.mjs:63,78,181-182,241` | The tuning audit trail (`logs/tuning/decisions.jsonl`) and the post-failure snapshot cleanup swallow every error; a permission error is reported as "No snapshots found". | M | Report the failure on stderr. |
+| SIL-6 | `src/core/routing/domain-registry.mjs:48-54,130-133` | Dead code hidden behind an empty catch: `readFileSync(DOMAINS_DIR, …)` reads a directory and always throws; the real work is the `readdirSync` below. The second catch silently discards a malformed `meta.json` and overwrites it with corpus-derived text. | L | Delete the dead `try`; warn on malformed meta. |
+| SIL-7 | `src/deploy/writer.mjs:274,305,422,428-429`, `src/sync/writer.mjs:95-99`, `src/import/scanner.mjs:82-87,104-110`, `src/analytics/reader.mjs:55-61` | Corrupt snapshots are never pruned and the secondary snapshot copy is best-effort (a deploy can report success with no rollback point); `readMeta()` returns `null` on malformed JSON, identical to "user-managed, never touch"; readdir/stat errors are skipped, so a permission problem presents as "fewer skills found" or "zero requests". | L | Log and surface; branch on `err.code`; count skipped paths. |
+| SIL-8 | `src/core/retriever/bm25.mjs:109-120`, `src/core/embeddings/engine.mjs:139-160`, `src/core/routing/hybrid.mjs:122-141`, `src/core/slm/parser.mjs:39,72,78`, `src/analytics/analyzer.mjs:39-46`, `src/cli/feedback.mjs:105-124` | Silent degradations with no telemetry: unreadable skills dropped from injected context, embedding index silently built from name+description only, SLM failures silently degraded to BM25, malformed SLM JSON indistinguishable from "model chose nothing", broken index yields an all-zero analytics report, and `feedback --outcomes` drops attribution silently. | L | Record a degradation counter per path. |
+| SIL-9 | `src/core/telemetry/logger.mjs:31-33`, `src/telemetry/feedback.mjs:66-68`, `src/cli/add.mjs:113`, `src/cli/doctor.mjs:48,63,111,135,155,178`, `src/cli/tune-guard.mjs:37`, `src/core/slm/client.mjs:50,95` | Remaining best-effort catches: telemetry writes intentionally fail open (required by the hook contract) and the CLI/SLM probes already degrade safely, but nothing records that telemetry is being dropped. | L | Optional stderr counter under a debug flag. |
+| SIL-10 | `src/cli/benchmark.mjs:22`, `hooks/build-index.mjs:172`, `hooks/route.mjs:309` | Every `.catch(` in the codebase installs a real handler. **No `.catch(() => {})` occurrences exist** (verified by the grep quoted in Section 0). | L | None. |
+| SIL-11 | `src/import/scanner.mjs:105-108`, `src/sync/planner.mjs:81-100`, `src/cli/import.mjs:33-38` | Symlink containment checks use `stat()` (which follows symlinks) and then test `isSymbolicLink()`, which is always false. Runtime reproduction was not possible on this host (`symlinkSync` → EPERM), so this is a static finding. Recorded as `P6-H-010`. | H | Use `lstat()` + `realpath()`. |
+
+### 3.8 Type safety / JSDoc
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| TS-1 | `src/core/cache/lru.mjs:25,35,51`, `src/core/cache/query-cache.mjs:54,123` | The cache boundary for every route plan is typed `Map<string, any>` / `@param {any} value` / `@returns {any}` (the only `{any}` hits in `src/`). | L | Introduce a `RoutePlan` typedef. |
+| TS-2 | `src/cli/{feedback,doctor,health,import,tune,verify}.mjs` and `src/config/env.mjs:115` | Exported `main(argv)` entry points and `getConfig()` have no JSDoc, so their argv contract and the config return shape are undocumented at the definition site. | M | Add `@param {string[]} argv` / `@returns {Promise<number>}` and the config shape. |
+| TS-3 | `src/logger.mjs:1-3` | The only module in `src/` without a JSDoc file header, and it duplicates `logDecision` from `src/core/telemetry/logger.mjs` with a different output file — a real source of confusion. | L | Delete the module (DEAD-1). |
+| TS-4 | `src/core/retriever/hybrid.mjs:31,37,110` | JSDoc documents `options.rerank=true` as default-on while the code reranks only for an explicit `=== true`, and `doRerank` is dead. | L | Align doc and code. |
+| TS-5 | `src/core/retriever/weights.mjs:23`, `src/analytics/reader.mjs:15`, `src/core/telemetry/reporter.mjs:9,31` | JSDoc references `import('./attribution.mjs').Attribution` and `LogEntry` shapes that are never exported or defined. | L | Export the typedefs or inline the shapes. |
+| TS-6 | `src/tuning/report.mjs:23-25`, `src/tuning/optimizer.mjs:100,194` | Entry-point detection uses `import.meta.url.split('/').slice(3).join('/')`, which does not survive Windows drive-letter paths; the rest of the codebase uses the `endsWith(argv[1].replace(/\\/g,'/'))` pattern. | L | Use the established pattern. |
+| TS-7 | `src/quality/validator.mjs:233` | Non-English comment (`满分 = 6 checks passed`) in an English-only codebase. | L | Translate. |
+
+### 3.9 Security track (separate from the eight categories)
+
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| SEC-1 | `src/import/importer.mjs`, `src/cli/import.mjs`, `src/cli/add.mjs` | Arbitrary file write via frontmatter-name path traversal. | C | **Fixed in this phase** — see C3 and its two regression tests. |
+| SEC-2 | `src/sync/disabler.mjs:110,167,221`, reachable from `src/cli/sync.mjs:40` | Arbitrary write/delete outside the mirror root via `--disable` names. | C | **Fixed in this phase** — see C4. |
+| SEC-3 | `src/import/scanner.mjs:105-108`, `src/sync/planner.mjs:81-100`, `src/cli/import.mjs:33-38` | Symlink-containment checks are dead code (SIL-11). | H | `P6-H-010`. |
+| SEC-4 | `src/cli/remove.mjs:38` | `rmSync(skillDir, { recursive: true, force: true })` has no containment assertion at delete time; it is safe only because `findSkillDir` walks under `SKILLS_DIR`. | L | Add an `isWithinRoot()` check before the delete, as in `src/sync/writer.mjs:82`. |
+| SEC-5 | `src/`, `hooks/`, `bin/` | No hardcoded secrets, tokens or absolute personal paths; no command injection (every child process is `spawn(process.execPath, [args…])` with no shell, and the single `execSync` uses a fixed literal); SSRF limited to the operator-configured SLM endpoint (loopback by default), with no response-size limit. | L | Note only. |
 
 ---
 
-## 4. Inventory by requested category
+### 3.10 Carry-over High findings from the first pass (re-verified)
 
-### 4.1 Imports and exports
+| ID | Where | Description | Sev | Suggested action |
+|---|---|---|---|---|
+| P6-H-001 | `hooks/route.mjs:153` | The hook calls `rankSkills(query, idx)` with no `topK` and no score floor, so all 54 entries (including zero-score ones) are written to `additionalContext`, violating `docs/ai-context.md:502,521`. `tests/e2e/hook-process.mjs:122-123,157-158` asserts non-empty context for zero-scoring prompts, so a threshold would flip an existing test. | H | Decide the shortlist policy and update the E2E expectations in the same change. |
+| P6-H-002 | `src/core/budget/manager.mjs:56-57` | `max(quota, minPerSkill)` lets `minPerSkill × count` exceed `maxChars`; `tests/budget/manager.test.mjs:117-122` asserts the overflow, contradicting the module docstring. | H | Cap the total or drop the floor. |
+| P6-H-003 | `hooks/route.mjs:192,202,214,271`, `src/telemetry/session-tracker.mjs:118` | Raw prompts are logged and a 60-char prefix is persisted in session state, contradicting the privacy invariant in `docs/ai-context.md:423,618`. | H | Hash or drop the query field. |
+| P6-H-004 | `tests/run-benchmark.mjs:38`, `package.json:14` | The benchmark defaults to `hybrid`, so the unqualified command reports 0.4385 while `data/baseline.json` records the BM25 figure 0.9231. | H | Default to `--mode bm25`. |
+| P6-H-006 | `src/cli/feedback.mjs:110-112`, `src/telemetry/feedback.mjs:61` | Attribution needs `decision.prompt`, but decision logs persist only `promptHash`, so `--json` never emits `attributions`. | H | Persist an attribution-safe input or hash-match it. |
+| P6-H-009 | `data/skill-index.json` entries | The generated index stores absolute user-local `SKILL.md` paths; the file is git-ignored but non-portable, and `src/core/retriever/bm25.mjs:112-114` silently skips unresolvable paths. | H | Store repo-relative paths. |
+| P6-H-011 | `src/config/defaults.mjs:141-152`, `src/config/env.mjs:66` | Both env parsers assign an array whenever the value contains a comma, so `SKILL_ROUTER_BM25_K1=1,2` makes `bm25.k1` an array. | H | Apply the array convention to list fields only. |
+| P6-H-012 | `hooks/route.mjs:221,287` | `RoutePlan.mode` emits `bm25` / `none` / `explicit`; `docs/ai-context.md:542` declares `"flat" \| "hierarchical" \| "single" \| "multi" \| "fallback"`. | H | Emit the documented union. |
+| P6-H-013 | `hooks/route.mjs:142` | A fresh `QueryCache` is built per hook process, so the `cache` telemetry event always reports 0 hits in production. | H | Persist the cache or drop the event. |
 
-- **Convention:** all runtime imports use `node:`-prefixed specifiers, except two
-  legacy modules: `src/retriever.mjs:1-2` (`'fs/promises'`, `'path'`) and
-  `src/logger.mjs:1-2` (`'fs/promises'`, `'path'`).
-- **Dynamic imports:** `bin/skill-router.mjs:40`, `hooks/route.mjs:297`,
-  `src/cli/{benchmark,health}.mjs:13/55`, `src/cli/tune-core.mjs:198`
-  (a redundant dynamic re-import of an already statically imported module).
-- **`require()`:** none remain in `src/`, `hooks/`, `bin/`, `tests/`, `scripts/`
-  (enforced by the new test; see C2).
-- **Unused imports: 37 across 24 modules** (independently re-measured during the
-  6.4 review on the post-fix tree with the same heuristic: 36 across 22 modules) (scanned with a throwaway script that
-  strips each `import {…}` statement and regex-matches the remaining identifier;
-  script deleted after the run). Examples: `src/cli/verify.mjs:21,25`
-  (`readdirSync, writeFileSync, rmSync, statSync, readSyncState`),
-  `src/sync/writer.mjs:17,23` (`readdirSync, dirname`),
-  `src/core/retriever/weights.mjs:13` (`getDefaults`),
-  `src/core/routing/hierarchical.mjs:13` (`computeIdf`),
-  `src/telemetry/session-tracker.mjs:17` (`existsSync, join`),
-  `src/utils/fs.mjs:6` (`stat`). Unused *locals* also exist:
-  `src/core/retriever/hybrid.mjs:37` (`doRerank`), `src/cli/benchmark.mjs:9`
-  (`args`), `hooks/route.mjs:47` (`modeLabel`), `src/sync/writer.mjs:153`
-  (`mirrorSkillDir`).
-- **Exports never consumed:** `src/logger.mjs:17` `logDecision` (no importer —
-  only a filename string reference in `src/cli/health.mjs:114`),
-  `src/core/budget/truncator.mjs:57` `charCount`, `src/tuning/optimizer.mjs:37`
-  `evaluate` (dead, see 4.3), `src/core/cache/query-cache.mjs:20` `sha256hex`
-  and `:209` `_origGetOrSet`.
-- **Barrel incompleteness:** `src/index.mjs` omits `selectRouter`, `detectExplicitSkill`,
-  `routeHybrid`, `routeWithExplicit`, `fitWithinBudget`, `expandQuery`,
-  `buildSynonymMap`, `attributeOutcome`, `computeWeights` — consumers (hook, tests)
-  import internal paths directly.
+The other first-pass High items are re-verified in the category tables above:
+`P6-H-005` = XP-1, `P6-H-007` = CONF-1, `P6-H-008` = XP-2, `P6-H-010` = SIL-11,
+`P6-H-014`–`P6-H-019` = SIL-1, SIL-2, SIL-3, CONF-2, DEAD-2, DEAD-1.
 
-### 4.2 Duplicate functions (duplication inventory)
+## 4. Corrected claims from the first pass
 
-| Function / constant | Copies | Notes |
-|---|---|---|
-| `rankSkills`, `readSkillContent` | `src/core/retriever/bm25.mjs:55,105` **and** `src/retriever.mjs:14,59` | Legacy copy hardcodes weights 3/2/1 and ignores `data/weights.json` + env. Still imported by `src/analytics/analyzer.mjs:17`, so analytics ranks with a *different* scorer than production. |
-| `logDecision` | `src/telemetry/feedback.mjs:50` **and** `src/logger.mjs:17` | Different schemas, different files (`logs/routing-YYYYMMDD.jsonl` vs `logs/routing.jsonl`); the legacy one documents a raw `record.prompt` field and is unused. |
-| `parseFrontmatter` | 5 copies: `src/loader.mjs:16`, `src/quality/validator.mjs:58`, `src/cli/list.mjs:130`, `src/cli/stats.mjs:137`, `src/cli/sources.mjs:149` (+ `tests/run-benchmark.mjs:61`) | `src/quality/validator.mjs:53` even documents "Mirrors the implementation in src/loader.mjs". |
-| `loadSkillsSync` | 3 copies: `src/cli/list.mjs:95`, `src/cli/stats.mjs:102`, `src/cli/sources.mjs:115` | Third async implementation in `src/loader.mjs:90`. |
-| `tagSkillsBySource` | 3 copies: `hooks/build-index.mjs:86`, `src/cli/reindex.mjs:60`, `src/cli/sources.mjs:18` | Identical bodies including the separator probe. |
-| `hashContent` | 5 copies: `src/sync/planner.mjs:47`, `src/sync/writer.mjs:75`, `src/sync/disabler.mjs:66`, `src/deploy/planner.mjs:46`, `src/deploy/verifier.mjs:56` | |
-| `readMeta` | 5 copies: `src/sync/writer.mjs:92`, `src/sync/disabler.mjs:73`, `src/deploy/writer.mjs:83`, `src/deploy/planner.mjs:53`, `src/deploy/verifier.mjs:63` | Behaviour drift: the `sync/` copies return `null` on malformed JSON, which `writer.mjs:222-227` then treats as "user-managed → skip". |
-| `isWithinRoot` | 3 copies: `src/import/scanner.mjs:48`, `src/sync/writer.mjs:82`, `src/deploy/planner.mjs:66` | |
-| `META_FILENAME` / `SKILL_FILE_NAME` constants | 5 files (`src/sync/{writer,disabler}.mjs`, `src/deploy/{planner,writer,verifier}.mjs`) | |
-| `STOPWORDS` sets | `src/scorer.mjs:1-15` and `src/utils/text.mjs:9-23` | Sets are currently identical (verified: 114 unique entries each, symmetric difference empty); `scorer.mjs` lists `again` and `been` twice. `utils/text.mjs:53` filters with its own copy, not the scorer's. |
-| `hashPrompt` | `src/telemetry/feedback.mjs:19` (`sha256:<hex>`) and `src/analytics/analyzer.mjs:28` (bare hex) | Two incompatible formats for the same concept. |
-| ANSI colour helpers | 5 CLI modules (`feedback.mjs:15-20`, `tune.mjs:21-26`, `tune-core.mjs:39-47`, `verify.mjs:31-36`, `health.mjs:28-33`) | |
-| **New in 6.4** | `buildWeightedDocTokens` | The BM25 doc-building block that was duplicated in `bm25.mjs` and `detector.mjs` is now one exported helper (`src/core/retriever/bm25.mjs:20-49`). |
-
-### 4.3 Error and config conventions
-
-- **Config sources are mixed.** `getDefaults()` (no env) is used by
-  `bm25.mjs`, `detector.mjs`, `attribution.mjs`, `core/retriever/hybrid.mjs`,
-  `core/routing/hybrid.mjs`, `core/embeddings/engine.mjs`, `core/reranker/engine.mjs`;
-  `getConfig()` (env-merged) only by `core/routing/hierarchical.mjs` and the hook.
-  See **P6-H7**.
-- **Module-load-time config snapshot.** `src/config/defaults.mjs:37,63` caches
-  `_thresholds`/`_weights` at import; `bm25.mjs:55` now re-reads `getDefaults()`
-  per call (cheap, since the file read is still cached at module level) but a
-  long-lived process never sees a new `data/weights.json`.
-- **Two overlapping env parsers.** `mergeWithEnv` (`defaults.mjs:136-180`,
-  unvalidated) and `mergeEnvOverrides` (`env.mjs:75-110`, range-checked) both
-  implement the same overrides; `mergeEnvOverrides` calls the first and then
-  re-applies. Scalar/array confusion: **P6-H11**.
-- **Boolean parsing is lenient**: `SKILL_ROUTER_SLM_ENABLED=banana` → `true`
-  (`defaults.mjs:174-177`).
-- **Error surfacing:** hook paths fail open by design
-  (`hooks/route.mjs:80-119,174-178,308-311`); CLI paths `console.error` +
-  `process.exit(1)`. `bin/skill-router.mjs:49-53` maps *any* `MODULE_NOT_FOUND`
-  to "Unknown subcommand", so a missing transitive dependency is misreported.
-  `bin/skill-router.mjs:43` calls `mod.main(...)` without `await`, so async
-  subcommand rejections are unhandled.
-- **Exit-code contract:** `health.mjs:433-440` (0/1/2) and `verify.mjs:464`
-  (0/1) are inconsistent with every other CLI (0/1).
-- **Dead tuning code:** `src/tuning/optimizer.mjs:37-60` `evaluate()` is never
-  called and never increments `hits`; its `high` parameter is unused, and
-  `evaluateFull` (`:72`) also ignores `high`. Grid search is unaffected because
-  it calls `evaluateFull`.
-- **Unverifiable contract:** `src/deploy/hook-registrar.mjs:20-21` sets
-  `command: 'node'` with `args: ['node', '${ZCODE_PLUGIN_ROOT}/hooks/route.mjs']`
-  (the executable is repeated inside `args`). Whether ZCode expects that shape
-  could not be checked from this repository — the registrar's own tests encode
-  the current form (`tests/deploy/hook-registrar.test.mjs`), so no defect is
-  claimed, only a "verify against the real ZCode schema" note.
-
-### 4.4 Hardcoded values and absolute paths
-
-- Absolute personal path in generated `data/skill-index.json` → **P6-H9**.
-- `resolve('logs'|'data/…')` module constants (cwd-dependent) → **P6-H8**.
-- `homedir()` defaults: `src/sync/planner.mjs:37`, `src/deploy/{planner,verifier}.mjs:39/49`,
-  `src/deploy/writer.mjs:76`, `src/deploy/hook-registrar.mjs:17-18`,
-  `src/cli/{verify,health,doctor}.mjs:78/53/88`. `src/deploy/hook-registrar.mjs`
-  therefore writes to `~/.zcode/cli/config.json`, which conflicts with the
-  `AGENTS.md:19-23` rule "Never Modify ~/.zcode/" — this is the documented Phase 4
-  behaviour (`docs/ai-context.md:252-254`), so it is recorded as a rule/doc
-  conflict, not a code defect.
-- Un-configurable magic numbers: `src/core/retriever/bm25.mjs:113` (4000-char read
-  cap), `src/core/routing/hybrid.mjs:105` (`bm25MinThreshold` default 0.35),
-  `src/core/slm/parser.mjs:89,104` (score ≥ 0.5, cap 7),
-  `src/core/slm/prompt-builder.mjs:8-9` (30 candidates / 200 chars),
-  `src/core/routing/hierarchical.mjs:219-223` (0.15 bonus threshold, 1.05/1.02),
-  `src/core/telemetry/logger.mjs:9` + `logs/YYYY-MM-DD.jsonl`,
-  `src/telemetry/*` fixed filename prefixes.
-- `src/core/embeddings/engine.mjs:133` JSDoc claims `buildEmbeddingIndex` "writes
-  the index to data/skill-embeddings.json"; it does not (the writers are
-  `hooks/build-index.mjs:148` and `src/cli/reindex.mjs:140`).
-
-### 4.5 Path separators
-
-- Working: `src/analytics/analyzer.mjs:123-127`, `src/quality/validator.mjs:317`,
-  `src/cli/validate.mjs:39`, `src/import/reporter.mjs:52,68,87` all normalise
-  `\\` → `/` before string surgery.
-- Fragile: `hooks/build-index.mjs:92`, `src/cli/reindex.mjs:65`,
-  `src/cli/sources.mjs:23` probe one character (`skill.path[src.path.length] === '\\'`)
-  to pick a separator.
-- Broken: `src/deploy/writer.mjs:127` vs `:154` and `:347` → **P6-H5**.
-- `src/sync/planner.mjs:129` calls `dirname()` on a forward-slash-normalised path;
-  correct on win32, but it mixes conventions inside one expression.
-- `src/deploy/writer.mjs:77` computes `LOGS_DEPLOYS_DIR` from `process.cwd()` at
-  import time while its sibling `DEFAULT_SNAPSHOT_DIR` uses `homedir()` — snapshot
-  locations depend on where the process was started.
-
-### 4.6 Silent failures
-
-- 11 empty `catch {}` blocks (scanned): `src/cli/tune-core.mjs:241`,
-  `src/core/routing/domain-registry.mjs:54,133`, `src/deploy/writer.mjs:125,139,166,275,306,372,423,429`.
-  Most are deliberate best-effort I/O; the deploy ones hide snapshot and restore
-  failures behind a "Rollback successful" message (`src/deploy/writer.mjs:479-482`).
-- `src/core/routing/domain-registry.mjs:48-53` is dead code that *reads a
-  directory as a file* inside `try { … } catch {}` and discards the result.
-- `readSkillContent` swallows every read error (`src/core/retriever/bm25.mjs:112-114`)
-  and `hooks/route.mjs:255` substitutes a `path: ''` entry, which then resolves to
-  the cwd and fails silently again.
-- The two `require()` swallow-and-fallback defects (C2) are the worst offenders:
-  both turned a hard error into a confidently wrong answer.
-- Telemetry/log writes intentionally fail open
-  (`src/core/telemetry/logger.mjs:31-33`, `src/telemetry/feedback.mjs:66-68`),
-  but nothing records that telemetry is being dropped.
-
-### 4.7 JSDoc / type-safety
-
-- **Contract mismatches:** `src/core/retriever/hybrid.mjs:31` documents
-  `options.rerank=true` (default on) while line 110 only reranks for an explicit
-  `=== true`, and line 37's `doRerank` is dead;
-  `src/core/slm/parser.mjs:12` documents cross-checking against `knownSkills`
-  although `parseSingleSelection` never uses the parameter;
-  `src/core/slm/prompt-builder.mjs:50,88` document an `options` parameter that is
-  never read.
-- **Unresolvable type references:** `src/core/retriever/weights.mjs:23` uses
-  `import('./attribution.mjs').Attribution` although the typedef is not exported
-  (`src/core/retriever/attribution.mjs:135-142`); `src/analytics/reader.mjs:15`
-  and `src/core/telemetry/reporter.mjs:9,31` reference `LogEntry` /
-  inline shapes that are never defined.
-- **Numeric type safety:** fractional weights reaching `Array(n)`/`repeat()`
-  (the Critical C1); `src/config/env.mjs:66` returning arrays for scalar fields
-  (**P6-H11**).
-- **Non-English comment:** `src/quality/validator.mjs:233` (`满分 = 6 checks passed`).
-- **Params that lie:** `src/tuning/report.mjs:23-25` and
-  `src/tuning/optimizer.mjs:194,100` use
-  `import.meta.url.split('/').slice(3).join('/')` for entry-point detection,
-  which does not survive Windows drive-letter paths; the rest of the codebase uses
-  the `import.meta.url.endsWith(argv[1].replace(/\\/g,'/'))` pattern
-  (e.g. `src/sync/writer.mjs:284-288`).
-
-### 4.8 Categories that came back clean
-
-- **No dependency was added**, and none is needed: `package.json` has no
-  `dependencies`/`devDependencies` blocks (verified by reading `package.json`).
-- **No network calls** in `src/`, `hooks/` or `bin/`; the only `fetch` is
-  `src/core/slm/client.mjs:126,90` against the configured local endpoint, and the
-  only sockets are the `health` port probe (`src/cli/health.mjs:285`).
-- **No hardcoded secrets/tokens** and no personal paths in tracked source: the
-  only absolute user-local path occurrence is the git-ignored generated index (**P6-H9**).
-- **No `eval`, `new Function`, or shell interpolation of untrusted input**; the
-  CLI arg parser only resolves paths (`src/cli/sync.mjs:33-48`).
-- **Path-traversal guards in the importer: NOT effective — corrected after
-  review.** This entry originally claimed the guards at
-  `src/import/importer.mjs:165-167,182-187` were effective. They were not:
-  `hasTraversal()` was called on an already-`resolve()`d absolute skills
-  directory (always false) and on `candidate.sourcePath` (never on the
-  untrusted frontmatter `name`, which is what builds the destination
-  directory). A skill named `backend-../../../../pwned` passed
-  `validateSkill()` and wrote `SKILL.md` outside `data/skills`. Fixed in the
-  6.4 security remediation; see `docs/problems.md` (P6-C3) and
-  `tests/security/path-traversal.test.mjs`.
+1. **"Path-traversal guards in the importer are effective"** (first pass, §4.8)
+   was wrong. `hasTraversal()` ran on an already-`resolve()`d absolute directory
+   and on `candidate.sourcePath`, never on the untrusted `name`. The auditor's
+   runtime reproduction wrote `SKILL.md` outside `data/skills`; now recorded as
+   C3 and P6-C3.
+2. **"No security vulnerability requiring immediate attention"** (first-pass
+   framing) was wrong for the same reason; the security blocker is now C3/C4,
+   both fixed with regression tests.
 
 ---
 
 ## 5. Changes made in Sub-Phase 6.4
 
-| File | Change |
-|---|---|
-| `src/scorer.mjs` | added `resolveFieldWeight()` (C1) |
-| `src/core/retriever/bm25.mjs` | added exported `buildWeightedDocTokens()`; `rankSkills()` uses it (C1) |
-| `src/core/routing/detector.mjs` | `detectDomains()` uses the shared helper (C1) |
-| `src/cli/add.mjs` | `node:fs` static imports replace `require()` (C2) |
-| `src/cli/doctor.mjs` | `node:fs` static imports replace `require()` (C2) |
-| `tests/run-benchmark.mjs`, `tests/integration/phase-2.mjs` | `spawnSync` static import replaces `require()` (C2) |
-| `tests/retriever/field-weight-safety.test.mjs` | new — 19 assertions (C1) |
-| `tests/cli/esm-require.test.mjs` | new — 5 assertions (C2); hardened during the 6.4 review to provision its own `data/domains/<name>` registry in a temp cwd, because `data/domains/` is generated and git-ignored (the original version failed on a fresh clone) |
-| `package.json` | both new tests added to `test` / `test:cli` |
-| `docs/problems.md` | 13 `P6-H` entries |
-| `docs/current-state.md` | entry-log line |
-| `docs/reports/phase-6-static-audit.md` | this report |
+- **Code (C1):** `src/scorer.mjs` (`resolveFieldWeight`),
+  `src/core/retriever/bm25.mjs` (exported `buildWeightedDocTokens`),
+  `src/core/routing/detector.mjs` (uses the helper).
+- **Code (C2):** static `node:fs` / `node:child_process` imports in
+  `src/cli/add.mjs`, `src/cli/doctor.mjs`, `tests/run-benchmark.mjs`,
+  `tests/integration/phase-2.mjs`.
+- **Code (C3, C4):** `src/utils/fs.mjs` (`isWithinRoot`, `isSafeName`);
+  `src/import/importer.mjs`, `src/cli/import.mjs`, `src/cli/add.mjs`,
+  `src/sync/disabler.mjs`, `src/sync/writer.mjs` reject unsafe names and
+  out-of-root targets.
+- **Tests:** `tests/retriever/field-weight-safety.test.mjs` (19),
+  `tests/cli/esm-require.test.mjs` (5), `tests/security/path-traversal.test.mjs`
+  (20), `tests/security/cli-path-traversal.test.mjs` (10), shared
+  `tests/security/helpers.mjs`; all registered in the `package.json` `test` chain.
+- **Docs:** this report, 19 `P6-H-0NN` entries plus the P6-C3 / P6-C4 resolved
+  rows in `docs/problems.md`, and the 6.4 entry-log line in
+  `docs/current-state.md`.
 
-## 6. Recommended next actions (not done in 6.4)
+## 6. Recommended Fixes (Critical and High only)
 
-1. Decide the hook shortlist policy (P6-H1/P6-H2) and update the E2E expectations
-   in the same change — the current tests encode "always inject the corpus".
-2. Reconcile the privacy invariant: hash or drop `query` in runtime logs and stop
-   persisting prompt prefixes in session state (P6-H3).
-3. Make one config source authoritative (`getConfig()` everywhere), validate
-   `data/weights.json` integers at load, and normalise `SKILL_ROUTER_SOURCES` to
-   `path.delimiter` (P6-H7, P6-H11, Windows drive letters).
-4. Delete the legacy duplicates (`src/retriever.mjs`, `src/logger.mjs`) after
-   repointing `src/analytics/analyzer.mjs` at the canonical modules.
-5. Fix the deploy snapshot paths to POSIX form before relying on
-   `deploy --restore` / automatic rollback on Windows (P6-H5).
+| Priority | ID | Action |
+|---|---|---|
+| Done | C1–C4 | Fractional-weight crash, ESM `require()`, and both path-traversal arbitrary-write classes are fixed and covered by regression tests. |
+| 1 | P6-H-014 (SIL-1) | Make `snapshotMirror()` fail loudly on a partial read; rollback currently trusts an empty snapshot and deletes mirror directories. |
+| 1 | P6-H-015 (SIL-2) | Make `planSync()` fail when a skill tree cannot be indexed; an empty project index currently plans a mass removal. |
+| 1 | P6-H-016 (SIL-3) | Branch on `ENOENT` in `readSignalFiles()`; any other error currently turns the whole outcome corpus into "positive". |
+| 2 | P6-H-001, P6-H-003 | Decide the hook shortlist policy and update the E2E expectations; stop persisting raw prompts and prompt prefixes. |
+| 2 | P6-H-005 (XP-1) | Normalise deploy snapshot paths to POSIX form before relying on rollback or `--restore` on Windows. |
+| 2 | P6-H-006, P6-H-007, P6-H-011, P6-H-017 (CONF-1, CONF-2) | Make `getConfig()` the single authoritative config source, validate scalar env values, and make decision logs carry the attribution input. |
+| 3 | P6-H-002, P6-H-004, P6-H-008, P6-H-009, P6-H-012, P6-H-013 | Budget overflow, default benchmark mode, cwd-relative data paths, absolute paths in the generated index, `RoutePlan.mode` union, and the per-process query cache. |
+| 3 | P6-H-010, P6-H-018, P6-H-019 | Replace `stat()` with `lstat()` + `realpath()` for symlink containment; delete `src/retriever.mjs` and `src/logger.mjs` after repointing the analyzer and the health file list. |
