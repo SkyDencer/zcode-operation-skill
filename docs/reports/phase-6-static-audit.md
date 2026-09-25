@@ -22,10 +22,8 @@
 
 | Command (run from the repo root) | Result |
 |---|---|
-| `node tests/security/path-traversal.test.mjs` | Passed 20, Failed 0 |
-| `node tests/security/cli-path-traversal.test.mjs` | Passed 10, Failed 0 |
-| `node tests/retriever/field-weight-safety.test.mjs` | Passed 19, Failed 0 |
-| `node tests/cli/esm-require.test.mjs` | Passed 5, Failed 0 |
+| `node tests/security/path-traversal.test.mjs` / `node tests/security/cli-path-traversal.test.mjs` | Passed 20 / Passed 10, Failed 0 |
+| `node tests/retriever/field-weight-safety.test.mjs` / `node tests/cli/esm-require.test.mjs` | Passed 19 / Passed 5, Failed 0 |
 | `grep -rn "catch\s*{" src hooks bin --include="*.mjs"` | 39 modules; each one is listed in 3.7 |
 | `grep -rn "\.catch(" src hooks bin` / `grep -rn "{any}" src` | 3 `.catch(` hits, all with a real handler (no `.catch(() => {})`); 4 `{any}` hits, all in the two cache modules |
 | `diff <(sed -n '393,414p' src/cli/health.mjs) <(sed -n '402,423p' src/cli/verify.mjs)` | identical (DUP-4 check-table renderer) |
@@ -45,10 +43,10 @@ run; the run script gates on it.
 | 2 | Unused exports | 9 | 0 | 0 | 1 | 8 |
 | 3 | Duplicate logic | 8 | 0 | 1 | 3 | 4 |
 | 4 | Inconsistent conventions (errors, config) | 6 | 0 | 2 | 2 | 2 |
-| 5 | Hardcoded values | 10 | 0 | 0 | 1 | 9 |
+| 5 | Hardcoded values | 8 | 0 | 0 | 1 | 7 |
 | 6 | Cross-platform issues | 5 | 0 | 2 | 0 | 3 |
 | 7 | Silent failures | 11 | 0 | 4 | 2 | 5 |
-| 8 | Type safety / JSDoc | 7 | 0 | 0 | 1 | 6 |
+| 8 | Type safety / JSDoc | 6 | 0 | 0 | 1 | 5 |
 | S | Security (separate track) | 5 | 2 | 1 | 0 | 2 |
 
 Critical total: 4 (C1–C4, all fixed in this phase, each with a regression test).
@@ -82,8 +80,7 @@ regression tests below were re-run in this session and pass.
   wrapped in `catch { return [] / 'no' }`, so `add` rejected every valid skill
   (empty domain registry) and `doctor` always reported the mirror non-writable.
 - **Fix:** static `node:` imports.
-- **Regression test:** `node tests/cli/esm-require.test.mjs` → 5/5 (scans every
-  `.mjs` in `src/ hooks/ bin/ tests/ scripts/` for `require(`).
+- **Regression test:** `node tests/cli/esm-require.test.mjs` → 5/5 (scans every `.mjs` in `src/ hooks/ bin/ tests/ scripts/` for `require(`).
 
 ### C3 — Arbitrary file write via path traversal in the import/add path (security blocker)
 
@@ -183,15 +180,13 @@ Severity key: **C** Critical (fixed), **H** High (`docs/problems.md`),
 | ID | Where | Description | Sev | Suggested action |
 |---|---|---|---|---|
 | HC-1 | `src/core/routing/hybrid.mjs:38-41` and `src/core/slm/client.mjs:21-27` | `http://127.0.0.1:8080`, `qwen2.5` and `2000` are hardcoded in both modules even though `src/config/defaults.mjs:116-122` already defines them. A defaults change would not propagate. | M | Read from config; keep one source of truth. |
-| HC-2 | `src/core/routing/hybrid.mjs:77-81` | `20`, `7`, `0.35`, `0.5`, `2000` restated as inline fallbacks already present in `config.slm`. | L | Drop the fallbacks. |
-| HC-3 | `src/cli/health.mjs:286-300` | Port `8080` and the `2000` ms socket timeout hardcoded for the SLM probe, including the message text. | L | Derive from `config.slm.endpoint` / `slmTimeoutMs`. |
-| HC-4 | `src/core/routing/detector.mjs:67,119`, `src/core/routing/domain-registry.mjs:191` | Scoring weights (`0.5/0.3/0.2`, `0.4/0.6`) and the `0.3` score threshold are not configurable. | L | Move to config. |
-| HC-5 | `src/core/retrieval/expander.mjs:12,18,24`, `src/core/reranker/engine.mjs:13` | `EXPAND_WEIGHT 0.5`, `MIN_IDF_THRESHOLD 0.8`, `MAX_EXPANDED_TOKENS 3`, `BLEND 0.01`. | L | Move to config with env overrides. |
-| HC-6 | `src/core/retriever/weights.mjs:15-18`, `src/cli/tune-guard.mjs:17-18,59,70` | Adaptation constants `20 / 0.05 / 0.5 / 5.0` and a hardcoded baseline fallback `0.9231`. | L | Read from config / `data/baseline.json`. |
-| HC-7 | `src/tuning/optimizer.mjs:18,23,122-123`, `src/tuning/report.mjs:25-26,118-119` | Grid `0.70–0.95 / 0.40–0.75 step 0.05` and the `0.85 / 0.60` defaults re-hardcoded instead of reading `config.confidence`. | L | Read from the config module. |
-| HC-8 | `src/cli/import.mjs:14`, `src/import/importer.mjs:60`, `src/import/scanner.mjs:36`, `src/sync/planner.mjs:62`; `src/core/retriever/hybrid.mjs:39`, `src/core/reranker/engine.mjs:33`, `src/core/routing/hierarchical.mjs:46`, `src/core/routing/planner.mjs:45` | `MAX_DEPTH = 10` declared four times and `options.topK ?? 5` in four retrievers; config has no `topK` key. | L | One shared constant each. |
-| HC-9 | `src/core/telemetry/metrics.mjs:30`, `src/cli/feedback.mjs:43,62` | Capacity `1000` samples and `300` records hardcoded. | L | Config with env override. |
-| HC-10 | `src/cli/health.mjs:311` | `execSync('git status --porcelain', …)` — fixed literal, no interpolation, so safe; recorded so the single `execSync` in the codebase is documented. | L | None (no change needed). |
+| HC-2 | `src/core/routing/hybrid.mjs:77-81`, `src/cli/health.mjs:286-300` | `20`, `7`, `0.35`, `0.5`, `2000` restated as inline fallbacks already present in `config.slm`, plus the health probe's hardcoded port `8080` and `2000` ms socket timeout (including the message text). | L | Drop the fallbacks; derive host/port/timeout from `config.slm`. |
+| HC-3 | `src/core/routing/detector.mjs:67,119`, `src/core/routing/domain-registry.mjs:191`, `src/core/retrieval/expander.mjs:12,18,24`, `src/core/reranker/engine.mjs:13` | Scoring weights (`0.5/0.3/0.2`, `0.4/0.6`), the `0.3` score threshold, `EXPAND_WEIGHT 0.5`, `MIN_IDF_THRESHOLD 0.8`, `MAX_EXPANDED_TOKENS 3` and `BLEND 0.01` are not configurable. | L | Move to config with env overrides. |
+| HC-4 | `src/core/retriever/weights.mjs:15-18`, `src/cli/tune-guard.mjs:17-18,59,70` | Adaptation constants `20 / 0.05 / 0.5 / 5.0` and a hardcoded baseline fallback `0.9231`. | L | Read from config / `data/baseline.json`. |
+| HC-5 | `src/tuning/optimizer.mjs:18,23,122-123`, `src/tuning/report.mjs:25-26,118-119` | Grid `0.70–0.95 / 0.40–0.75 step 0.05` and the `0.85 / 0.60` defaults re-hardcoded instead of reading `config.confidence`. | L | Read from the config module. |
+| HC-6 | `src/cli/import.mjs:14`, `src/import/importer.mjs:60`, `src/import/scanner.mjs:36`, `src/sync/planner.mjs:62`; `src/core/retriever/hybrid.mjs:39`, `src/core/reranker/engine.mjs:33`, `src/core/routing/hierarchical.mjs:46`, `src/core/routing/planner.mjs:45` | `MAX_DEPTH = 10` declared four times and `options.topK ?? 5` in four retrievers; config has no `topK` key. | L | One shared constant each. |
+| HC-7 | `src/core/telemetry/metrics.mjs:30`, `src/cli/feedback.mjs:43,62` | Capacity `1000` samples and `300` records hardcoded. | L | Config with env override. |
+| HC-8 | `src/cli/health.mjs:311` | `execSync('git status --porcelain', …)` — fixed literal, no interpolation, so safe; recorded so the single `execSync` in the codebase is documented. | L | None (no change needed). |
 
 ### 3.6 Cross-platform issues
 
@@ -226,10 +221,9 @@ Severity key: **C** Critical (fixed), **H** High (`docs/problems.md`),
 | TS-1 | `src/core/cache/lru.mjs:25,35,51`, `src/core/cache/query-cache.mjs:54,123` | The cache boundary for every route plan is typed `Map<string, any>` / `@param {any} value` / `@returns {any}` (the only `{any}` hits in `src/`). | L | Introduce a `RoutePlan` typedef. |
 | TS-2 | `src/cli/{feedback,doctor,health,import,tune,verify}.mjs` and `src/config/env.mjs:115` | Exported `main(argv)` entry points and `getConfig()` have no JSDoc, so their argv contract and the config return shape are undocumented at the definition site. | M | Add `@param {string[]} argv` / `@returns {Promise<number>}` and the config shape. |
 | TS-3 | `src/logger.mjs:1-3` | The only module in `src/` without a JSDoc file header, and it duplicates `logDecision` from `src/core/telemetry/logger.mjs` with a different output file — a real source of confusion. | L | Delete the module (DEAD-1). |
-| TS-4 | `src/core/retriever/hybrid.mjs:31,37,110` | JSDoc documents `options.rerank=true` as default-on while the code reranks only for an explicit `=== true`, and `doRerank` is dead. | L | Align doc and code. |
-| TS-5 | `src/core/retriever/weights.mjs:23`, `src/analytics/reader.mjs:15`, `src/core/telemetry/reporter.mjs:9,31` | JSDoc references `import('./attribution.mjs').Attribution` and `LogEntry` shapes that are never exported or defined. | L | Export the typedefs or inline the shapes. |
-| TS-6 | `src/tuning/report.mjs:23-25`, `src/tuning/optimizer.mjs:100,194` | Entry-point detection uses `import.meta.url.split('/').slice(3).join('/')`, which does not survive Windows drive-letter paths; the rest of the codebase uses the `endsWith(argv[1].replace(/\\/g,'/'))` pattern. | L | Use the established pattern. |
-| TS-7 | `src/quality/validator.mjs:233` | Non-English comment (`满分 = 6 checks passed`) in an English-only codebase. | L | Translate. |
+| TS-4 | `src/core/retriever/hybrid.mjs:31,37,110`; `src/core/retriever/weights.mjs:23`, `src/analytics/reader.mjs:15`, `src/core/telemetry/reporter.mjs:9,31` | JSDoc documents `options.rerank=true` as default-on while the code reranks only for an explicit `=== true` and `doRerank` is dead; other JSDoc references `import('./attribution.mjs').Attribution` and `LogEntry` shapes that are never exported or defined. | L | Align doc and code; export the typedefs or inline the shapes. |
+| TS-5 | `src/tuning/report.mjs:23-25`, `src/tuning/optimizer.mjs:100,194` | Entry-point detection uses `import.meta.url.split('/').slice(3).join('/')`, which does not survive Windows drive-letter paths; the rest of the codebase uses the `endsWith(argv[1].replace(/\\/g,'/'))` pattern. | L | Use the established pattern. |
+| TS-6 | `src/quality/validator.mjs:233` | A non-English comment ("6 checks passed" written in Chinese) sits in an English-only codebase. | L | Translate. |
 
 ### 3.9 Security track (separate from the eight categories)
 
@@ -263,36 +257,18 @@ The other first-pass High items are re-verified in the category tables above:
 
 ## 4. Corrected claims from the first pass
 
-1. **"Path-traversal guards in the importer are effective"** (first pass, §4.8)
-   was wrong. `hasTraversal()` ran on an already-`resolve()`d absolute directory
-   and on `candidate.sourcePath`, never on the untrusted `name`. The auditor's
-   runtime reproduction wrote `SKILL.md` outside `data/skills`; now recorded as
-   C3 and P6-C3.
-2. **"No security vulnerability requiring immediate attention"** (first-pass
-   framing) was wrong for the same reason; the security blocker is now C3/C4,
-   both fixed with regression tests.
+1. **"Path-traversal guards in the importer are effective"** (first pass, §4.8) was wrong. `hasTraversal()` ran on an already-`resolve()`d absolute directory and on `candidate.sourcePath`, never on the untrusted `name`. The auditor's runtime reproduction wrote `SKILL.md` outside `data/skills`; now recorded as C3 and P6-C3.
+2. **"No security vulnerability requiring immediate attention"** (first-pass framing) was wrong for the same reason; the security blocker is now C3/C4, both fixed with regression tests.
 
 ---
 
 ## 5. Changes made in Sub-Phase 6.4
 
-- **Code (C1):** `src/scorer.mjs` (`resolveFieldWeight`),
-  `src/core/retriever/bm25.mjs` (exported `buildWeightedDocTokens`),
-  `src/core/routing/detector.mjs` (uses the helper).
-- **Code (C2):** static `node:fs` / `node:child_process` imports in
-  `src/cli/add.mjs`, `src/cli/doctor.mjs`, `tests/run-benchmark.mjs`,
-  `tests/integration/phase-2.mjs`.
-- **Code (C3, C4):** `src/utils/fs.mjs` (`isWithinRoot`, `isSafeName`);
-  `src/import/importer.mjs`, `src/cli/import.mjs`, `src/cli/add.mjs`,
-  `src/sync/disabler.mjs`, `src/sync/writer.mjs` reject unsafe names and
-  out-of-root targets.
-- **Tests:** `tests/retriever/field-weight-safety.test.mjs` (19),
-  `tests/cli/esm-require.test.mjs` (5), `tests/security/path-traversal.test.mjs`
-  (20), `tests/security/cli-path-traversal.test.mjs` (10), shared
-  `tests/security/helpers.mjs`; all registered in the `package.json` `test` chain.
-- **Docs:** this report, 19 `P6-H-0NN` entries plus the P6-C3 / P6-C4 resolved
-  rows in `docs/problems.md`, and the 6.4 entry-log line in
-  `docs/current-state.md`.
+- **Code (C1):** `src/scorer.mjs` (`resolveFieldWeight`), `src/core/retriever/bm25.mjs` (exported `buildWeightedDocTokens`), `src/core/routing/detector.mjs` (uses the helper).
+- **Code (C2):** static `node:fs` / `node:child_process` imports in `src/cli/add.mjs`, `src/cli/doctor.mjs`, `tests/run-benchmark.mjs`, `tests/integration/phase-2.mjs`.
+- **Code (C3, C4):** `src/utils/fs.mjs` (`isWithinRoot`, `isSafeName`); `src/import/importer.mjs`, `src/cli/import.mjs`, `src/cli/add.mjs`, `src/sync/disabler.mjs`, `src/sync/writer.mjs` reject unsafe names and out-of-root targets.
+- **Tests:** `tests/retriever/field-weight-safety.test.mjs` (19), `tests/cli/esm-require.test.mjs` (5), `tests/security/path-traversal.test.mjs` (20), `tests/security/cli-path-traversal.test.mjs` (10), shared `tests/security/helpers.mjs`; all registered in the `package.json` `test` chain.
+- **Docs:** this report, 19 `P6-H-0NN` entries plus the P6-C3 / P6-C4 resolved rows in `docs/problems.md`, and the 6.4 entry-log line in `docs/current-state.md`.
 
 ## 6. Recommended Fixes (Critical and High only)
 
