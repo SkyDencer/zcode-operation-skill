@@ -183,3 +183,11 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 - **Rationale:** Phase 2 benchmark results (docs/reports/phase-2-slm-benchmark.md) showed Qwen2.5-0.5B underperforms BM25 on this corpus. SLM-Only Top-1 = 20.00% vs BM25-Only Top-1 = 46.67%; Set Recall = 0.0972 vs 0.7000. Hybrid mode matches BM25 on Top-1 but degrades Set Recall (0.5750 vs 0.7000) and adds ~1.5 s latency per prompt — exceeding the hook timeout budget of 200 ms. The 0.5B model is too small for reliable multi-skill selection. Larger models (1.5B+) should be evaluated before enabling SLM. The `tests/slm-benchmark/runner.mjs --slm` flag forces SLM-enabled mode for comparison.
 - **Date:** 2026-09-23
 - **Status:** Accepted
+
+## D26 — Both index builders share one default project corpus (`data/skills/` + `router-skills/`)
+
+- **Question:** Should `reindex` and `hooks/build-index.mjs` each define their own default source list?
+- **Decision:** No. Both now resolve the default project corpus through `projectSources()` in `src/index/sources.mjs`: `data/skills/` (54 leaf skills) plus `router-skills/` (6 `router-*` dispatchers), both tagged `source: "project"`. `--skills-dir` remains the explicit single-directory escape hatch; `SKILL_ROUTER_SOURCES` remains the explicit env override for `build-index`.
+- **Rationale:** `reindex` previously defaulted to `data/skills` only, so running it rewrote `data/skill-index.json` with 54 entries and silently dropped the 6 router entries that the explicit `$mention` path and the tuning/optimizer corpus depend on. The generated index then depended on which builder ran last, which failed `tests/tuning/optimizer.test.mjs` after Sub-Phase 6.4 ("full index has 60 entries ... got 54", "leaf-only top1 0.9077 > full-index top1 0.9077"). Sharing one function makes the divergence structurally impossible and is regression-tested by `tests/cli/reindex.test.mjs` (12 assertions; 7 fail without the fix).
+- **Date:** 2026-09-25
+- **Status:** Accepted

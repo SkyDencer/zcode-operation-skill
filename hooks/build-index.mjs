@@ -23,6 +23,7 @@ import { logBuild } from '../src/core/telemetry/logger.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { populateDomainsFromSkills } from '../src/core/routing/domain-registry.mjs';
 import { resolveCollisions } from '../src/index/dedupe.mjs';
+import { projectSources } from '../src/index/sources.mjs';
 
 const config = getConfig();
 const INDEX_PATH = resolve('data/skill-index.json');
@@ -38,18 +39,12 @@ function parseSources() {
   const raw = process.env.SKILL_ROUTER_SOURCES;
   if (!raw) {
     // Default: project skills + router skills
-    return [
-      { path: resolve('data/skills'), source: 'project' },
-      { path: resolve('router-skills'), source: 'project' },
-    ];
+    return projectSources();
   }
 
   const parts = raw.split(':').map((p) => p.trim()).filter(Boolean);
   if (parts.length === 0) {
-    return [
-      { path: resolve('data/skills'), source: 'project' },
-      { path: resolve('router-skills'), source: 'project' },
-    ];
+    return projectSources();
   }
 
   const sources = parts.map((p) => ({

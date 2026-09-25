@@ -80,13 +80,13 @@ node bin/skill-router.mjs validate --json
 Rebuild the BM25 skill index and recompute embeddings from all SKILL.md files across configured sources.
 
 ```bash
-# Reindex from project source only (default)
+# Reindex from the project source (default): data/skills/ + router-skills/
 node bin/skill-router.mjs reindex
 
 # Reindex from all configured sources
 node bin/skill-router.mjs reindex --sources all
 
-# Reindex from project only explicitly
+# Reindex from project only explicitly (data/skills/ + router-skills/)
 node bin/skill-router.mjs reindex --sources project
 
 # Reindex from zcode-user source (if it exists)
@@ -97,6 +97,7 @@ node bin/skill-router.mjs reindex --skills-dir ./my-skills --sources all
 ```
 
 This command:
+0. Resolves the same default project corpus as `hooks/build-index.mjs`: `data/skills/` (54 leaf skills) plus `router-skills/` (6 `router-*` dispatchers). Both index builders share `projectSources()` in `src/index/sources.mjs`, so the generated index never depends on which entry point ran last. Pass `--skills-dir` to index a single directory instead.
 1. Loads skills from each configured source directory
 2. Parses frontmatter from each file
 3. Deduplicates by path (removes duplicates from overlapping source scans)

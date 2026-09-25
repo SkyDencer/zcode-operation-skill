@@ -11,8 +11,11 @@ import { logBuild } from '../core/telemetry/logger.mjs';
 import { populateDomainsFromSkills } from '../core/routing/domain-registry.mjs';
 import { writeFile } from 'node:fs/promises';
 import { resolveCollisions } from '../index/dedupe.mjs';
+import { projectSources } from '../index/sources.mjs';
 
-const DEFAULT_SOURCES = [{ path: resolve('data/skills'), source: 'project' }];
+// Default corpus must match hooks/build-index.mjs: leaf skills + router skills.
+// Reindexing with data/skills alone silently dropped the 6 router-* entries.
+const DEFAULT_SOURCES = projectSources();
 const INDEX_PATH = resolve('data/skill-index.json');
 const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
 
@@ -30,9 +33,9 @@ function parseSourcesFlag(sourcesFlag) {
   const parts = sourcesFlag.split(',').map((p) => p.trim().toLowerCase());
   const sources = [];
 
-  // Always include project source
+  // Always include the project source (leaf skills + router dispatchers)
   if (parts.includes('all') || parts.includes('project')) {
-    sources.push({ path: resolve('data/skills'), source: 'project' });
+    sources.push(...projectSources());
   }
 
   // Include zcode-user source if available
