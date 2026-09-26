@@ -192,28 +192,23 @@ export function hybridRetrieve(prompt, index, options = {}) {
   // Promise even when x is not.
   const buildIsPromise = embeddingSource.build instanceof Promise;
   const queryIsPromise = embeddingSource.query instanceof Promise;
-  console.log('[DEBUG hybrid] buildIsPromise:', buildIsPromise, 'queryIsPromise:', queryIsPromise);
 
   if (buildIsPromise || queryIsPromise) {
-    console.log('[DEBUG hybrid] entering async path');
     const fused = Promise.all([
       buildIsPromise ? embeddingSource.build : Promise.resolve(embeddingSource.build),
       queryIsPromise ? embeddingSource.query : Promise.resolve(embeddingSource.query),
     ]).then(([skillVectors, queryVector]) => withEmbeddings(skillVectors, queryVector));
     if (!fallbackToFnv1a) {
-      console.log('[DEBUG hybrid] returning fused (no fallback)');
       return fused;
     }
     // Async provider rejected (e.g. a truncated model file): retry once with
     // the always-available FNV-1a provider so the caller still gets a ranking.
-    console.log('[DEBUG hybrid] returning fused with fallback');
     return fused.catch((err) => {
       onDegrade(`[skill-router] embedding provider failed (${err.message}); using fnv1a`);
       const fb = createProvider('fnv1a');
       return withEmbeddings(fb.buildIndex(index), fb.embed(prompt));
     });
   }
-  console.log('[DEBUG hybrid] returning sync path');
   return withEmbeddings(embeddingSource.build, embeddingSource.query);
 }
 

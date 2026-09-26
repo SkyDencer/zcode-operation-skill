@@ -170,32 +170,66 @@ async function main() {
         // Explicit routing: scope BM25 to the router's domain
         return routeWithExplicit(query, index, explicitSkill);
       }
-      // Implicit routing: full hybrid pipeline on leaf skills only
+      // Implicit routing: full hybrid pipeline on leaf skills only.
+      // `slm.enabled` is false by default, so the branch below is the
+      // production path; `routeHybrid` only runs when the operator opts in.
       const slmEnabled = config.slm?.enabled !== false;
       if (!slmEnabled) {
+        // Lexical relevance floor. Neither retrieval source can abstain on
+        // its own — rankSkills returns every indexed skill and every skill
+        // has a non-zero cosine similarity — so without this the hook would
+        // inject five skills into every prompt, including unrelated ones.
+        // Same threshold routeHybrid() applies for the SLM path.
+        const minBm25Score = config.slm?.bm25MinThreshold ?? 0.35;
         // Implicit routing: use hybrid retrieval (BM25 + embeddings via RRF)
         // when a provider is available; fall back to pure BM25 otherwise.
         const provider = getProvider();
         if (provider) {
+          const hybridStart = performance.now();
           // Await: providers such as ONNX build their embedding index
           // asynchronously, so hybridRetrieve() may hand back a Promise.
-          const ranked = await hybridRetrieve(query, idx, { provider, rerank: false });
-          const tier = ranked.length > 0 ? 'bm25' : 'none';
-          const confidence = ranked.length > 0 ? ranked[0].score : 0;
+          // The race keeps a cold model load (measured ~2 s) from blowing
+          // through hook.timeoutMs on every prompt; the hook must never
+          // block, so a timeout degrades to pure BM25 rather than failing.
+          let ranked;
+          try {
+            ranked = await Promise.race([
+              hybridRetrieve(query, idx, { provider, rerank: false, minBm25Score }),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('embedding retrieval timeout')), timeoutMs)
+              ),
+            ]);
+          } catch (err) {
+            await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
+            ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
+          }
+          // When hybrid abstains because the relevance floor rejected every skill
+          // (e.g. a prompt of random characters or HTML that produces no lexical
+          // matches above threshold), fall back to pure BM25 without the floor so
+          // the hook still surfaces the best lexical matches rather than exiting
+          // with no output.
+          if (!ranked || ranked.length === 0) {
+            ranked = rankSkills(query, idx);
+          }
+          const bm25Ms = Math.round(performance.now() - hybridStart);
+          // Confidence is reported on the BM25 scale (normalised [0,1]) so it
+          // stays comparable with confidence.highThreshold/mediumThreshold;
+          // the fused RRF score is on a different scale entirely.
+          const confidence = ranked.length > 0 ? ranked[0].bm25Score : 0;
           return {
             skills: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
-            tier,
+            tier: ranked.length > 0 ? 'bm25' : 'none',
             confidence,
             candidates: ranked.slice(0, config.slm?.topCandidates ?? 20).map((r) => ({
               name: r.skill.name,
               description: r.skill.description,
               bm25Score: r.bm25Score,
             })),
-            latencyMs: { total: 0, bm25: 0, slmEnabled: false },
+            latencyMs: { total: bm25Ms, bm25: bm25Ms, slmEnabled: false },
           };
         }
         // No provider available — pure BM25 fallback
-        const ranked = rankSkills(query, idx);
+        const ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
         const tier = ranked.length > 0 ? 'bm25' : 'none';
         const confidence = ranked.length > 0 ? ranked[0].score : 0;
         return {
