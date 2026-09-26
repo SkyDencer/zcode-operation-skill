@@ -22,6 +22,10 @@ const BLEND = 0.01; // weight given to feature signal vs. original RRF score
 /**
  * Load trained reranker weights from data/reranker-weights.json if present.
  *
+ * Only keys that name a known feature are kept, so provenance metadata in the
+ * file (sample counts, R², the provider the fit was run against) can never
+ * leak into the weighted feature sum below.
+ *
  * @returns {Record<string, number>|undefined}
  */
 function loadTrainedWeights() {
@@ -30,7 +34,11 @@ function loadTrainedWeights() {
     const raw = readFileSync(path, 'utf-8');
     const data = JSON.parse(raw);
     if (typeof data === 'object' && !Array.isArray(data)) {
-      return data;
+      const picked = {};
+      for (const name of Object.keys(reranker.weights)) {
+        if (typeof data[name] === 'number') picked[name] = data[name];
+      }
+      return Object.keys(picked).length > 0 ? picked : undefined;
     }
   } catch {
     // File missing or malformed — use defaults from getDefaults()
@@ -51,12 +59,16 @@ const weights = { ...reranker.weights, ...(_trainedWeights ?? {}) };
  *
  * Results are sorted descending by blendedScore and truncated to topK.
  *
+ * When `options.provider` is asynchronous (ONNX), `extractFeatures` returns a
+ * Promise and so does `rerank` — the same mixed sync/async contract
+ * `hybridRetrieve` uses. Callers must therefore be prepared for either shape.
+ *
  * @param {string} query
  * @param {Array<{skill: object, score?: number, rrfScore?: number}>} candidates
  * @param {object} options
  * @param {number} [options.topK=5] — maximum number of results to return
  * @param {object} [options.provider] — embedding provider (optional; enables embeddingSimilarity feature)
- * @returns {Array<{skill: object, score: number, rerankScore: number}>}
+ * @returns {Array<{skill: object, score: number, rerankScore: number}>|Promise<Array>}
  */
 export function rerank(query, candidates, options = {}) {
   const topK = options.topK ?? 5;
@@ -64,32 +76,55 @@ export function rerank(query, candidates, options = {}) {
 
   if (!candidates || candidates.length === 0) return [];
 
-  // Compute weighted feature score for each candidate
-  const scored = candidates.map((c) => {
-    const features = extractFeatures(query, c.skill, { provider });
-    let featureScore = 0;
-    for (const [feature, weight] of Object.entries(weights)) {
-      featureScore += (features[feature] ?? 0) * weight;
-    }
-    // Use c.score if available (public API), otherwise c.rrfScore (internal)
-    const originalScore = c.score ?? c.rrfScore ?? 0;
-    // Blend original RRF score with feature signal
-    const blended = (1 - BLEND) * originalScore + BLEND * featureScore;
-    return {
-      skill: c.skill,
-      score: blended,
-      rerankScore: blended,
-      bm25Score: c.bm25Score ?? 0,
-      embeddingScore: c.embeddingScore ?? 0,
-      bm25Rrf: c.bm25Rrf ?? 0,
-      semanticRrf: c.semanticRrf ?? 0,
-      featureScore,
+  /**
+   * Blend one feature set with its candidate and the configured weights.
+   *
+   * @param {object} c — candidate
+   * @param {Record<string, number>|Promise<Record<string, number>>} features
+   * @returns {object|Promise<object>} the scored row
+   */
+  const scoreOne = (c, features) => {
+    const applyFeatures = (f) => {
+      let featureScore = 0;
+      for (const [feature, weight] of Object.entries(weights)) {
+        featureScore += (f[feature] ?? 0) * weight;
+      }
+      // Use c.score if available (public API), otherwise c.rrfScore (internal)
+      const originalScore = c.score ?? c.rrfScore ?? 0;
+      // Blend original RRF score with feature signal
+      const blended = (1 - BLEND) * originalScore + BLEND * featureScore;
+      return {
+        skill: c.skill,
+        score: blended,
+        rerankScore: blended,
+        bm25Score: c.bm25Score ?? 0,
+        embeddingScore: c.embeddingScore ?? 0,
+        bm25Rrf: c.bm25Rrf ?? 0,
+        semanticRrf: c.semanticRrf ?? 0,
+        featureScore,
+      };
     };
-  });
+    return features instanceof Promise ? features.then(applyFeatures) : applyFeatures(features);
+  };
 
-  // Sort descending by blended score
-  scored.sort((a, b) => b.rerankScore - a.rerankScore);
+  const rows = candidates.map((c) => scoreOne(c, extractFeatures(query, c.skill, { provider })));
 
-  // Return top-K, never more than the number of candidates received
-  return scored.slice(0, Math.min(topK, scored.length));
+  /**
+   * Sort descending by blended score and truncate to topK.
+   *
+   * @param {Array<object>} scored
+   * @returns {Array<object>}
+   */
+  const finalise = (scored) => {
+    scored.sort((a, b) => b.rerankScore - a.rerankScore);
+    // Return top-K, never more than the number of candidates received
+    return scored.slice(0, Math.min(topK, scored.length));
+  };
+
+  // Async provider: one Promise per candidate, resolved together so a single
+  // rejected feature extraction cannot silently zero the other features.
+  if (rows.some((r) => r instanceof Promise)) {
+    return Promise.all(rows).then(finalise);
+  }
+  return finalise(rows);
 }

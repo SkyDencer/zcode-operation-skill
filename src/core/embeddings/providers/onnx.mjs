@@ -9,9 +9,8 @@
  * enable it. The default remains Fnv1aProvider for backward compatibility.
  */
 import { ProviderNotAvailableError } from '../errors.mjs';
-import { isModelCached, resolveCacheDir } from './onnx-cache.mjs';
+import { isModelCached, resolveCacheDir, MODEL_ID } from './onnx-cache.mjs';
 
-const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const EMBEDDING_DIM = 384;
 
 /**

@@ -190,16 +190,35 @@ calls, and no persistent state beyond the JSON skill index.
 
 - Runs BM25 and embedding similarity independently, through the Provider
   interface (so FNV-1a and ONNX are interchangeable).
-- Fuses via **weighted** Reciprocal Rank Fusion:
+- Fuses via **weighted** Reciprocal Rank Fusion
+  (`src/core/retriever/rrf.mjs`):
   `score = w_bm25 * 1/(k + rank_bm25) + w_semantic * 1/(k + rank_semantic)`,
-  with `k = 60` and weights `bm25 = 0.4`, `semantic = 0.6` from
-  `embeddings.weights` in `src/config/defaults.mjs`.
+  with `k = 60` and the weights from `embeddings.weights` in
+  `src/config/defaults.mjs`.
+- **Shipped weights are `bm25 = 1.0`, `semantic = 0.0`.** A sweep over the
+  130-prompt real corpus (leaf index, relevance floor on, reranking off) shows
+  the semantic channel is a net negative for Top-1 at every weight and with
+  both providers: 0.4/0.6 scores 72/130 with FNV-1a and 100/130 with ONNX,
+  while BM25 alone scores 126/130. The full table is in `defaults.mjs`. With
+  `semantic = 0` the provider is never constructed or awaited, which keeps the
+  default routing path synchronous and free of a model load. Bring the channel
+  back with `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`.
 - BM25 rank used as tiebreaker when RRF scores are within 1e-10.
 - `options._weightBm25` / `options._weightSemantic` override the weights
   per call (used by `tests/retriever/weighted-rrf.test.mjs`).
+- **Relevance floor** (`options.minBm25Score`): neither source can abstain --
+  `rankSkills` returns an entry for every indexed skill and every skill has a
+  non-zero cosine similarity -- so fusion returns an **empty** list when the
+  best normalised BM25 score is below the floor. The hook passes
+  `slm.bm25MinThreshold` (0.35), the same gate `routeHybrid()` applies, which
+  is what lets an unrelated prompt get `tier: 'none'` instead of five skills.
+- Fail-open: a provider that throws or rejects is swapped for FNV-1aProvider
+  and reported through `options.onDegrade`, unless
+  `options.fallbackToFnv1a === false`.
 - Providers whose `buildIndex()` is asynchronous (ONNX) make `hybridRetrieve()`
   return a Promise; callers must await it. The hook does.
-- Optional feature-based reranking stage (opt-in, `options.rerank: true`).
+- Optional feature-based reranking stage. `options.rerank` defaults to `true`;
+  the hook passes `rerank: false`.
 
 ### Provider Resolution (`src/core/embeddings/resolve.mjs`)
 
@@ -221,8 +240,10 @@ calls, and no persistent state beyond the JSON skill index.
 ### Reranker (`src/core/reranker/`)
 
 - **features.mjs**: Extracts 5 features -- exact keyword overlap, bigram overlap, domain match, title match, and `embeddingSimilarity` (cosine similarity between the prompt embedding and the skill-description embedding, computed only when an embedding provider is supplied; 0 otherwise).
-- **engine.mjs**: Blends RRF score with feature score (BLEND=0.01). Opt-in to avoid degrading accuracy on small corpora.
-- Weights come from `data/reranker-weights.json` (linear regression over the 30-prompt benchmark, produced by `src/scripts/train-reranker-weights.mjs`) merged over the defaults in `src/config/defaults.mjs`.
+- **engine.mjs**: Blends RRF score with feature score (BLEND=0.01). `rerank()` returns a Promise when the supplied provider is asynchronous, so `embeddingSimilarity` is computed for ONNX too rather than silently reading `undefined` and scoring 0.
+- Weights come from `data/reranker-weights.json` (least-squares fit over the 30-prompt benchmark, produced by `src/scripts/train-reranker-weights.mjs`) merged over the defaults in `src/config/defaults.mjs`. Only keys naming a known feature are read, so provenance metadata in that file cannot leak into the score.
+- The fit's reported R-squared is **in-sample**; the script also prints a held-out R-squared over a 20% prompt split, which is negative. Read the header of `src/scripts/train-reranker-weights.mjs` before quoting either number.
+- Measured cost: `node tests/run-benchmark.mjs --mode hybrid --rerank on` scores 102/130 against 120/130 with reranking off, so the stage stays opt-in in the hook.
 
 ### Route Selector (`src/routing/selector.mjs`)
 
@@ -618,6 +639,8 @@ All tunable parameters can be overridden via `SKILL_ROUTER_*` environment variab
 | `SKILL_ROUTER_EMBED_DIMS` | 256 | Embedding dimensionality |
 | `SKILL_ROUTER_EMBEDDING_PROVIDER` | `fnv1a` | Embedding provider: `fnv1a` or `onnx`. Resolved once at hook start; falls back to `fnv1a` with a warning when the ONNX model is not cached |
 | `SKILL_ROUTER_RRF_K` | 60 | RRF fusion constant |
+| `SKILL_ROUTER_RRF_BM25_WEIGHT` | 1.0 | Weighted-RRF BM25 weight (convex combination with the semantic weight) |
+| `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT` | 0.0 | Weighted-RRF semantic weight; 0 skips the embedding provider entirely |
 | `SKILL_ROUTER_DOMAIN_THRESHOLD` | 0.80 | Single-domain confidence threshold |
 | `SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD` | 0.50 | Multi-domain confidence threshold |
 | `SKILL_ROUTER_HIERARCHICAL_CONFIDENCE_THRESHOLD` | 0.08 | Hierarchical routing confidence threshold for domain selection |

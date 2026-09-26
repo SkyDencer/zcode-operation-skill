@@ -203,14 +203,6 @@ async function main() {
             await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
             ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
           }
-          // When hybrid abstains because the relevance floor rejected every skill
-          // (e.g. a prompt of random characters or HTML that produces no lexical
-          // matches above threshold), fall back to pure BM25 without the floor so
-          // the hook still surfaces the best lexical matches rather than exiting
-          // with no output.
-          if (!ranked || ranked.length === 0) {
-            ranked = rankSkills(query, idx);
-          }
           const bm25Ms = Math.round(performance.now() - hybridStart);
           // Confidence is reported on the BM25 scale (normalised [0,1]) so it
           // stays comparable with confidence.highThreshold/mediumThreshold;
@@ -229,6 +221,9 @@ async function main() {
           };
         }
         // No provider available — pure BM25 fallback
+        // The relevance floor applies here too: an empty list means the
+        // prompt has no lexical match worth injecting, so the hook abstains
+        // rather than falling back to an unfiltered top-5.
         const ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
         const tier = ranked.length > 0 ? 'bm25' : 'none';
         const confidence = ranked.length > 0 ? ranked[0].score : 0;

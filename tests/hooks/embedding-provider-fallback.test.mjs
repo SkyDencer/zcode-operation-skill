@@ -176,13 +176,28 @@ assert(warmDefault.stderr.trim() === '', 'no provider warning on the default pat
 
 console.log('\n=== Hook: onnx requested, model cached ===\n');
 
-const warm = await runHook({ env: { SKILL_ROUTER_EMBEDDING_PROVIDER: 'onnx' } });
+// The semantic channel ships disabled (bm25=1.0 / semantic=0.0 — the weight
+// sweep in src/config/defaults.mjs shows it costs accuracy with both
+// providers), so with the default weights every provider produces the same
+// pure-BM25 ranking. Turn the channel on to prove the provider actually
+// reaches the retriever and changes the result.
+const SEMANTIC_ENV = {
+  SKILL_ROUTER_RRF_BM25_WEIGHT: '0.4',
+  SKILL_ROUTER_RRF_SEMANTIC_WEIGHT: '0.6',
+};
+const warmSemanticFnv1a = await runHook({ env: SEMANTIC_ENV });
+const warm = await runHook({ env: { ...SEMANTIC_ENV, SKILL_ROUTER_EMBEDDING_PROVIDER: 'onnx' } });
 const onnxNames = selectedNames(warm.output);
 const fnv1aNames = selectedNames(warmDefault.output);
 assert(warm.exitCode === 0, 'hook exits 0 with a warm onnx cache');
 assert(warm.output !== null, 'hook writes output.json with the onnx provider');
 assert(onnxNames.length > 0, 'hook selects skills with the onnx provider');
 assert(!/falling back/.test(warm.stderr), 'no fallback warning when the model is cached');
+const semanticFnv1aNames = selectedNames(warmSemanticFnv1a.output);
+assert(
+  semanticFnv1aNames.length > 0 && semanticFnv1aNames.join(',') !== fnv1aNames.join(','),
+  `turning the semantic channel on changes the fnv1a ranking (fnv1a: ${semanticFnv1aNames.join(', ')})`,
+);
 assert(
   onnxNames.length > 0 && onnxNames.join(',') !== fnv1aNames.join(','),
   `onnx ranking differs from fnv1a (onnx: ${onnxNames.join(', ')})`,

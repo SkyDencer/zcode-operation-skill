@@ -91,8 +91,8 @@ assert(differs, 'k=1 produces different fusion scores than the default constant'
 console.log('\n4. Source contract (config link)');
 const source = readFileSync(HYBRID_PATH, 'utf-8');
 assert(
-  /const\s*\{\s*rrf(?:\s*,\s*embeddings)?\s*\}\s*=\s*getDefaults\(\)/.test(source),
-  'hybrid.mjs destructures rrf (and optionally embeddings) from getDefaults()'
+  /const\s*\{\s*rrf(?:\s*,\s*embeddings)?\s*\}\s*=\s*get(?:Defaults|Config)\(\)/.test(source),
+  'hybrid.mjs destructures rrf (and optionally embeddings) from the config module'
 );
 assert(
   source.includes('options.k ?? rrf.k'),
@@ -101,6 +101,10 @@ assert(
 assert(
   !source.includes('options.k ?? 60'),
   'no hardcoded 60 fusion constant remains'
+);
+assert(
+  /getConfig\(\)/.test(source),
+  'hybrid.mjs reads getConfig(), so SKILL_ROUTER_RRF_K and the RRF weight overrides apply at runtime'
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

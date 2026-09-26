@@ -15,6 +15,7 @@ import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
 import { QueryCache } from '../src/core/cache/query-cache.mjs';
 import { buildSynonymMap } from '../src/core/retrieval/synonyms.mjs';
 import { now, percentile } from '../src/utils/time.mjs';
+import { getDefaults } from '../src/config/defaults.mjs';
 import { spawn, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -39,7 +40,10 @@ const modeFlag = args.find((a) => a.startsWith('--mode='))?.split('=')[1]
   || 'hybrid';
 const rerankFlag = args.find((a) => a.startsWith('--rerank='))?.split('=')[1]
   || (args.find((a) => a === '--rerank') !== undefined ? args[args.indexOf('--rerank') + 1] : undefined);
-const rerankValue = rerankFlag !== undefined ? rerankFlag : 'on';
+// Default matches the hook: hooks/route.mjs calls hybridRetrieve with
+// `rerank: false`, so measuring hybrid *with* the reranker on would report a
+// configuration production never runs.
+const rerankValue = rerankFlag !== undefined ? rerankFlag : 'off';
 
 // Corpus flag: real | synthetic-N
 const corpusFlag = args.find((a) => a.startsWith('--corpus='))?.split('=')[1]
@@ -207,9 +211,16 @@ let noSkillCount = 0;
 // Choose retrieve function based on mode
 const retrieveFn = modeFlag === 'hybrid' ? hybridRetrieve : rankSkills;
 
-// Build options for hybrid mode
+// Build options for hybrid mode. The relevance floor and the semantic
+// weight mirror what hooks/route.mjs passes, so the measured configuration is
+// the one production runs (the hook also uses a leaf-only index; the benchmark
+// keeps the full index so the frozen BM25 baseline stays comparable).
+const DEFAULTS = getDefaults();
 const retrieveOptions = modeFlag === 'hybrid'
-  ? { rerank: rerankValue !== 'off' }
+  ? {
+    rerank: rerankValue !== 'off',
+    minBm25Score: DEFAULTS.slm.bm25MinThreshold,
+  }
   : {};
 
 // Build synonym map when expansion is enabled
@@ -236,8 +247,17 @@ for (const p of prompts) {
   const exp = expected.find((e) => e.id === p.id)?.expected;
   // When expected is null, topSkill must also be null for a match (no-skill prompt)
   const expName = exp === null ? null : (typeof exp === 'string' ? exp : String(exp));
+  const topScore = ranked.length > 0
+    ? (typeof ranked[0].score === 'number' && !Number.isNaN(ranked[0].score) ? ranked[0].score : 0)
+    : 0;
+  // A prompt is a no-skill prompt when nothing was returned, or when the top
+  // score is below the abstention floor. Testing `ranked.length === 0` first
+  // matters for hybrid mode: its scores are RRF values whose maximum
+  // (1/61 = 0.0164) sits above the old 0.01 cut, so a relevance floor that
+  // empties the result set would otherwise be scored as a miss.
+  const isNoSkill = ranked.length === 0 || topScore < 0.01;
 
-  if (topSkill === expName || (expName === null && ranked.length > 0 && ranked[0].score < 0.01)) top1Hits++;
+  if (topSkill === expName || (expName === null && isNoSkill)) top1Hits++;
   const expStr = String(exp);
   // For multi-domain prompts, check that any of the expected domain skills appear in top-3
   const isMultiDomain = expStr.startsWith('multi:');
@@ -259,7 +279,7 @@ for (const p of prompts) {
     expected: expName,
     topSkill,
     top3: top3Skills,
-    topScore: ranked.length > 0 ? (typeof ranked[0].score === 'number' && !Number.isNaN(ranked[0].score) ? ranked[0].score : 0) : 0,
+    topScore,
     latency_ms: latency,
   });
 }
@@ -285,7 +305,7 @@ console.log('  Prompt                                              | Expected   
 console.log('  ' + '-'.repeat(76));
 for (const r of results) {
   const promptShort = r.prompt.slice(0, 45);
-  const match = (r.expected === r.topSkill || (r.expected === null && r.topScore < 0.01)) ? 'YES' : 'NO ';
+  const match = (r.expected === r.topSkill || (r.expected === null && (r.topSkill === null || r.topScore < 0.01))) ? 'YES' : 'NO ';
   console.log(
     `  ${promptShort.padEnd(45)} | ${String(r.expected).padEnd(16)} | ${match.padEnd(10)} | ${r.topScore.toFixed(3).padStart(6)} | ${String(r.latency_ms).padStart(7)}`
   );
@@ -316,6 +336,11 @@ const report = {
   mode: modeFlag,
   rerank: rerankValue,
   expand: expandValue,
+  retrieval: {
+    rrfWeights: DEFAULTS.embeddings.weights,
+    rrfK: DEFAULTS.rrf.k,
+    minBm25Score: modeFlag === 'hybrid' ? retrieveOptions.minBm25Score : null,
+  },
   totalSkills: index.length,
   totalPrompts: total,
   top1Accuracy: parseFloat(top1Accuracy),

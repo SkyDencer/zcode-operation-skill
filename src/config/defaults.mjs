@@ -87,7 +87,25 @@ export function getDefaults() {
       fallbackToFnv1a: true,
       // RRF fusion weights: how much each retrieval signal contributes to the fused score.
       // bm25 + semantic should sum to 1.0 for a proper convex combination.
-      weights: { bm25: 0.4, semantic: 0.6 },
+      //
+      // MEASURED, not assumed. Weight sweep over the 130-prompt real-corpus
+      // benchmark on the 54-skill leaf index the hook actually uses, with the
+      // lexical relevance floor at 0.35 and reranking off (Top-1 hits / 130):
+      //
+      //   bm25/semantic   fnv1a   onnx(MiniLM)
+      //   0.4 / 0.6        72        100     <- the weight this file used to ship
+      //   0.5 / 0.5        85        108
+      //   0.7 / 0.3        97        112
+      //   0.9 / 0.1       123        120
+      //   1.0 / 0.0       126        126     <- shipped default
+      //   BM25 alone      126        126
+      //
+      // The semantic channel is a net negative for Top-1 at every weight and
+      // with both providers, so it is off by default. It is not dead code: set
+      // SKILL_ROUTER_RRF_SEMANTIC_WEIGHT (with the matching BM25 weight) to
+      // bring it back once a provider is shown to help a target metric.
+      // See docs/reports/phase-6-embedding-benchmark.md (Sub-Phase 6.10).
+      weights: { bm25: 1.0, semantic: 0.0 },
     },
     rrf: {
       k: 60,
@@ -100,8 +118,11 @@ export function getDefaults() {
         titleMatch: 3.0,
         // Cosine similarity between prompt and skill description embeddings.
         // Overridden by data/reranker-weights.json when that file is present;
-        // those weights come from a linear regression over the 30-prompt
-        // benchmark (src/scripts/train-reranker-weights.mjs).
+        // those weights come from a least-squares fit over the 30-prompt
+        // benchmark (src/scripts/train-reranker-weights.mjs). That fit's R² is
+        // an IN-SAMPLE fit statistic, and the script's held-out R² is
+        // negative — see the "WHAT THE FIT NUMBERS DO AND DO NOT MEAN" block
+        // in that script before quoting either number.
         embeddingSimilarity: 0.8,
       },
     },
@@ -171,6 +192,8 @@ export function mergeWithEnv(defaults) {
   override('bm25.descriptionWeight', 'SKILL_ROUTER_BM25_DESC_WEIGHT');
   override('bm25.keywordWeight', 'SKILL_ROUTER_BM25_KEYWORD_WEIGHT');
   override('embeddings.dimensions', 'SKILL_ROUTER_EMBED_DIMS');
+  override('embeddings.weights.bm25', 'SKILL_ROUTER_RRF_BM25_WEIGHT');
+  override('embeddings.weights.semantic', 'SKILL_ROUTER_RRF_SEMANTIC_WEIGHT');
   override('rrf.k', 'SKILL_ROUTER_RRF_K');
   override('routing.domainThreshold', 'SKILL_ROUTER_DOMAIN_THRESHOLD');
   override('routing.multiDomainThreshold', 'SKILL_ROUTER_MULTI_DOMAIN_THRESHOLD');

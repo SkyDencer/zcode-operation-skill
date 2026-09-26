@@ -3,15 +3,30 @@
  * benchmark dataset.
  *
  * For each prompt, the script:
- *   1. Runs hybrid retrieval (BM25 + FNV-1a embeddings) to get candidate skills.
+ *   1. Runs hybrid retrieval to get the top-20 candidate skills.
  *   2. Computes all reranker features for each candidate (including
  *      embeddingSimilarity when a provider is available).
  *   3. Labels each candidate: 1 if it appears in the expected answers, 0 otherwise.
  *   4. Solves the OLS normal equations (X'X)^-1 X'y to find optimal weights.
- *   5. Writes the trained weights to data/reranker-weights.json.
+ *   5. Reports R² in-sample AND on a held-out 20% prompt split.
+ *   6. Writes the trained weights to data/reranker-weights.json.
  *
  * The training is deterministic and idempotent: re-running produces the same
  * weights (assuming the benchmark data and index are unchanged).
+ *
+ * WHAT THE FIT NUMBERS DO AND DO NOT MEAN — read before quoting R²:
+ *   - R² reported as "in-sample" is computed on the same (X, y) the weights
+ *     were fitted on. It is a goodness-of-fit statistic, NOT a generalisation
+ *     estimate. The held-out figure is the one to quote.
+ *   - Labels merge "expected" and "acceptable" answers, which are two
+ *     different notions of correctness.
+ *   - The corpus is heavily imbalanced: roughly 9% of the 600 samples are
+ *     positive, so a high R² is mostly explained by the majority class.
+ *   - Candidates are the top-20 of hybrid retrieval, so the reranker can
+ *     never rescue a skill the retriever already ranked below 20.
+ *   - Weights are fitted against FNV-1a cosines but the engine applies them
+ *     regardless of the active provider, so `embeddingSimilarity` is an
+ *     out-of-distribution feature when ONNX is enabled.
  *
  * Usage:
  *   node src/scripts/train-reranker-weights.mjs
@@ -47,6 +62,7 @@ const FEATURE_NAMES = ['exactKeyword', 'bigramOverlap', 'domainMatch', 'titleMat
 function buildTrainingData() {
   const X = [];
   const y = [];
+  const promptIds = [];
 
   for (const prompt of prompts) {
     const promptId = prompt.id;
@@ -75,10 +91,32 @@ function buildTrainingData() {
 
       X.push(row);
       y.push(label);
+      promptIds.push(promptId);
     }
   }
 
-  return { X, y };
+  return { X, y, promptIds };
+}
+
+/**
+ * Split sample indices into a fit set and a held-out set by prompt.
+ *
+ * The split is by prompt, not by sample, so every candidate of a held-out
+ * prompt stays out of the fit. Prompt ids are ordered deterministically and
+ * the last 20% are held out.
+ *
+ * @param {string[]} promptIds — one id per row of X
+ * @param {number} [holdoutFraction=0.2]
+ * @returns {{fit: number[], holdout: number[]}} row indices
+ */
+export function splitByPrompt(promptIds, holdoutFraction = 0.2) {
+  const unique = [...new Set(promptIds)].sort();
+  const holdoutCount = Math.max(1, Math.round(unique.length * holdoutFraction));
+  const holdoutIds = new Set(unique.slice(-holdoutCount));
+  const fit = [];
+  const holdout = [];
+  promptIds.forEach((id, i) => (holdoutIds.has(id) ? holdout : fit).push(i));
+  return { fit, holdout };
 }
 
 /**
@@ -178,19 +216,32 @@ function rSquared(X, y, weights) {
 
 console.log('Training reranker weights on 30-prompt benchmark...\n');
 
-const { X, y } = buildTrainingData();
+const { X, y, promptIds } = buildTrainingData();
 console.log(`  Training samples: ${X.length}`);
 console.log(`  Features: ${FEATURE_NAMES.join(', ')}`);
 console.log(`  Positive labels: ${y.filter((v) => v === 1).length} / ${y.length}`);
+console.log(`  Label rule: expected OR acceptable (two different notions of correctness)`);
+console.log(`  Candidate ceiling: hybrid top-20 per prompt`);
 
 const weights = ols(X, y);
-const r2 = rSquared(X, y, weights);
+const r2InSample = rSquared(X, y, weights);
+
+// Held-out estimate: fit on 80% of the prompts, score the remaining 20%.
+// The in-sample figure above is a fit statistic and is labelled as such.
+const { fit, holdout } = splitByPrompt(promptIds);
+const holdoutWeights = ols(fit.map((i) => X[i]), fit.map((i) => y[i]));
+const r2HeldOut = rSquared(
+  holdout.map((i) => X[i]),
+  holdout.map((i) => y[i]),
+  holdoutWeights
+);
 
 console.log('\nTrained weights:');
 for (let i = 0; i < FEATURE_NAMES.length; i++) {
   console.log(`  ${FEATURE_NAMES[i]}: ${weights[i].toFixed(4)}`);
 }
-console.log(`  R²: ${r2.toFixed(4)}`);
+console.log(`  R² (in-sample, fit statistic): ${r2InSample.toFixed(4)}`);
+console.log(`  R² (held-out, ${holdout.length} of ${X.length} rows): ${r2HeldOut.toFixed(4)}`);
 
 // Write trained weights
 const weightData = {};
