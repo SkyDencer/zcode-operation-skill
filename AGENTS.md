@@ -53,6 +53,15 @@ A phase is complete only when ALL four criteria are met:
 | `src/loader.mjs` | JSON manifest loader |
 | `src/logger.mjs` | Structured jsonl logger |
 | `tests/*.mjs` | Benchmark and unit test scripts |
+| `src/corpus/fetcher.mjs` | Corpus source entry points + clone lifetime (Phase 7.2) |
+| `src/corpus/scan.mjs` | Local directory walk, one record per `SKILL.md` (Phase 7.2) |
+| `src/corpus/git.mjs` | `cloneRepo()` — the only module in `src/corpus/` that shells out (Phase 7.2) |
+| `src/corpus/dedupe.mjs` | Identity + content deduplication keys (Phase 7.2) |
+| `src/corpus/manifest.mjs` | Self-contained fetch manifest (`fetch --to` / `import --from-manifest`) (Phase 7.2) |
+| `src/corpus/validator.mjs` | Corpus validation rules (Phase 7.2) |
+| `src/corpus/importer.mjs` | Corpus import + `logs/corpus-import-*.json` (Phase 7.2) |
+| `src/cli/corpus.mjs` | `corpus fetch/validate/stats/import` subcommand (Phase 7.2) |
+| `src/cli/corpus-args.mjs` | Usage block and flag parsing helper for `corpus` (Phase 7.2) |
 | `data/mock-skills/*.json` | Fixture skill manifests |
 | `docs/*.md` | Project documentation |
 | `.zcode-plugin/plugin.json` | Plugin manifest |

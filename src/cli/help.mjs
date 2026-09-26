@@ -20,6 +20,7 @@ Subcommands:
   stats      Show corpus statistics (counts, domains, keywords)
   analytics  Show usage analytics from routing logs
   import     Bulk import skills from a directory
+  corpus     Fetch, validate, measure and import external skill corpora
   sync       Sync project skills to the ZCode mirror
   deploy     Deploy router skills to the ZCode mirror
   sources    List current sources and skill counts
@@ -45,6 +46,10 @@ Examples:
   node bin/skill-router.mjs tune --apply --dry-run
   node bin/skill-router.mjs tune --status
   node bin/skill-router.mjs tune --rollback
+  node bin/skill-router.mjs corpus stats data/skills
+  node bin/skill-router.mjs corpus validate ./some-skill-tree
+  node bin/skill-router.mjs corpus fetch ./some-skill-tree --to tmp/fetch
+  node bin/skill-router.mjs corpus import ./some-skill-tree --target tmp/skills --force
 
 Options:
   --skills-dir <dir>   Override the default skills directory (default: data/skills)

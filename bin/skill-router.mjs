@@ -5,7 +5,7 @@
  * Usage:
  *   node bin/skill-router.mjs <subcommand> [options]
  *
- * Subcommands (18 total -- see `node bin/skill-router.mjs help`):
+ * Subcommands (19 total -- see `node bin/skill-router.mjs help`):
  *   list       List skills grouped by domain with quality scores
  *   add        Add a new skill from a SKILL.md file
  *   remove     Remove a skill by name
@@ -15,6 +15,7 @@
  *   stats      Show corpus statistics
  *   analytics  Show usage analytics from routing logs
  *   import     Bulk import skills from a directory
+ *   corpus     Fetch, validate, measure and import external skill corpora
  *   sync       Sync project skills to the ZCode mirror
  *   deploy     Deploy router skills to the ZCode mirror
  *   sources    List current sources and skill counts
@@ -49,7 +50,16 @@ try {
   const { pathToFileURL } = await import('node:url');
   const mod = await import(pathToFileURL(resolvedPath).href);
   if (typeof mod.main === 'function') {
-    mod.main(process.argv.slice(3));
+    const result = mod.main(process.argv.slice(3));
+    // `corpus` is the first subcommand with an async main(). A synchronous
+    // subcommand returns undefined and is unaffected; a rejected promise is
+    // reported rather than becoming an unhandled rejection.
+    if (result && typeof result.then === 'function') {
+      result.catch((err) => {
+        console.error(`Error running "${subcommand}": ${err.message}`);
+        process.exit(1);
+      });
+    }
   } else {
     console.error(`Subcommand "${subcommand}" has no exported main() function.`);
     process.exit(1);

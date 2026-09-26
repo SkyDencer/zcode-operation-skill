@@ -133,11 +133,11 @@ calls, and no persistent state beyond the JSON skill index.
 │  │  .mjs        │  │  .mjs        │  │  validate, reindex,  │  │
 │  │              │  │              │  │  benchmark, stats,   │  │
 │  │  populate    │  │  LRU + TTL,  │  │  analytics, import,  │  │
-│  │  Domains from│  │  5-min TTL,  │  │  sync, sources,      │  │
-│  │  skills      │  │  fingerprint │  │  verify, doctor,     │  │
-│  │  match-      │  │  keyed       │  │  help                │  │
+│  │  Domains from│  │  5-min TTL,  │  │  corpus, sync,       │  │
+│  │  skills      │  │  fingerprint │  │  sources, verify,    │  │
+│  │  match-      │  │  keyed       │  │  doctor, help        │  │
 │  │  DomainsTo   │  │              │  │                      │  │
-│  │  Query()     │  │  Key:        │  │  18 subcommands      │  │
+│  │  Query()     │  │  Key:        │  │  19 subcommands      │  │
 │  └──────────────┘  │  sha256+fp   │  └──────────────────────┘  │
 │                     └──────────────┘                               │
 └──────────────────────┬──────────────────────────────────────────┘
@@ -502,9 +502,55 @@ calls, and no persistent state beyond the JSON skill index.
 ### CLI (`bin/skill-router.mjs` + `src/cli/`)
 
 - Entry point at `bin/skill-router.mjs` routes to subcommand modules.
-- Subcommands (18 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `analytics`, `import`, `sync`, `deploy`, `sources`, `verify`, `doctor`, `feedback`, `health`, `tune`, `help`.
-- `src/cli/` holds 20 modules; `tune-core.mjs` and `tune-guard.mjs` are helpers of `tune.mjs`, not subcommands.
-- Each subcommand is a separate module in `src/cli/` with an exported `main(argv)` function.
+- Subcommands (19 total): `list`, `add`, `remove`, `validate`, `reindex`, `benchmark`, `stats`, `analytics`, `import`, `corpus`, `sync`, `deploy`, `sources`, `verify`, `doctor`, `feedback`, `health`, `tune`, `help`.
+- `src/cli/` holds 22 modules; `tune-core.mjs`, `tune-guard.mjs` and `corpus-args.mjs` are helpers of `tune.mjs` and `corpus.mjs`, not subcommands.
+- Each subcommand is a separate module in `src/cli/` with an exported `main(argv)` function. `corpus.mjs` is the only one with an async `main()`; `bin/skill-router.mjs` attaches a `.catch()` to a thenable return so a rejection is reported rather than becoming an unhandled rejection.
+
+### Corpus Tooling (`src/corpus/`, Sub-Phase 7.2)
+
+Fetches, validates and imports large external skill corpora, so 7.3 can
+assemble a real 200-skill corpus without hand-editing files. Full detail in
+`docs/reports/phase-7.2-corpus-tooling.md`.
+
+- **fetcher.mjs** — the source entry points and their **clone-lifetime
+  contracts**, which is the whole design here. `fetchFromGit(url, opts)` clones
+  and removes the clone before returning, so its records are metadata only.
+  `openSources(sources, opts)` returns `{ records, release() }` and keeps clones
+  alive until the caller releases them; `importSkills()` uses it and copies
+  inside a `finally` that calls `release()`. `fetchFromSources` is
+  `openSources` plus an immediate `release`. A git source is only readable while
+  its clone exists.
+- **scan.mjs** — the local directory walk. One record per `SKILL.md`, carrying
+  `path`, `dir`, `relPath` (path within the source root) and `contentHash`.
+- **git.mjs** — `cloneRepo()`, the only module in `src/corpus/` that shells
+  out. Shallow-clones with `-c core.autocrlf=false` so an import reproduces the
+  committed bytes. Never removes a clone it created; removes its own temp dir
+  when the clone fails.
+- **dedupe.mjs** — two keys: **identity** (real path for local; normalized repo
+  ref + path *within* the clone for git) and **content** (name + SHA-256).
+  First occurrence wins; every drop is a `duplicate skill skipped:` warning.
+  Keying on real path alone cannot collapse two clones of one repository, since
+  each descriptor gets its own `mkdtemp` parent.
+- **manifest.mjs** — the self-contained manifest `corpus fetch --to` writes and
+  `corpus import --from-manifest` reads. Each record carries the skill
+  directory as a `files` map, not a path. A non-UTF-8 file is omitted with a
+  warning rather than corrupted; reading is strict about `kind`/`version`.
+- **validator.mjs** — `validateSkill(path)` delegates to
+  `validateSkillContent(content)`, which returns `{valid, issues, parsed}`
+  under four rules: frontmatter present, name present, description 40-400
+  characters, name matching the `{domain}-{specific}` shape (`NAME_SHAPE`).
+  The content form exists for manifest records, which have no file to read.
+  Keyword count, content tokens and domain registration are deliberately not
+  enforced here; `src/quality/validator.mjs` does that for the in-project
+  corpus.
+- **importer.mjs** — `importSkills(sources, targetDir, opts)` validates every
+  skill, never overwrites without `opts.force`, copies the whole skill
+  directory, releases every clone, writes
+  `logs/corpus-import-{YYYY-MM-DD}.json`. Also `corpusStats(dir)`.
+- **CLI** — `corpus fetch|validate|stats|import` (`src/cli/corpus.mjs` plus the
+  `corpus-args.mjs` helper). `stats` and `validate` share the invalid-count
+  rule and both exit 1 on a non-zero invalid count. A flag with no value is a
+  usage error.
 
 ## Skill Index Schema
 
