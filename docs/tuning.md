@@ -220,6 +220,16 @@ node bin/skill-router.mjs benchmark --mode bm25
 
 To reset to the default weights, delete `data/weights.json` — `defaults.mjs` will fall back to `name: 3, description: 2, keywords: 1`.
 
+## Fixtures
+
+Telemetry fixture files under `tests/telemetry/fixtures/` are hand-crafted
+to encode a known outcome distribution (3 negative, 3 positive, 1 unknown
+decision) that downstream tests assert against. When the default embedding
+provider changes, `scripts/regenerate-fixtures.mjs` re-evaluates them against
+the live benchmark and writes date-stamped copies alongside the originals.
+With the shipped default (`fnv1a`, `semantic=0`) the hand-crafted fixtures
+remain valid and are never overwritten.
+
 ## Files
 
 | Path | Purpose |
