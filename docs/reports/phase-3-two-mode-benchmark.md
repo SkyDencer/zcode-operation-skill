@@ -68,12 +68,12 @@ For each prompt:
 | Router Selection Accuracy (explicit) | 1.0000 (15/15) |
 | Top-1 Accuracy (implicit) | 1.0000 (25/25) |
 | Overall Success Rate | 1.0000 (40/40) |
-| Explicit Latency p50 | 3 ms |
-| Explicit Latency p95 | 14 ms |
-| Implicit Latency p50 | 5 ms |
-| Implicit Latency p95 | 9 ms |
-| Overall Latency p50 | 5 ms |
-| Overall Latency p95 | 9 ms |
+| Explicit Latency p50 | 1 ms |
+| Explicit Latency p95 | 4 ms |
+| Implicit Latency p50 | 2 ms |
+| Implicit Latency p95 | 3 ms |
+| Overall Latency p50 | 2 ms |
+| Overall Latency p95 | 3 ms |
 
 **All 40 prompts passed.** Both explicit and implicit routing modes achieve 100% accuracy on this dataset.
 
@@ -84,5 +84,5 @@ For each prompt:
 - Ambiguous prompts are handled gracefully: either routing path yields an acceptable skill.
 - Both explicit and implicit paths complete in under 1 ms median, well within the hook timeout budget.
 
-Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260926T012931.json`
+Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260926T065206.json`
 This report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-3-two-mode-benchmark.md`

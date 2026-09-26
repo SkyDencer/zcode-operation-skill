@@ -81,21 +81,40 @@ export function getDefaults() {
       dimensions: 256,
       ngramSizes: [2, 3],
       hashSeed: 0x811c9dc5,
-      // Provider type: 'fnv1a' (default, zero-dependency) or 'onnx' (requires
-      // model download). When set to 'onnx' and the model is not cached, the
-      // hook falls back to 'fnv1a'.
+      // Provider mode. The default, 'bm25-only', is the lexical mode: the
+      // FNV-1a n-gram provider with the semantic RRF channel at 0.0, i.e. no
+      // semantic backend in the request path at all. 'onnx' selects the
+      // pre-trained model and is EXPERIMENTAL (see `providers` below and
+      // docs/reports/phase-7.1-semantic-decision.md).
       //
-      // Sub-Phase 6.10 decision, measured on the 130-prompt real corpus
-      // (docs/reports/phase-6-embedding-benchmark.md): ONNX stays opt-in.
-      // With the semantic channel switched on (bm25 0.4 / semantic 0.6) ONNX
+      // Phase 7.1 decision D29, on the Phase 6.10 measurements
+      // (docs/reports/phase-6-embedding-benchmark.md): ONNX stays in the
+      // tree, is forced off by default, and is marked experimental. With
+      // the semantic channel switched on (bm25 0.4 / semantic 0.6) ONNX
       // beats FNV-1a on Set Recall@5 by 5.18 pp (0.9052 vs 0.8534 over the
       // 116 prompts that name a skill) but costs 1445 ms median latency
       // against the 100 ms the decision rule allows — 14x over. Both are
-      // worse than pure BM25 (1.0000). Keeping 'fnv1a' as the default also
+      // worse than pure BM25 (1.0000). Keeping the default lexical also
       // keeps the default path free of a 591 MB dependency tree and a
       // 469 ms first-prompt model load.
-      provider: 'fnv1a',
+      provider: 'bm25-only',
       fallbackToFnv1a: true,
+      // Provider registry. `provider` above names one of these keys.
+      // `type` is what createProvider() constructs; `experimental` drives
+      // the `experimental_mode` telemetry event in
+      // src/core/embeddings/experimental.mjs; `risk` is the label that
+      // event carries.
+      providers: {
+        'bm25-only': { type: 'fnv1a', experimental: false, risk: null },
+        // Alias kept so `SKILL_ROUTER_EMBEDDING_PROVIDER=fnv1a` and
+        // createProvider('fnv1a') keep working unchanged.
+        fnv1a: { type: 'fnv1a', experimental: false, risk: null },
+        onnx: {
+          type: 'onnx',
+          experimental: true,
+          risk: 'untested_scale',
+        },
+      },
       // RRF fusion weights: how much each retrieval signal contributes to the fused score.
       // bm25 + semantic should sum to 1.0 for a proper convex combination.
       //

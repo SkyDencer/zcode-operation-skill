@@ -5,17 +5,24 @@
  * module turns the `embeddings` block of the configuration into a provider
  * instance that is safe to use right now:
  *
- *   - the requested provider is constructed and probed with `isAvailable()`;
+ *   - the configured mode ('bm25-only' | 'fnv1a' | 'onnx') is mapped through
+ *     the registry in `config.embeddings.providers` to a provider type, which
+ *     is then constructed and probed with `isAvailable()`;
  *   - when the probe fails (e.g. `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` with
  *     no model in the transformers cache) and `fallbackToFnv1a` is not
  *     disabled, the FNV-1a provider is returned instead;
  *   - when no provider can be produced, `provider` is null and the caller
  *     should degrade to pure BM25.
  *
+ * `requested` is the mode the configuration asked for; `used` is the provider
+ * type that was actually constructed. They differ only for alias modes such as
+ * `bm25-only`, which the registry maps onto the FNV-1a provider.
+ *
  * Resolution never loads a model: `isAvailable()` is a filesystem probe, so
  * a cold ONNX cache costs one directory scan and no network access.
  */
 import { createProvider } from './provider.mjs';
+import { normalizeMode, resolveProviderType } from './experimental.mjs';
 
 /**
  * Resolve a usable embedding provider from configuration.
@@ -33,7 +40,12 @@ export function resolveProvider(config = {}, options = {}) {
   const onWarn = options.onWarn ?? ((msg) => console.error(msg));
 
   const embeddings = config.embeddings ?? {};
-  const requested = String(embeddings.provider ?? 'fnv1a').toLowerCase().trim();
+  // `requested` is the configured MODE ('bm25-only' | 'fnv1a' | 'onnx');
+  // `type` is the provider the registry maps it onto. They differ only for
+  // mode names that are aliases (Phase 7.1 decision D29: 'bm25-only' and
+  // 'fnv1a' both build the FNV-1a provider).
+  const requested = normalizeMode(embeddings.provider ?? 'fnv1a');
+  const type = resolveProviderType({ embeddings }, requested);
   const fallbackToFnv1a = embeddings.fallbackToFnv1a !== false;
 
   /** @type {string|null} */
@@ -52,16 +64,16 @@ export function resolveProvider(config = {}, options = {}) {
   };
 
   try {
-    const provider = factory(requested, options.providerOptions ?? {});
+    const provider = factory(type, options.providerOptions ?? {});
     if (typeof provider?.isAvailable === 'function' && !provider.isAvailable()) {
       throw new Error('isAvailable() returned false — model is not cached');
     }
-    return { provider, requested, used: requested, fellBack: false, warning: null };
+    return { provider, requested, used: type, fellBack: false, warning: null };
   } catch (err) {
     warn('not usable', err);
   }
 
-  if (!fallbackToFnv1a || requested === 'fnv1a') {
+  if (!fallbackToFnv1a || type === 'fnv1a') {
     // FNV-1a itself failed, or the operator disabled the fallback:
     // the caller degrades to pure BM25.
     return { provider: null, requested, used: 'none', fellBack: false, warning };

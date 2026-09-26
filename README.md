@@ -15,7 +15,7 @@ It solves three problems:
 2. **Relevance** -- BM25 ranking surfaces the most appropriate skill for the current task.
 3. **Performance** -- fully local, zero network calls, median latency around 2 ms.
 
-The system is intentionally lightweight: fully local, zero network calls, and no persistent state beyond a pre-built JSON index. The default retrieval path needs nothing installed. Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used **only** by the opt-in ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`); it is not required to run the plugin. See [docs/embeddings.md](./docs/embeddings.md) and the decision in `docs/decision-dictionary.md` (D28).
+The system is intentionally lightweight: fully local, zero network calls, and no persistent state beyond a pre-built JSON index. The default retrieval path needs nothing installed. **Retrieval is BM25-only by default.** Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used **only** by the experimental ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`), which is **not recommended for use** — on the measured corpus it is slower and less accurate than the default, and every use of it emits an `experimental_mode` event. It is not required to run the plugin. See [docs/embeddings.md](./docs/embeddings.md) and the decisions in `docs/decision-dictionary.md` (D28, D29).
 
 ## One-Command Install
 
@@ -243,6 +243,12 @@ Key findings from scale benchmarks:
 
 Full scale report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
 
+## Embeddings
+
+**BM25-only is the default. The semantic (ONNX) path is experimental and not recommended.**
+
+`embeddings.provider` defaults to `bm25-only` in `src/config/defaults.mjs` — lexical retrieval with no semantic backend in the request path. `fnv1a` is kept as an accepted alias of the same provider. The `onnx` provider stays in the tree so the decision can be revisited without rebuilding anything, but it is not a supported configuration: setting `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` makes the hook log `{"event":"experimental_mode","mode":"onnx","risk":"untested_scale"}` on every invocation and warn on stderr. The conditions under which ONNX would be reconsidered are in [docs/embeddings.md](./docs/embeddings.md) and the decision record is [docs/reports/phase-7.1-semantic-decision.md](./docs/reports/phase-7.1-semantic-decision.md).
+
 ## Embedding Benchmark (Phase 6)
 
 Phase 6 evaluated replacing the FNV-1a n-gram embeddings with a real ONNX transformer model (Xenova/all-MiniLM-L6-v2, 384-dim). The comparison below is the decision Sub-Phase 6.10 was written for, on the 130-prompt real corpus against the 60-entry index.
@@ -284,13 +290,13 @@ The retriever rebuilds the skill vectors on every prompt, which is where the ~1.
 
 ### Decision
 
-**The default provider remains FNV-1a, and the semantic channel remains at `semantic: 0.0`.**
+**The default provider remains FNV-1a, and the semantic channel remains at `semantic: 0.0`.** Phase 7.1 (D29) recorded this as the shipped default: the configuration key is now spelled `bm25-only`, and the `onnx` mode is flagged experimental.
 
 The rule was "switch to ONNX only if Set Recall improves by more than 5 pp *and* latency stays under 100 ms". ONNX does beat FNV-1a by 5.18 pp Set Recall@5 with the semantic channel on, so it **passes the accuracy clause**; what decided against shipping is a comparison the rule omits — 0.9052 Set Recall@5 against the pure-BM25 configuration that actually ships at 1.0000, a regression rather than an improvement. It also costs 1445 ms median latency, 14x the 100 ms budget and about seven times `hook.timeoutMs` (200). That 200 ms is the *internal race timer* the hybrid branch is wrapped in, not the budget ZCode gives the hook: the hook is registered with 3500 ms at `hooks/hooks.json:12`, so a slow ONNX prompt degrades to pure BM25 rather than stalling — it costs accuracy, not availability. Switching would trade a working default for a regression plus 591 MB of packages and a 469 ms first-prompt model load.
 
-ONNX remains available as an opt-in (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`), and the semantic channel is reachable through `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`. Note that "opt-in" describes the *provider*: `@huggingface/transformers` is declared in `dependencies`, so its 591 MB install is paid by every consumer whether or not ONNX is ever selected. A paraphrase test set and cached skill vectors are what would change the answer — see the report.
+ONNX remains selectable for measurement (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`) and the semantic channel is reachable through `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`, but both are experimental: expect the `experimental_mode` event, and expect accuracy to drop on this corpus. Note that the experimental label describes the *provider* — `@huggingface/transformers` is declared in `dependencies`, so its 591 MB install is paid by every consumer whether or not ONNX is ever selected. A paraphrase test set, cached skill vectors, and an optional (not hard) dependency are what would change the answer — see [docs/embeddings.md](./docs/embeddings.md).
 
-Full results: [docs/reports/phase-6-embedding-benchmark.md](./docs/reports/phase-6-embedding-benchmark.md)
+Full results: [docs/reports/phase-6-embedding-benchmark.md](./docs/reports/phase-6-embedding-benchmark.md). Decision: [docs/reports/phase-7.1-semantic-decision.md](./docs/reports/phase-7.1-semantic-decision.md).
 
 ## CLI Reference
 
@@ -466,10 +472,10 @@ node bin/skill-router.mjs analytics --json   # machine-readable output
 
 - **Synonym expansion degrades Top-1** on the real corpus (80.0% vs 92.31% with expansion off). Keep expansion off by default.
 - **Synthetic scale accuracy is low** due to prompt-skill distribution mismatch, not algorithm failure. The real corpus achieves 92.31% Top-1 over the 60-entry benchmark index and 96.92% over the 54-leaf corpus the hook searches.
-- **FNV-1a n-gram embeddings** (256-dim) cannot represent meaning: "add a login page" and "implement user authentication" are unrelated to it. The ONNX provider added in Phase 6 can, but on the current corpus it costs accuracy and 1.4 s per prompt, so it stays opt-in.
+- **FNV-1a n-gram embeddings** (256-dim) cannot represent meaning: "add a login page" and "implement user authentication" are unrelated to it. The ONNX provider added in Phase 6 can, but on the current corpus it costs accuracy and 1.4 s per prompt, so it is experimental and not recommended for use.
 - **Hierarchical routing is slower** than flat at all corpus sizes. It is deprecated as default but remains available experimentally.
 - **Disable mechanism is filesystem-based** and depends on ZCode's skill discovery behavior. It may not work in all ZCode configurations.
-- **Semantic channel off by default** -- a pre-trained ONNX provider ships (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`), but Sub-Phase 6.10 measured it below the pure-BM25 configuration on Set Recall and far over the latency budget, so the default path is lexical (BM25) only. See the Embedding Benchmark section.
+- **Semantic channel off by default** -- a pre-trained ONNX provider ships (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`) but is **experimental and not recommended**: Sub-Phase 6.10 measured it below the pure-BM25 configuration on Set Recall and far over the latency budget, and Phase 7.1 (D29) marked the mode experimental, so the default path is lexical (BM25) only. See the Embeddings and Embedding Benchmark sections.
 - **Single-runner cache** -- the query cache shows <1% hit rate on single-run benchmarks because prompts are not repeated. Cache benefits accumulate in long-running sessions.
 
 ## Project Structure
@@ -651,6 +657,7 @@ zcode-operation-skill/
 | 4 | Log Rotation & Cleanup | Implement 30-day log rotation, disk-space monitoring, stale cache eviction | Planned |
 | 5 | Feedback Loop | Collect implicit user corrections (dismissed/selected skills); adjust field weights from feedback | Complete |
 | 6 | Semantic Embedding Upgrade | Evaluate ONNX transformer (MiniLM-L6-v2) vs FNV-1a; disable semantic channel by default due to no Set Recall improvement; keep FNV-1a as default | Complete |
+| 7.1 | Semantic decision close-out (D29) | Default provider mode renamed `bm25-only`; ONNX marked experimental with an `experimental_mode` telemetry event; revisit conditions documented | Complete |
 | 7 | Polishing | Edge-case hardening, error recovery, comprehensive documentation | Planned |
 
 See [docs/implementation-plan.md](./docs/implementation-plan.md) for full ordering rationale.

@@ -77,9 +77,17 @@ const manifest = JSON.parse(readFileSync(resolve(REGEN, 'manifest.json'), 'utf-8
 const config = getConfig();
 const liveWeights = config.embeddings.weights;
 
+// Phase 7.1 (D29) renamed the default mode to 'bm25-only', which the provider
+// registry maps onto the FNV-1a provider. The manifest therefore records BOTH:
+// `requested` is the configured mode (what must track getConfig()) and `used`
+// is the provider type that was constructed.
 assert(
-  manifest.provider.used === config.embeddings.provider,
-  `manifest provider "${manifest.provider.used}" matches default "${config.embeddings.provider}"`
+  manifest.provider.requested === config.embeddings.provider,
+  `manifest requested mode "${manifest.provider.requested}" matches default "${config.embeddings.provider}"`
+);
+assert(
+  manifest.provider.used === 'fnv1a',
+  `manifest used provider "${manifest.provider.used}" is the fnv1a provider behind bm25-only`
 );
 assert(
   manifest.rrfWeights.bm25 === liveWeights.bm25 && manifest.rrfWeights.semantic === liveWeights.semantic,

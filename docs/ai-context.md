@@ -223,12 +223,30 @@ calls, and no persistent state beyond the JSON skill index.
 ### Provider Resolution (`src/core/embeddings/resolve.mjs`)
 
 - `resolveProvider(config)` turns the `embeddings` config block into a usable
-  provider: it constructs the requested provider, probes it with
+  provider: it maps the configured *mode* through the `embeddings.providers`
+  registry to a provider *type*, constructs it, probes it with
   `isAvailable()` (a filesystem check — no model load, no network), and when
   the probe fails and `embeddings.fallbackToFnv1a` is not disabled, returns the
   FNV-1a provider and a `warning` string the hook prints to stderr.
+- `requested` is the configured mode (`bm25-only` by default), `used` is the
+  provider type actually constructed (`fnv1a` by default).
 - Returns `provider: null` when nothing is usable, and the caller degrades to
   pure BM25. The hook never fails because of a missing semantic backend.
+
+### Experimental Provider Policy (`src/core/embeddings/experimental.mjs`)
+
+- Phase 7.1, decision D29. The registry in `src/config/defaults.mjs`
+  (`embeddings.providers`) maps each mode onto a provider `type` and carries
+  `experimental` / `risk` flags: `bm25-only` -> fnv1a (not experimental),
+  `fnv1a` -> fnv1a (alias), `onnx` -> onnx with `experimental: true` and
+  `risk: 'untested_scale'`.
+- `emitExperimentalMode(config)` writes the telemetry event
+  `{ event: 'experimental_mode', mode: 'onnx', risk: 'untested_scale' }` and a
+  stderr warning when the selected mode is experimental. The hook calls it at
+  module scope, before the decision path. It never throws: a failure to write
+  the event is dropped, never surfaced as a routing failure.
+- Rationale and the exact Phase 6 numbers:
+  `docs/reports/phase-7.1-semantic-decision.md`.
 
 ### Embedding Engine (`src/core/embeddings/engine.mjs`)
 
@@ -637,7 +655,7 @@ All tunable parameters can be overridden via `SKILL_ROUTER_*` environment variab
 | `SKILL_ROUTER_BM25_DESC_WEIGHT` | 2 | Description field weight multiplier |
 | `SKILL_ROUTER_BM25_KEYWORD_WEIGHT` | 1 | Keywords field weight multiplier |
 | `SKILL_ROUTER_EMBED_DIMS` | 256 | Embedding dimensionality |
-| `SKILL_ROUTER_EMBEDDING_PROVIDER` | `fnv1a` | Embedding provider: `fnv1a` or `onnx`. Resolved once at hook start; falls back to `fnv1a` with a warning when the ONNX model is not cached |
+| `SKILL_ROUTER_EMBEDDING_PROVIDER` | `bm25-only` | Embedding provider mode: `bm25-only` (default; `fnv1a` is an accepted alias of the same FNV-1a provider) or `onnx`. Resolved once at hook start through the registry in `embeddings.providers`; falls back to FNV-1a with a warning when the ONNX model is not cached. `onnx` is **experimental** (Phase 7.1, D29): it emits `{"event":"experimental_mode","mode":"onnx","risk":"untested_scale"}` and a stderr warning |
 | `SKILL_ROUTER_RRF_K` | 60 | RRF fusion constant |
 | `SKILL_ROUTER_RRF_BM25_WEIGHT` | 1.0 | Weighted-RRF BM25 weight (convex combination with the semantic weight) |
 | `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT` | 0.0 | Weighted-RRF semantic weight; 0 skips the embedding provider entirely |
@@ -658,7 +676,7 @@ List parameters accept comma-separated values (e.g., `SKILL_ROUTER_BM25_NAME_WEI
 
 ## Constraints
 
-- **No required dependencies.** The default path ships as plain ESM and needs no `npm install`. Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used only by the opt-in ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`); with the shipped default (`fnv1a`, semantic weight 0.0) it is never loaded. See `docs/embeddings.md` and decision D28.
+- **No required dependencies.** The default path ships as plain ESM and needs no `npm install`. Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used only by the experimental ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`); with the shipped default (`bm25-only`, semantic weight 0.0) it is never loaded. See `docs/embeddings.md` and decisions D28 and D29.
 - **No network calls.** All data is local to the project directory.
 - **Deterministic.** Same input always produces the same ranking.
 - **Memory bounded.** The index is loaded into memory at build time; capped at

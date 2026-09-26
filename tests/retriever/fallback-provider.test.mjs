@@ -90,11 +90,21 @@ const fnv1aFactory = createProvider('fnv1a');
 assert(fnv1aFactory.name === 'fnv1a', 'factory returns fnv1a provider');
 assert(fnv1aFactory.isAvailable() === true, 'fnv1a provider is available');
 
-// 6. Verify that config.embeddings.provider defaults to 'fnv1a'
-console.log('\n6. Config defaults to fnv1a provider');
+// 6. Verify that config.embeddings.provider defaults to the lexical 'bm25-only' mode
+console.log('\n6. Config defaults to the bm25-only mode (FNV-1a provider)');
 const defaults = getDefaults();
-assert(defaults.embeddings.provider === 'fnv1a', 'embeddings.provider defaults to fnv1a');
-assert(defaults.embeddings.fallbackToFnv1a === true, 'fallbackToFnv1a defaults to true');
+assert(
+  defaults.embeddings.provider === 'bm25-only',
+  `embeddings.provider defaults to bm25-only (got ${defaults.embeddings.provider})`,
+);
+assert(
+  defaults.embeddings.providers['bm25-only'].type === 'fnv1a',
+  'the bm25-only mode maps onto the fnv1a provider',
+);
+assert(
+  defaults.embeddings.fallbackToFnv1a === true,
+  'fallbackToFnv1a defaults to true',
+);
 // NOTE: The RRF weights default to bm25=1.0, semantic=0.0 because the
 // Phase 6.10 benchmark sweep showed semantic embedding similarity was a
 // net negative for Top-1 at every weight tested against both providers.

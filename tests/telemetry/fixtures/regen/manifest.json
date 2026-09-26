@@ -2,7 +2,7 @@
   "generatedBy": "scripts/regenerate-fixtures.mjs",
   "fixtureEpoch": "2026-09-26T00:00:00.000Z",
   "provider": {
-    "requested": "fnv1a",
+    "requested": "bm25-only",
     "used": "fnv1a",
     "fellBack": false
   },

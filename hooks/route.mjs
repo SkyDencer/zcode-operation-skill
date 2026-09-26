@@ -10,6 +10,8 @@
  * Embedding provider is resolved from config.embeddings.provider with
  * automatic fallback to Fnv1aProvider when the configured provider
  * (e.g. ONNX) is not available and config.embeddings.fallbackToFnv1a is true.
+ * The default mode is 'bm25-only' (Phase 7.1 decision D29); the experimental
+ * 'onnx' mode emits an `experimental_mode` event and a stderr warning.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -24,6 +26,7 @@ import { trackPrompt } from '../src/telemetry/session-tracker.mjs';
 import { recordSignal } from '../src/telemetry/signals.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { resolveProvider } from '../src/core/embeddings/resolve.mjs';
+import { emitExperimentalMode } from '../src/core/embeddings/experimental.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
@@ -37,12 +40,16 @@ const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
 
-// Resolve the embedding provider from config. When
-// SKILL_ROUTER_EMBEDDING_PROVIDER=onnx and the model is not cached,
-// resolveProvider() logs a warning and hands back the FNV-1a provider;
-// when no provider is usable at all the hook degrades to pure BM25.
-// Resolution is a filesystem probe only — it never loads a model.
+// Resolve the embedding provider from config. When the model is not cached,
+// resolveProvider() logs a warning and hands back the FNV-1a provider; when
+// no provider is usable at all the hook degrades to pure BM25. Resolution is
+// a filesystem probe only — it never loads a model.
 const providerResolution = resolveProvider(config);
+
+// Phase 7.1 (D29): the default mode is 'bm25-only'; the experimental 'onnx'
+// mode emits `experimental_mode` telemetry before the decision path. Fail-open:
+// the emitter never throws, and this guard keeps the hook at exit 0.
+await emitExperimentalMode(config).catch(() => {});
 
 /**
  * Get the active embedding provider, or null when the caller should fall
