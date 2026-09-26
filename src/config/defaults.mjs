@@ -81,8 +81,19 @@ export function getDefaults() {
       dimensions: 256,
       ngramSizes: [2, 3],
       hashSeed: 0x811c9dc5,
-      // Provider type: 'fnv1a' (default, zero-dependency) or 'onnx' (requires model download).
-      // When set to 'onnx' and the model is not cached, the hook falls back to 'fnv1a'.
+      // Provider type: 'fnv1a' (default, zero-dependency) or 'onnx' (requires
+      // model download). When set to 'onnx' and the model is not cached, the
+      // hook falls back to 'fnv1a'.
+      //
+      // Sub-Phase 6.10 decision, measured on the 130-prompt real corpus
+      // (docs/reports/phase-6-embedding-benchmark.md): ONNX stays opt-in.
+      // With the semantic channel switched on (bm25 0.4 / semantic 0.6) ONNX
+      // beats FNV-1a on Set Recall@5 by 5.18 pp (0.9052 vs 0.8534 over the
+      // 116 prompts that name a skill) but costs 1445 ms median latency
+      // against the 100 ms the decision rule allows — 14x over. Both are
+      // worse than pure BM25 (1.0000). Keeping 'fnv1a' as the default also
+      // keeps the default path free of a 591 MB dependency tree and a
+      // 469 ms first-prompt model load.
       provider: 'fnv1a',
       fallbackToFnv1a: true,
       // RRF fusion weights: how much each retrieval signal contributes to the fused score.
@@ -105,6 +116,8 @@ export function getDefaults() {
       // SKILL_ROUTER_RRF_SEMANTIC_WEIGHT (with the matching BM25 weight) to
       // bring it back once a provider is shown to help a target metric.
       // See docs/reports/phase-6-embedding-benchmark.md (Sub-Phase 6.10).
+      // At 0.4/0.6 on the 130-prompt corpus, Set Recall@5 is 1.0000 (BM25
+      // alone), 0.8534 (FNV-1a) and 0.9052 (ONNX).
       weights: { bm25: 1.0, semantic: 0.0 },
     },
     rrf: {

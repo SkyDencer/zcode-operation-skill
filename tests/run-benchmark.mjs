@@ -7,169 +7,76 @@
  * Usage:
  *   node tests/run-benchmark.mjs [--mode bm25|hybrid] [--rerank on|off]
  *   node tests/run-benchmark.mjs --corpus real|synthetic-100|synthetic-200|synthetic-300|synthetic-500 [options]
+ *   node tests/run-benchmark.mjs --corpus real --router flat|hybrid [--provider fnv1a|onnx]
+ *
+ * `--router flat` is the pure-BM25 path (identical to `--mode bm25`); the two
+ * spellings exist because the benchmark is quoted both ways in the reports.
+ * `--provider` selects the embedding provider handed to hybridRetrieve(); it
+ * is reported in the JSON output so a run cannot be mistaken for a different
+ * provider than the one it names. Set Recall@5 is computed for every mode
+ * (see tests/benchmark/metrics.mjs).
  */
-import { readFileSync, writeFileSync, mkdirSync, statSync, readdirSync, existsSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { rankSkills } from '../src/index.mjs';
 import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
 import { QueryCache } from '../src/core/cache/query-cache.mjs';
 import { buildSynonymMap } from '../src/core/retrieval/synonyms.mjs';
+import { createProvider } from '../src/core/embeddings/provider.mjs';
 import { now, percentile } from '../src/utils/time.mjs';
 import { getDefaults } from '../src/config/defaults.mjs';
-import { spawn, spawnSync } from 'node:child_process';
-import { promisify } from 'node:util';
+import { getConfig } from '../src/config/env.mjs';
+import { loadSkillsFromDir, ensureSyntheticCorpus, SYNTHETIC_DIR } from './benchmark/corpus.mjs';
+import { gradePrompt, summarizeSetRecall } from './benchmark/metrics.mjs';
+import { printReport } from './benchmark/report.mjs';
 
-const exec = promisify(spawn);
+const INDEX_PATH = resolve('data/skill-index.json');
+const LOGS_DIR = resolve('logs');
+const REPORT_DATE = now().slice(0, 10);
+const REPORT_PATH = resolve(LOGS_DIR, `benchmark-${REPORT_DATE}.json`);
 
 const BASE = resolve('.');
 const PROMPTS_PATH = resolve(BASE, 'tests/prompts.json');
 const EXPECTED_PATH = resolve(BASE, 'tests/expected-routes.json');
-const INDEX_PATH = resolve(BASE, 'data/skill-index.json');
-const LOGS_DIR = resolve(BASE, 'logs');
-const REPORT_DATE = now().slice(0, 10);
-const REPORT_PATH = resolve(LOGS_DIR, `benchmark-${REPORT_DATE}.json`);
-const SYNTHETIC_DIR = resolve(BASE, 'data/skills-synthetic');
-const GENERATOR_PATH = resolve(BASE, 'tests/scale/generate-synthetic.mjs');
 
 mkdirSync(LOGS_DIR, { recursive: true });
 
 // Parse CLI args
 const args = process.argv.slice(2);
-const modeFlag = args.find((a) => a.startsWith('--mode='))?.split('=')[1]
-  || (args.find((a) => a === '--mode') !== undefined ? args[args.indexOf('--mode') + 1] : undefined)
-  || 'hybrid';
-const rerankFlag = args.find((a) => a.startsWith('--rerank='))?.split('=')[1]
-  || (args.find((a) => a === '--rerank') !== undefined ? args[args.indexOf('--rerank') + 1] : undefined);
+/**
+ * Read a `--flag value` or `--flag=value` argument.
+ *
+ * @param {string} name
+ * @returns {string|undefined}
+ */
+const flagValue = (name) =>
+  args.find((a) => a.startsWith(`--${name}=`))?.split('=')[1]
+  || (args.includes(`--${name}`) ? args[args.indexOf(`--${name}`) + 1] : undefined);
+
+const routerFlag = flagValue('router');
+// Router selection, then the explicit mode. `flat` is the pure-BM25 path;
+// an unknown router name is rejected rather than silently measured as hybrid.
+const ROUTER_TO_MODE = { flat: 'bm25', bm25: 'bm25', hybrid: 'hybrid', hierarchical: 'bm25' };
+const modeFlag = routerFlag !== undefined
+  ? (ROUTER_TO_MODE[routerFlag.toLowerCase()] ?? (() => {
+      console.error(`Unknown router: ${routerFlag}. Use flat or hybrid.`);
+      process.exit(1);
+    })())
+  : (flagValue('mode') ?? 'hybrid');
+const rerankFlag = flagValue('rerank');
 // Default matches the hook: hooks/route.mjs calls hybridRetrieve with
 // `rerank: false`, so measuring hybrid *with* the reranker on would report a
 // configuration production never runs.
 const rerankValue = rerankFlag !== undefined ? rerankFlag : 'off';
 
 // Corpus flag: real | synthetic-N
-const corpusFlag = args.find((a) => a.startsWith('--corpus='))?.split('=')[1]
-  || (args.find((a) => a === '--corpus') !== undefined ? args[args.indexOf('--corpus') + 1] : undefined);
+const corpusFlag = flagValue('corpus');
 
 // Expand flag: --expand on|off
-const expandFlag = args.find((a) => a.startsWith('--expand='))?.split('=')[1]
-  || (args.find((a) => a === '--expand') !== undefined ? args[args.indexOf('--expand') + 1] : undefined);
-const expandValue = expandFlag !== undefined ? expandFlag : 'off';
+const expandValue = flagValue('expand') ?? 'off';
 
-// Router flag: --router flat|hierarchical (maps to mode selection for routing tests)
-const routerFlag = args.find((a) => a.startsWith('--router='))?.split('=')[1]
-  || (args.find((a) => a === '--router') !== undefined ? args[args.indexOf('--router') + 1] : undefined);
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Parse YAML-like frontmatter from a Markdown string.
- */
-function parseFrontmatter(content) {
-  const frontmatterRegex = /^---\s*\n([\s\S]+?)\n---\s*\n?/;
-  const match = content.match(frontmatterRegex);
-  if (!match) return {};
-
-  const body = match[1].replace(/\r/g, '');
-  const result = {};
-  const lines = body.split('\n');
-  let currentKey = null;
-  let currentList = [];
-
-  for (const line of lines) {
-    const listMatch = line.match(/^\s*-\s+(.+)$/);
-    if (listMatch && currentKey) {
-      currentList.push(listMatch[1].trim());
-      continue;
-    }
-    if (currentKey && currentList.length > 0) {
-      result[currentKey] = currentList;
-      currentList = [];
-    }
-    const kvMatch = line.match(/^(\w[\w-]*)\s*:\s*(.*)$/);
-    if (kvMatch) {
-      const key = kvMatch[1];
-      const value = kvMatch[2].trim();
-      if (value === '') {
-        currentKey = key;
-        currentList = [];
-      } else {
-        result[key] = value;
-        currentKey = null;
-      }
-    }
-  }
-  if (currentKey && currentList.length > 0) {
-    result[currentKey] = currentList;
-  }
-  return result;
-}
-
-/**
- * Recursively walk a directory yielding SKILL.md file paths.
- */
-function* walkSkillFiles(dir) {
-  const entries = readdirSync(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      yield* walkSkillFiles(full);
-    } else if (entry.isFile() && entry.name === 'SKILL.md') {
-      yield full;
-    }
-  }
-}
-
-/**
- * Load skills from a directory.
- */
-function loadSkillsFromDir(dir) {
-  const skills = [];
-  for (const filePath of walkSkillFiles(dir)) {
-    try {
-      const content = readFileSync(filePath, 'utf-8');
-      const fm = parseFrontmatter(content);
-      skills.push({
-        name: fm.name || 'unknown',
-        description: fm.description || '',
-        keywords: Array.isArray(fm.keywords) ? fm.keywords : [],
-        domains: Array.isArray(fm.domains) ? fm.domains : [],
-        path: filePath,
-        version: fm.version || '0.1.0',
-      });
-    } catch (err) {
-      console.warn(`[benchmark] skipped unreadable file: ${filePath} — ${err.message}`);
-    }
-  }
-  skills.sort((a, b) => a.name.localeCompare(b.name));
-  return skills;
-}
-
-/**
- * Count SKILL.md files in a directory.
- */
-function countSkillMdFiles(dir) {
-  let count = 0;
-  for (const _ of walkSkillFiles(dir)) count++;
-  return count;
-}
-
-/**
- * Ensure synthetic corpus exists with the requested count.
- */
-function ensureSyntheticCorpus(count) {
-  const currentCount = countSkillMdFiles(SYNTHETIC_DIR);
-  if (currentCount >= count) {
-    console.log(`  Using existing synthetic corpus (${currentCount} skills)`);
-    return;
-  }
-  console.log(`  Generating synthetic corpus (${count} skills)...`);
-  const result = spawnSync('node', [GENERATOR_PATH, String(count)], {
-    cwd: BASE,
-    stdio: 'inherit',
-  });
-  if (result.status !== 0) {
-    throw new Error(`Synthetic corpus generation failed with exit code ${result.status}`);
-  }
-}
+// Provider flag: --provider fnv1a|onnx (hybrid mode only)
+const providerFlag = flagValue('provider');
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 let index;
@@ -216,12 +123,34 @@ const retrieveFn = modeFlag === 'hybrid' ? hybridRetrieve : rankSkills;
 // the one production runs (the hook also uses a leaf-only index; the benchmark
 // keeps the full index so the frozen BM25 baseline stays comparable).
 const DEFAULTS = getDefaults();
+// The retriever reads its weights and k from getConfig() (so the
+// SKILL_ROUTER_RRF_* overrides apply); the report records the effective values
+// next to the shipped ones, otherwise a run with an override in the
+// environment would be filed under the shipped weights.
+const EFFECTIVE = getConfig();
+const rrfK = EFFECTIVE.rrf.k;
 const retrieveOptions = modeFlag === 'hybrid'
   ? {
     rerank: rerankValue !== 'off',
     minBm25Score: DEFAULTS.slm.bm25MinThreshold,
   }
   : {};
+
+// Embedding provider for hybrid mode. The named provider is constructed once
+// and shared by every prompt, so a cold model load is paid a single time (and
+// shows up in the first prompt's latency). Degradations are collected rather
+// than printed so the report can state how often the router actually fell back.
+let providerName = 'none';
+/** @type {string[]} */
+const degradeEvents = [];
+if (modeFlag === 'hybrid' && providerFlag !== undefined) {
+  const provider = createProvider(providerFlag);
+  providerName = provider.name;
+  retrieveOptions.provider = provider;
+  retrieveOptions.onDegrade = (msg) => degradeEvents.push(msg);
+} else if (modeFlag === 'hybrid') {
+  providerName = 'fnv1a (default)';
+}
 
 // Build synonym map when expansion is enabled
 let synonymMap;
@@ -273,6 +202,16 @@ for (const p of prompts) {
   }
   if (!topSkill || (modeFlag === 'bm25' && ranked[0].score < 0.60)) noSkillCount++;
 
+  // Set Recall@5: the decision metric for Sub-Phase 6.10. See
+  // tests/benchmark/metrics.mjs for the convention (top-5 returned set,
+  // negative prompts scored on the abstention decision).
+  const grade = gradePrompt(
+    expName,
+    ranked.map((r) => r.skill.name),
+    isNoSkill,
+    index
+  );
+
   results.push({
     id: p.id,
     prompt: p.prompt,
@@ -281,8 +220,12 @@ for (const p of prompts) {
     top3: top3Skills,
     topScore,
     latency_ms: latency,
+    setRecall: grade.recall,
+    setKind: grade.kind,
   });
 }
+
+const setSummary = summarizeSetRecall(results);
 
 const total = prompts.length;
 const top1Accuracy = (top1Hits / total).toFixed(4);
@@ -292,62 +235,55 @@ const medianLatency = latencies[Math.floor(latencies.length / 2)];
 const p95Latency = percentile(latencies, 95);
 const noSkillRate = (noSkillCount / total).toFixed(4);
 
-// Print formatted table
-console.log('');
-console.log('='.repeat(80));
-const label = modeFlag === 'hybrid' && rerankValue === 'off' ? 'hybrid (no-rerank)' : modeFlag;
-const expandLabel = expandValue === 'on' ? 'expand:on' : 'expand:off';
-console.log(`  SKILL ROUTER BENCHMARK — ${REPORT_DATE} [corpus: ${corpusLabel}, mode: ${label}, rerank: ${rerankValue}, expand: ${expandLabel}]`);
-console.log('='.repeat(80));
-console.log(`  Index size: ${index.length} skills`);
-console.log('');
-console.log('  Prompt                                              | Expected           | Top-1        | Score   | Lat(ms)');
-console.log('  ' + '-'.repeat(76));
-for (const r of results) {
-  const promptShort = r.prompt.slice(0, 45);
-  const match = (r.expected === r.topSkill || (r.expected === null && (r.topSkill === null || r.topScore < 0.01))) ? 'YES' : 'NO ';
-  console.log(
-    `  ${promptShort.padEnd(45)} | ${String(r.expected).padEnd(16)} | ${match.padEnd(10)} | ${r.topScore.toFixed(3).padStart(6)} | ${String(r.latency_ms).padStart(7)}`
-  );
-}
-console.log('');
-console.log('='.repeat(80));
-console.log('  SUMMARY');
-console.log('='.repeat(80));
-console.log(`  Top-1 Accuracy:    ${top1Accuracy}  (${top1Hits}/${total})`);
-console.log(`  Recall@3:          ${recallAt3}  (${recallAt3Total}/${total})`);
-console.log(`  Median Latency:    ${medianLatency} ms`);
-console.log(`  P95 Latency:       ${p95Latency} ms`);
-console.log(`  No-Skill Rate:     ${noSkillRate}  (${noSkillCount}/${total})`);
-
-// Cache performance
 const cacheStats = cache.getStats();
-console.log(`  Cache Hits:        ${cacheStats.hits}`);
-console.log(`  Cache Misses:      ${cacheStats.misses}`);
-console.log(`  Cache Hit Rate:    ${cacheStats.hitRate.toFixed(4)}`);
-console.log(`  Cache Size:        ${cacheStats.total}`);
-console.log('='.repeat(80));
-console.log('');
+
+printReport({
+  date: REPORT_DATE,
+  corpusLabel,
+  mode: modeFlag,
+  provider: providerName,
+  rerank: rerankValue,
+  expand: expandValue,
+  indexSize: index.length,
+  results,
+  top1: top1Accuracy,
+  top1Hits,
+  recallAt3,
+  recallAt3Total,
+  setSummary,
+  medianLatency,
+  p95Latency,
+  noSkillRate,
+  noSkillCount,
+  degradeEvents,
+  cacheStats,
+});
 
 // Write JSON results
 const report = {
   date: REPORT_DATE,
   corpus: corpusLabel,
   mode: modeFlag,
+  provider: providerName,
   rerank: rerankValue,
   expand: expandValue,
   retrieval: {
-    rrfWeights: DEFAULTS.embeddings.weights,
-    rrfK: DEFAULTS.rrf.k,
+    rrfWeights: EFFECTIVE.embeddings.weights,
+    rrfWeightsShipped: DEFAULTS.embeddings.weights,
+    rrfK: rrfK,
     minBm25Score: modeFlag === 'hybrid' ? retrieveOptions.minBm25Score : null,
   },
   totalSkills: index.length,
   totalPrompts: total,
   top1Accuracy: parseFloat(top1Accuracy),
   recallAt3: parseFloat(recallAt3),
+  setRecall: setSummary.setRecall,
+  setRecallSkillPrompts: setSummary.setRecallSkillPrompts,
+  negativePromptsHandled: `${setSummary.negativeHits}/${setSummary.negativePrompts}`,
   medianLatencyMs: medianLatency,
   p95LatencyMs: p95Latency,
   noSkillRate: parseFloat(noSkillRate),
+  providerFallbacks: degradeEvents.length,
   cache: {
     hits: cacheStats.hits,
     misses: cacheStats.misses,

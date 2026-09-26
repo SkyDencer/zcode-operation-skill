@@ -243,46 +243,50 @@ Full scale report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phas
 
 ## Embedding Benchmark (Phase 6)
 
-Phase 6 evaluated replacing FNV-1a n-gram embeddings with a real ONNX transformer model (Xenova/all-MiniLM-L6-v2, 384-dim). The benchmark compared four modes on the 130-prompt real corpus (54 leaf skills):
+Phase 6 evaluated replacing the FNV-1a n-gram embeddings with a real ONNX transformer model (Xenova/all-MiniLM-L6-v2, 384-dim). The comparison below is the decision Sub-Phase 6.10 was written for, on the 130-prompt real corpus against the 60-entry index.
 
-| Mode | Top-1 | Recall@3 | Set Recall | Median Latency | P95 Latency |
-|------|-------|----------|------------|----------------|-------------|
-| BM25 (flat) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 6 ms |
-| Hybrid (FNV-1a) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 5 ms |
-| Hybrid (ONNX) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 5 ms |
-| SLM Hybrid (30 prompts) | 46.67% (14/30) | N/A | 0.7000 | 5 ms p50 | 11 ms p95 |
+The mission's four commands run the shipped configuration, where `semantic: 0.0` means the provider is never constructed (`src/core/retriever/hybrid.mjs:137`) — so the provider comparison needs the semantic channel switched on. Both are shown.
 
-**Two-Mode Routing (40 prompts):**
-- Mode Detection Accuracy: 100% (15/15 explicit)
-- Router Selection Accuracy: 100% (15/15)
-- Implicit Top-1 Accuracy: 100% (25/25)
-- Overall Success Rate: 100% (40/40)
+| Mode | Top-1 | Recall@3 | Set Recall@5 | Median | P95 | Embedding file |
+|------|-------|----------|--------------|--------|-----|----------------|
+| Flat (BM25) | 92.31% (120/130) | 89.23% (116/130) | 100.00% (116/116) | 3 ms | 5 ms | none |
+| Hybrid, FNV-1a (shipped weights) | 92.31% (120/130) | 89.23% (116/130) | 100.00% (116/116) | 3 ms | 6 ms | 381 KB, 256-dim |
+| Hybrid, ONNX (shipped weights) | 92.31% (120/130) | 89.23% (116/130) | 100.00% (116/116) | 3 ms | 5 ms | 585 KB, 384-dim |
+| Hybrid, FNV-1a (semantic 0.6) | 18.46% (24/130) | 60.77% (79/130) | 85.34% (99/116) | 36 ms | 42 ms | 381 KB, 256-dim |
+| Hybrid, ONNX (semantic 0.6) | 76.15% (99/130) | 77.69% (101/130) | 90.52% (105/116) | 1445 ms | 1827 ms | 585 KB, 384-dim |
+
+Set Recall@5 is the expected skill in the returned top 5, over the 116 prompts that name a skill; the 14 negative prompts are scored as an abstention decision (11/14 correct in every mode). A repeat ONNX run gave identical accuracy (0.7615 / 0.9052) at 947 ms median, so the timings move with machine load but the comparison does not.
+
+**Two-Mode Routing (40 prompts):** 100% mode detection (15/15), 100% router selection (15/15), 100% implicit Top-1 (25/25), 100% overall (40/40), p50 2 ms.
+
+**SLM benchmark hybrid mode (30 prompts, no LLM server on :8080 so it degrades to BM25):** Top-1 0.4667 (14/30), Set Recall 0.7000, p50 3 ms.
 
 ### Provider Latency Comparison
 
 | Operation | FNV-1a | ONNX (cold) | ONNX (warm) |
 |-----------|--------|-------------|-------------|
-| `embed(text)` | 0.40 ms | 396 ms | 6 ms |
-| `buildIndex(54 skills)` | 57.55 ms | 1281 ms | 1281 ms |
+| `embed(text)` | 0.08 ms | 469 ms | 5.9 ms |
+| `buildIndex(60 skills)` | 51 ms | 1407 ms | 1365 ms |
+
+The retriever rebuilds the skill vectors on every prompt, which is where the ~1.4 s per prompt comes from; a single embedding is 5.9 ms.
 
 ### Disk Usage
 
 | Component | Size |
 |-----------|------|
-| `@huggingface/transformers` package | 132 MB |
+| `node_modules` total (packages + runtimes) | 591 MB |
+| of which `onnxruntime-node` + `onnxruntime-web` | 429 MB |
 | ONNX model cache (`model.onnx` + tokenizer) | 122 MB |
-| **Total overhead** | **254 MB** |
+
+35 MB of the cache is a stale partial download (`model.onnx.tmp.*`) from an interrupted fetch; the live model is 86.9 MiB. The embedding JSON artifacts (381 KB / 585 KB) are gitignored.
 
 ### Decision
 
-**Default provider remains FNV-1a.** The ONNX provider does not improve Set Recall over FNV-1a (both achieve 92.31% on the 130-prompt benchmark) when using the default semantic weight of 0.0. A weight sweep showed semantic embeddings were a net negative for Top-1 at every weight configuration tested.
+**The default provider remains FNV-1a, and the semantic channel remains at `semantic: 0.0`.**
 
-The ONNX provider carries significant costs:
-- 254 MB disk overhead (package + model cache)
-- 396 ms cold-start latency on first embed call
-- 1281 ms index build time vs 57 ms for FNV-1a
+The rule was "switch to ONNX only if Set Recall improves by more than 5 pp *and* latency stays under 100 ms". ONNX does beat FNV-1a by 5.18 pp Set Recall@5 with the semantic channel on, but it costs 1445 ms median latency — 14x the 100 ms budget, and 7x the hook's own 200 ms timeout. Both semantic-on modes are also *worse* than the pure-BM25 configuration that ships (100% Set Recall@5), so switching would trade a working default for a regression plus 591 MB of packages and a 469 ms first-prompt model load.
 
-Per the sub-phase 6.10 rule — switch to ONNX only if Set Recall improves by >5 pp and latency stays <100 ms — the threshold is not met. The semantic channel is disabled by default (`embeddings.weights: { bm25: 1.0, semantic: 0.0 }`) but can be enabled via `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT` for experimentation.
+ONNX remains available as an opt-in (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`), and the semantic channel is reachable through `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`. A paraphrase test set and cached skill vectors are what would change the answer — see the report.
 
 Full results: [docs/reports/phase-6-embedding-benchmark.md](./docs/reports/phase-6-embedding-benchmark.md)
 
@@ -460,10 +464,10 @@ node bin/skill-router.mjs analytics --json   # machine-readable output
 
 - **Synonym expansion degrades Top-1** on the current 54-skill corpus (80% vs 97% with expansion off). Keep expansion off by default.
 - **Synthetic scale accuracy is low** due to prompt-skill distribution mismatch, not algorithm failure. The real 54-skill corpus achieves 96.9% Top-1.
-- **FNV-1a n-gram embeddings** (256-dim) are insufficient for semantic search. Hybrid mode degrades BM25 precision. Phase 3 targeted infrastructure; semantic embedding upgrade is planned for a future phase.
+- **FNV-1a n-gram embeddings** (256-dim) cannot represent meaning: "add a login page" and "implement user authentication" are unrelated to it. The ONNX provider added in Phase 6 can, but on the current corpus it costs accuracy and 1.4 s per prompt, so it stays opt-in.
 - **Hierarchical routing is slower** than flat at all corpus sizes. It is deprecated as default but remains available experimentally.
 - **Disable mechanism is filesystem-based** and depends on ZCode's skill discovery behavior. It may not work in all ZCode configurations.
-- **No pre-trained embedding model** -- all search is lexical (BM25). Semantic search requires a Phase 4+ upgrade.
+- **Semantic channel off by default** -- a pre-trained ONNX provider ships (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`), but Sub-Phase 6.10 measured it below the pure-BM25 configuration on Set Recall and far over the latency budget, so the default path is lexical (BM25) only. See the Embedding Benchmark section.
 - **Single-runner cache** -- the query cache shows <1% hit rate on single-run benchmarks because prompts are not repeated. Cache benefits accumulate in long-running sessions.
 
 ## Project Structure
