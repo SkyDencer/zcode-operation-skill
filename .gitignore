@@ -24,6 +24,8 @@ Thumbs.db
 
 # Benchmark output (runtime, not source)
 logs/benchmark-*.json
+logs/*.txt
+logs/*.lcov
 
 # Local project utilities
 extract.js
