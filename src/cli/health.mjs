@@ -9,7 +9,9 @@
  *   3. [PASS/FAIL] Hook registered in ZCode CLI config
  *   4. [PASS/FAIL] Index is fresh (data/skill-index.json valid)
  *   5. [PASS/FAIL] Hook script responds to stdin
- *   6. [WARN] llama-server status (port 8080 listening)
+ *   6. [PASS/FAIL] llama-server status (port 8080 listening) — only a WARN
+ *      when slm.enabled is true; with the shipped default (SLM disabled) the
+ *      server is optional and its absence is the expected state
  *   7. [PASS/FAIL] No forbidden files in git status
  *   8. [PASS/FAIL] Thresholds file valid
  *
@@ -23,6 +25,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { getConfig } from '../config/env.mjs';
 
 // ── ANSI color helpers ────────────────────────────────────────────────────────
 
@@ -276,27 +279,45 @@ async function checkHookInvocable() {
   });
 }
 
-// ── Check 6: llama-server status (warn only) ──────────────────────────────────
+// ── Check 6: llama-server status ──────────────────────────────────────────────
+// The SLM backend is opt-in: src/config/defaults.mjs ships slm.enabled = false,
+// so an absent llama-server is the expected state and not a degradation. A
+// missing server is only a real WARN (exit 1) when the operator has switched
+// SLM routing on, because there the absent server does cost capability.
 
 async function checkLlamaServer() {
   const label = 'llama-server';
   const net = await import('node:net');
+  const { slm } = getConfig();
+  const required = slm?.enabled === true;
 
   return new Promise((resolve) => {
+    let settled = false;
+    const record = (running) => {
+      if (settled) return;
+      settled = true;
+      if (running) {
+        pass(label, required
+          ? 'running on port 8080 (SLM enabled)'
+          : 'running on port 8080 (optional, used when SLM is enabled)');
+      } else if (required) {
+        warn(label, 'not running on port 8080 — SLM is enabled, so SLM routing is unavailable');
+      } else {
+        pass(label, 'not running — optional, not required (SLM disabled)');
+      }
+      resolve();
+    };
+
     const sock = net.createConnection({ port: 8080, host: '127.0.0.1' }, () => {
       sock.end();
-      warn(label, 'llama-server running on port 8080 (optional, used for hybrid routing)');
-      resolve();
+      record(true);
     });
 
-    sock.on('error', () => {
-      warn(label, 'llama-server not running on port 8080 (hybrid mode unavailable)');
-      resolve();
-    });
+    sock.on('error', () => record(false));
 
     setTimeout(() => {
-      if (sock.writable) sock.destroy();
-      resolve();
+      sock.destroy();
+      record(false);
     }, 2000);
   });
 }

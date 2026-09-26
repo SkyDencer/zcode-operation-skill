@@ -4,7 +4,7 @@
  * Tests:
  *   1. All checks pass on healthy system -> exit 0
  *   2. Missing hook -> exit 2
- *   3. llama-server not running -> exit 1 (warning, not failure)
+ *   3. llama-server absent -> exit 0 / PASS with SLM disabled, exit 1 / WARN with SLM enabled
  *   4. Stale index -> exit 2
  */
 import { resolve, dirname } from 'node:path';
@@ -139,36 +139,44 @@ try {
   console.error(`  ✗ missing hook test failed: ${err.message}`);
 }
 
-// ── 3. llama-server not running -> exit 1 (warning, not failure) ──────────────
+// ── 3. llama-server absent: PASS when SLM is off, WARN when SLM is on ────────
 
-console.log('\n=== 3. llama-server Not Running (exit 1) ===');
+console.log('\n=== 3. llama-server Absent (exit 0 with SLM off, exit 1 with SLM on) ===');
 
-// We can't actually stop llama-server, but we can verify the warn behavior
-// by checking that the health command handles the warning case correctly.
-// Instead, we test that exit 1 means warnings-only (no failures).
-try {
-  // Temporarily make a check fail to ensure exit code is 2, not 1
-  // For this test, we verify the structure of warning output
+// The check is scoped by slm.enabled. With the shipped default (SLM disabled)
+// the server is optional, so its absence is the expected state and must not
+// cost a warning. With SLM enabled the absent server is a real degradation and
+// must still warn, so the check is exercised in both directions.
+async function runHealth(env) {
   const child = spawn(process.execPath, [CLI, 'health'], {
     cwd: ROOT,
+    env: { ...process.env, ...env },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
-
   let stdout = '';
-  child.stdout.on('data', (chunk) => { stdout += chunk; });
-  child.stderr.on('data', (chunk) => { stdout += chunk; });
-
+  let stderr = '';
+  let code = null;
+  child.stdout.on('data', (c) => { stdout += c; });
+  child.stderr.on('data', (c) => { stderr += c; });
   await new Promise((resolve) => {
-    child.on('close', () => {
-      // Check that WARN appears in output when llama-server is running
-      if (stdout.includes('WARN')) {
-        assertContains(stdout, 'WARN', 'shows WARN for llama-server check');
-      }
-      resolve();
-    });
+    child.on('close', (c) => { code = c; resolve(); });
   });
+  return { stdout, stderr, code };
+}
 
-  await new Promise((r) => setTimeout(r, 3000));
+try {
+  // 3a. Default config: SLM disabled -> no WARN, exit 0.
+  const off = await runHealth({ SKILL_ROUTER_SLM_ENABLED: 'false' });
+  assertContains(off.stdout, 'llama-server', 'reports the llama-server check with SLM disabled');
+  assert(!off.stdout.includes('WARN'), 'no WARN when SLM is disabled (server is optional)');
+  assert(off.code === 0, `exit 0 when the only absent service is optional (got ${off.code})`);
+
+  // 3b. SLM enabled -> the absent server is a real degradation -> WARN, exit 1.
+  const on = await runHealth({ SKILL_ROUTER_SLM_ENABLED: 'true' });
+  assertContains(on.stdout, 'WARN', 'shows WARN for llama-server when SLM is enabled');
+  assertContains(on.stdout, 'SLM is enabled', 'names SLM as the reason for the warning');
+  assert(!on.stdout.includes('FAIL'), 'absent server warns but does not fail the check');
+  assert(on.code === 1, `exit 1 on warning, not failure (got ${on.code})`);
 } catch (err) {
   failed++;
   console.error(`  ✗ llama-server test failed: ${err.message}`);

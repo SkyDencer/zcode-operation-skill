@@ -437,10 +437,15 @@ own exit-code scheme. `verify` runs 5 checks (7 with `--deep`) and exits 0 or 1.
 2 = at least one failure).
 
 `health` checks: plugin directory up to date, hook registered, index is fresh,
-routers installed, hook invocable, `llama-server` reachable, no forbidden files,
+routers installed, hook invocable, `llama-server` status, no forbidden files,
 thresholds file. `verify` checks: mirror sync status, orphan mirror dirs, meta
 files, index up to date, thresholds file (plus hook-registered under `--deep`).
 No check name overlaps.
+
+The `llama-server` check is scoped by `slm.enabled` (default `false`). With SLM
+disabled the server is optional, so its absence passes and does not cost the
+exit code; with `SKILL_ROUTER_SLM_ENABLED=true` an absent server is a real
+degradation and warns (exit 1).
 
 Note: the "hook invocable" check spawns `node hooks/route.mjs`, which writes
 `.zcode/output.json` in the current working directory.
