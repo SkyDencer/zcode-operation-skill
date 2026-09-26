@@ -4,6 +4,81 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added (Phase 6)
+
+- **Embedding provider abstraction** (`src/core/embeddings/provider.mjs`, `providers/fnv1a.mjs`, `providers/onnx.mjs`, `errors.mjs`) -- `createProvider(type, options)` over a uniform `embed` / `buildIndex` / `isAvailable` / `dimensions` / `name` interface. `Fnv1aProvider` delegates to the Phase 1 engine, so its 256-dim output is byte-identical to what shipped before.
+- **ONNX embedding provider (opt-in)** (`src/core/embeddings/providers/onnx.mjs`) -- `Xenova/all-MiniLM-L6-v2` through `@huggingface/transformers` 4.3.0, producing 384-dim mean-pooled L2-normalised vectors. Selected with `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` or `node hooks/build-index.mjs --provider onnx`. **This is a new runtime dependency** (`@huggingface/transformers`, 591 MB installed plus a 122 MB model cache); the default path needs nothing installed.
+- **`SKILL_ROUTER_EMBEDDING_PROVIDER` environment variable** -- opt-in provider selection, honoured by the hook and by `build-index`.
+- **`SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`** -- runtime-configurable hybrid fusion weights, replacing the hardcoded 0.4 / 0.6 pair.
+- **Weighted RRF fusion** (`src/core/retriever/rrf.mjs`, `src/core/retriever/hybrid.mjs`) -- per-source weights over Reciprocal Rank Fusion (k=60), with the fusion math extracted from the retriever so it stays under the 300-line cap.
+- **`embeddingSimilarity` reranker feature** (`src/core/reranker/features.mjs`) -- cosine similarity between the prompt and skill-description embeddings, fed to the existing linear reranker.
+- **Fail-open provider resolution** (`src/core/embeddings/resolve.mjs`) -- probes the configured provider on the filesystem without loading a model, falls back to FNV-1a with a stderr warning, and degrades to pure BM25 when nothing is usable. Telemetry records `embeddingProvider` and `embeddingProviderFallback`.
+- **Hybrid relevance floor** -- `hybridRetrieve()` takes `options.minBm25Score` and returns an empty list below it, so `hooks/route.mjs` can abstain instead of injecting skills for every prompt.
+- **Benchmark harness: `--router` and `--provider` flags plus Set Recall@5** (`tests/run-benchmark.mjs`, `tests/benchmark/{metrics,corpus,report}.mjs`) -- the `--router` flag was previously parsed and ignored, so every mode measured the same configuration. Set Recall@5 is computed over the 116 skill prompts; the 14 negative prompts are scored as abstentions.
+- **Coverage runner rewrite** (`tests/run-coverage.mjs`, `tests/coverage/aggregate.mjs`) -- modules keyed by repo-relative path instead of basename (the repo has three `planner.mjs`, three `writer.mjs` and four `reporter.mjs` that masked each other), coverage unioned across test files rather than maxed, and assertion counts read from each file's own output. `node tests/run-coverage.mjs`.
+- **Adaptation fixture regeneration** (`scripts/regenerate-fixtures.mjs`) -- regenerates the telemetry fixtures from the live default configuration and `--check` is a real drift gate that exits 1 when the provider or weights change.
+- **30 new test files** added to the `test` chain, which grew from 43 steps to 73: security regressions, edge-case suites, the implicit router filter, provider fallback, RRF weights, relevance floor, abstention, ONNX cache probe, and adaptation fixtures. 73/73 passing, 0 failures in the Sub-Phase 6.12 verification run, confirmed by re-running every step individually: **2024 assertions** across the 73-step chain (the earlier figure of 1746 was measured over 60 files in Sub-Phase 6.6, when the chain was shorter).
+- **Phase 6 audit reports** at `docs/reports/phase-6-{static-audit,doc-audit,test-audit,embedding-benchmark,final-report}.md`.
+- **Decisions D27** (adaptation fixtures derived from the live default and drift-gated) and **D28** (the default provider stays FNV-1a) recorded in `docs/decision-dictionary.md`.
+
+### Fixed (Phase 6)
+
+- **Security: arbitrary file write via path traversal in the import/add path.** The destination directory was derived from the untrusted SKILL.md frontmatter `name`, so a skill named `backend-../../../../pwned` passed validation and wrote `SKILL.md` outside `data/skills`. The previous `hasTraversal()` guard could never fire -- it ran on an already-resolved absolute path, never on the name. New `isSafeName()` / `isWithinRoot()` in `src/utils/fs.mjs`, applied in `src/import/importer.mjs`, `src/cli/import.mjs` and `src/cli/add.mjs`.
+- **Security: arbitrary write and delete outside the ZCode mirror root via the disable/sync path.** `entry.path` from `.skill-router-disabled.json` was joined onto the mirror root unchecked; shadow mode wrote outside the root and mirror mode deleted a sibling directory. Both paths now fail closed.
+- **Regression coverage for both:** `tests/security/path-traversal.test.mjs` and `tests/security/cli-path-traversal.test.mjs` reproduced 19 failing assertions before the fix and pass 20/20 and 10/10 after, including legitimate-name cases proving the guards are not over-broad.
+- **Fractional BM25 field weights crashed retrieval.** Any fractional weight from `data/weights.json` threw `RangeError: Invalid array length`; the hook caught it and exited 0 without writing output, so routing silently stopped. Fixed with `resolveFieldWeight()` and a shared `buildWeightedDocTokens()`; `tests/retriever/field-weight-safety.test.mjs`.
+- **`require()` inside ESM modules broke `add` and `doctor`.** Both calls were swallowed by `catch { return [] }`, so `add` rejected every valid skill and `doctor` always reported the mirror non-writable. Replaced with static `node:` imports; `tests/cli/esm-require.test.mjs` scans every `.mjs` for `require(`.
+- **`feedback --outcomes` called `correlateFromLogs()` with no `logDir`**, so the CLI could never read signals. Fixed at the CLI call site and defaulted in the correlator; `tests/telemetry/logdir-regression.test.mjs` pins it.
+- **`tune` corpus drift.** The optimizer and tuning-report CLIs tuned the 60-entry index while the hook ranks 54 leaves; both now filter to the same leaf-only corpus.
+- **Two index builders disagreed on the default corpus** -- `reindex` produced 54 entries, `build-index` produced 60, so the index depended on which ran last. Both now share `projectSources()` in `src/index/sources.mjs`; `tests/cli/reindex.test.mjs` (7 assertions fail without the fix).
+- **The default production path had no relevance floor**, so every prompt received skill context (Top-1 0.4846 against a 0.9231 BM25 baseline). `hybridRetrieve()` now returns an empty list below the floor and the hook abstains again.
+- **The shipped hybrid weights were the worst setting tested.** A weight sweep over the same 130 prompts showed the semantic channel a net negative at every weight and with both providers; the default is now `bm25: 1.0, semantic: 0.0`.
+- **The reranker read async provider features synchronously**, so under ONNX every feature was `undefined ?? 0` and the reranker was a silent no-op. `rerank()` is now async-aware and `hybridRetrieve()` awaits it.
+- **The ONNX model download was a no-op** (the transformers pipeline is lazy) and its failures surfaced as raw library errors; both fixed, plus `options.cacheDir` now reaches the library rather than only the availability probe.
+- **Deploy and sync verification:** wrong skill name in `.skill-router-disabled.json`, `src/deploy/planner.mjs` setting `path = name` for leaf disable entries, shadow-mode `SKILL.md` written without creating its directory, and `src/cli/verify.mjs` orphan/index/hook checks. `health` now reports 8 passed and exits 0 on a clean tree; the llama-server check warns only when the SLM is actually enabled.
+- **Documentation:** 7 broken internal links, 6 stale `npm run` examples, the subcommand count (18, not 20), a missing `help` entry, a fictional inverted-index schema, a fabricated `deploy --list-snapshots` table, an `add` walkthrough that could not succeed, and several hardcoded personal paths. Two audit passes, 20 code-to-doc mismatches and 10 stale examples fixed in the second.
+- **No subcommand implements `--help`**, so `deploy --help` deployed. Now documented as a known defect rather than silently relied on.
+
+### Changed (Phase 6)
+
+- **Default embedding provider decision: FNV-1a stays the default, ONNX is opt-in.** The rule fixed in advance was "switch to ONNX only if Set Recall improves by more than 5 pp *and* latency stays under 100 ms". ONNX clears the accuracy half (+5.18 pp Set Recall@5, 0.9052 vs 0.8534) but costs 1445 ms median (947 ms on a repeat, 1212 ms when re-measured in the 6.12 reporting pass) against a 100 ms budget, and both semantic-on configurations score below the pure-BM25 configuration that ships (Set Recall@5 1.0000). A weight sweep confirmed the semantic signal is a net negative at every configuration. The report is `docs/reports/phase-6-embedding-benchmark.md`; the decision is D28.
+- **`docs/embeddings.md`** rewritten with the measured provider comparison and the decision.
+- **`docs/tuning.md`** gained a Fixtures section describing the regeneration policy and the drift gate.
+- **Test chain:** `package.json` `scripts.test` is now 73 steps (was 43).
+- **Personal paths and usernames redacted** across ten files plus four more, ahead of the first push to GitHub.
+
+### Benchmark Results (Phase 6)
+
+| Metric | Value | Notes |
+|---|---|---|
+| Top-1 (BM25, 60-entry index) | 92.31% (120/130) | Frozen baseline, unchanged |
+| Top-1 (BM25, 54-leaf corpus) | 96.92% (126/130) | The corpus the hook actually searches |
+| Recall@3 (BM25) | 89.23% (116/130) | |
+| Set Recall@5 (116 skill prompts) | 100% (116/116) | |
+| Median / p95 latency (BM25) | 3 ms / 5 ms | |
+| No-skill rate | 8.46% (11/130) | |
+| ONNX hybrid, semantic on | Top-1 76.15%, Set Recall@5 90.52% | 1445 ms median (1212 ms re-measured in 6.12) -- 12-14x the 100 ms budget |
+| FNV-1a hybrid, semantic on | Top-1 18.46%, Set Recall@5 85.34% | 36 ms median (33 ms re-measured in 6.12) |
+| Two-mode routing | 40/40 (100%) | p50 2 ms |
+| SLM hybrid (no server on :8080) | Top-1 46.67%, Set Recall 70.00% | Degrades to BM25, as documented in Phase 2 |
+
+### Key Findings (Phase 6)
+- **Semantic embeddings do not beat BM25 on this corpus.** 60 short, keyword-rich skill manifests over a fixed technology vocabulary give BM25 almost nothing to lose, and 116 of 130 prompts name concepts the manifests also name. The provider is a real capability, not a fake one -- it is the only one that relates "add a login page" to "implement user authentication" -- but the corpus cannot show a gain.
+- **Four Critical code defects were found by audit, not by tests**, two of them arbitrary file write. Every one now has a failing-first regression test.
+- **The tests were not deterministic-by-accident.** 61 targets x 3 runs: 183 runs, 4884 assertions, 0 failures, 0 non-deterministic results.
+- **The guardrail still refuses to tune.** The proposed description weight (delta 0.715) exceeds MAX_DELTA (0.5) and `tune --apply` exits 1 without writing. That is correct, and raising the cap to make it apply would be removing the guard rather than satisfying it.
+- **The reranker's fitted weights do not generalise** -- held-out R-squared -4.58 against an in-sample ~0.1. Recorded as a weak training signal (P6-H-026), not a result.
+
+### Known Limitations (Phase 6)
+- The semantic channel is at weight 0.0 by default, so the ONNX provider is implemented, benchmarked and opt-in but **inert in the shipped configuration**.
+- The reranker fit is weak (in-sample R² ~0.1, held-out -4.58) and `data/reranker-weights.json` was deliberately not regenerated.
+- The adaptation loop has still never been exercised against real user data. The signals on disk are test-generated and age out past the 10-minute stale window, which is why `feedback --outcomes` legitimately reports 0 negative on live logs. A live `--outcomes` count is not a stable acceptance criterion (P6-H-025).
+- 19 High static-audit findings remain open (`P6-H-001`-`P6-H-019`), including three silent destructive failures in the deploy, sync and telemetry paths and a privacy invariant (raw prompts persisted in logs) that the documentation still claims is upheld.
+- The benchmark ranks 60 index entries while the hook searches 54 leaves; both Top-1 figures are now recorded separately in `data/baseline.json`, but the harness gap itself is unfixed.
+- `node bin/skill-router.mjs health` warns (and exits 1) when the optional local SLM (llama-server on port 8080) is not running **and** `SKILL_ROUTER_SLM_ENABLED=true`. With the SLM disabled, which is the shipped default, its absence is a pass and `health` exits 0.
+
+---
+
 ### Added (Phase 5)
 
 - **Adaptive feedback loop** -- Collects implicit user-correction signals (retry, rephrase, dismiss, explicit_override, success) from routing decisions and classifies each outcome as positive/negative/unknown using time-window correlation.
@@ -138,7 +213,7 @@ All notable changes to this project will be documented in this file.
 
 ### Known Limitations
 - Synonym expansion degrades Top-1 on the current 54-skill corpus; keep off by default.
-- Synthetic scale accuracy drops below 95% at N=50 on synthetic prompts (inflection point). This reflects prompt-skill distribution mismatch due to lexical poverty of randomly generated tokens, not algorithm failure. Real corpus maintains 96.9% Top-1.
+- Synthetic scale accuracy drops below 95% at N=50 on synthetic prompts (inflection point). This reflects prompt-skill distribution mismatch due to lexical poverty of randomly generated tokens, not algorithm failure. The real corpus holds at 92.31% Top-1 over the 60-entry benchmark index (96.92% over the 54-leaf corpus the hook searches) -- see the Phase 6 benchmark table above for the current figures.
 - Real scalability beyond the 60-skill corpus has not been tested with real data.
 - FNV-1a n-gram embeddings remain insufficient for semantic search; a future phase targets pre-trained model replacement.
 - Disable mechanism is filesystem-based and depends on ZCode skill discovery behavior.

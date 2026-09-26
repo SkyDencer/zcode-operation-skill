@@ -102,10 +102,10 @@ node bin/skill-router.mjs benchmark --mode bm25
 Expected output:
 
 ```
-Top-1 Accuracy:    96.92%  (126/130)
+Top-1 Accuracy:    92.31%  (120/130)
 Recall@3:          89.23%  (116/130)
-Median Latency:    2 ms
-P95 Latency:       3 ms
+Median Latency:    3 ms
+P95 Latency:       5 ms
 No-Skill Rate:     8.46%   (11/130)
 ```
 

@@ -4,6 +4,7 @@
 
 ## Entry Log
 
+| 2026-09-26 | **Phase 6 complete -- Sub-Phase 6.12 reporting half.** Final report written at `docs/reports/phase-6-final-report.md` (300 lines): summary of all twelve sub-phases, the Part A bug fixes, the Part B audit findings pointed at the three audit reports, the Part C embedding benchmark and default-provider decision, test count, coverage, known limitations and the Phase 7 recommendation. `CHANGELOG.md`, `HANDOFF.md`, `docs/implementation-plan.md` (Phase 6 marked complete; Phase 7 retitled **Hardening and Corpus Truth**) and `docs/decision-dictionary.md` (new D28) updated in the same pass. Stale claims corrected: the project is **no longer zero-dependency** (`@huggingface/transformers` 4.3.0 since 6.8), and the "96.9% current baseline" lines in `README.md` now name both corpora -- **0.9231 over the 60-entry benchmark index** (the figure frozen in `data/baseline.json` and compared by every guardrail) and **0.9692 over the 54-leaf corpus the hook actually searches**. The two numbers had been conflated into one "current baseline" claim. **Final summary.** Status: Complete, 12/12 sub-phases, 44 Phase 6 commits (`f799d99`..`6ca4a82`), 158 files, +19,518/-774, **not pushed by this pass** (32 commits ahead of `origin/main`; the run script pushes). Part A: both critical bugs FIXED (`logDir` default, optimizer corpus); Phase 4/5 commits landed; the 6.3 push succeeded. Part B: 4 Critical static-audit findings fixed with reproduction-first regression tests, two of them path-traversal security blockers; 20 code-to-doc mismatches and 10 stale examples fixed; 6 new regression/edge-case suites (190 assertions) plus a rewritten coverage runner; 80/86 modules reachable by a test. Part C: provider abstraction and the ONNX MiniLM-L6-v2 provider (384-dim) implemented; **default provider stays `fnv1a`**, semantic weight stays `0.0`. Part D: verification suite green, frozen BM25 baseline unchanged. **Checks run in this pass, each `node <file>`, all exit 0:** `--corpus real --router flat` -> Top-1 0.9231 (120/130), Recall@3 0.8923 (116/130), Set Recall@5 0.9769 all-prompt / 1.0000 skill-only, abstained 11/14, median 5 ms, p95 6.55 ms; `--corpus real --router hybrid` -> identical 0.9231, median 3 ms, p95 4 ms; `SKILL_ROUTER_RRF_BM25_WEIGHT=0.4 SKILL_ROUTER_RRF_SEMANTIC_WEIGHT=0.6` + `--router hybrid --provider fnv1a` -> Top-1 0.1846 (24/130), Set Recall@5 0.8534 (99/116), median 33 ms; the same with `--provider onnx` -> Top-1 0.7615 (99/130), Set Recall@5 0.9052 (105/116), median 1212 ms, p95 1462 ms -- reproducing Sub-Phase 6.10's accuracies exactly with different timings, confirming the ranking is deterministic and only latency moves with load. **Not run in this pass, by instruction:** the full test suite and `node tests/run-coverage.mjs` (the run script gates on them), the two-mode and SLM benchmark runners, and `git push`. **Coverage was not re-measured** -- the only report in the tree is `logs/coverage-2026-09-25.json` written by 6.6 (mean line 87.55% / branch 68.70% / function 83.23%, 91 modules, 23 at 100% line); the 6.12 coverage pass left no artifact and its "45 suite files" does not match the 73-entry chain `tests/run-coverage.mjs` derives its file list from, so it used a different invocation. **The assertion total was not recounted**; the last measured figure is 1746 across 60 files (6.6). Known limitations carried forward: the 60-vs-54 corpus gap, `P6-H-026` (reranker held-out R² -4.58), `P6-H-020` (`deploy --help` deploys), `P6-H-025` (the live `--outcomes` count is a function of the clock), the ONNX path having no timeout guard, and three pre-existing files over the 300-line cap (`src/cli/health.mjs` 463, `hooks/route.mjs` 393, `src/sync/disabler.mjs` 300), flagged rather than split. Next: Phase 7 -- Hardening and Corpus Truth, starting with `P6-H-014` and `P6-H-015`, the two silent destructive failures. | final-reporter |
 | 2026-09-26 | Sub-Phase 6.12 final verification repair, second pass: fixed the one remaining failing verification command, `node bin/skill-router.mjs health`, which exited **1**. **Root cause — `checkLlamaServer()` recorded `warn()` in *both* of its branches** (the pre-fix `src/cli/health.mjs:281-302` called `warn(label, 'llama-server running on port 8080 ...')` on connect *and* `warn(label, 'llama-server not running ...')` on error). An optional, opt-in, disabled-by-default dependency therefore produced a permanent warning, and since `main()` maps `warned > 0` to exit 1 (`src/cli/health.mjs:434-441`), `health` could not exit 0 in any state — the mission's 6.12 requirement "All must succeed" was unsatisfiable, and a *working* server was reported as a warning. It also had a latent second defect: the 2 s `setTimeout` resolved without recording a result, which would have silently dropped the check and made the total 7 instead of 8. **Fix:** the check is now scoped by `slm.enabled` (read via `getConfig()`, which honours `SKILL_ROUTER_SLM_ENABLED`, default `false` per `src/config/defaults.mjs:161-162`) — a running server passes either way, an absent server is a `warn` (exit 1) only when SLM is actually enabled, and passes with `not running — optional, not required (SLM disabled)` otherwise. A `settled` guard makes the connect, error and timeout paths record exactly one result. The check was not merely silenced: `SKILL_ROUTER_SLM_ENABLED=true` still warns and still exits 1. **Test updated, not weakened:** `tests/cli/health.test.mjs` section 3 previously asserted the WARN only behind `if (stdout.includes('WARN'))`, so the fix would have *deleted* that assertion (17 → 16) — coverage loss caused by my own change. It now runs `health` twice via a `runHealth(env)` helper, once with `SKILL_ROUTER_SLM_ENABLED=false` (no WARN, exit 0) and once with `=true` (WARN naming SLM as the cause, no FAIL, exit 1), pinning both directions deterministically without needing a server. **Checks run in this session, each `node <file>` / `node bin/...`, all as stated:** `node bin/skill-router.mjs health` → **8 passed (8 total), EXIT=0** (was 7 passed · 1 warning, EXIT=1); `SKILL_ROUTER_SLM_ENABLED=true node bin/skill-router.mjs health` → 7 passed · 1 warning, **EXIT=1**, `llama-server | WARN not running on port 8080 — SLM is enabled, so SLM routing is unavailable`; `node tests/cli/health.test.mjs` → **23/23, EXIT=0** (17/23 assertions are new; the 8 section-1, 3 section-2 and 3 section-4 assertions are unchanged). The full suite was **not** run, per instruction. **Not touched / open:** `src/cli/health.mjs` is 463 lines, over the 300-line cap — **pre-existing** (442 lines before this pass, i.e. already 142 over) and not fixed here, because splitting a file the verification suite gates on is a scope change the run owner should make; it is flagged rather than silently ignored. `decisions.csv` and `doc-inventory3.cjs` are untracked at the repo root, predate this pass, and match none of the forbidden-file patterns in `checkForbiddenFiles`, so `health` reports `no forbidden files detected`; they are not mine and were left in place. Not pushed. | final-verification-repair-engineer |
 | 2026-09-26 | Sub-Phase 6.12 final verification repair: fixed 4 failing checks. Root causes — (1) .skill-router-disabled.json had wrong skill name (backend-laravel-eloquent vs backend-eloquent), causing every deploy to hit a disable error that rolled back all router adds; (2) src/deploy/planner.mjs set path=name for leaf disable entries instead of looking up the correct subdirectory path, so disableSkill received a non-existent mirror path; (3) src/sync/disabler.mjs shadow mode wrote SKILL.md without creating the target directory; (4) src/cli/verify.mjs checks treated router-managed dirs as orphans, only scanned data/skills/ for index verification (missing routers), and expected JSON stdout from the hook which actually writes to .zcode/output.json. Fixed all four. Mirror now has 6 routers + 53 leaves + 1 disabled shadow (backend-eloquent). health: 7 passed 1 warning. verify --deep: 7/7 passed. BM25 baseline unchanged at 92.31% Top-1. Commit 780cc19. Not pushed. | final-verification-repair-engineer
 | Date | Entry | Author / Agent |
@@ -82,24 +83,53 @@
 | 2026-09-20 | Skill Router modules implemented: build-index, scorer, retriever, logger, route hook, hooks.json, benchmark suite. build-index produces 10 skills; benchmark Top-1 accuracy 90%, Recall@3 100%, median latency 2 ms. | CodeImplementor |
 | 2026-09-20 | Phase 0 spike complete: ZCode hook contract confirmed (stdin fields, hookSpecificOutput format, ${ZCODE_PLUGIN_ROOT} supported, project-level hooks not supported). Benchmark: Top-1 90% (18/20), Recall@3 100% (20/20), median latency 3 ms, no-skill rate 0%. Two lexical-collision failures (prompts 10 & 11) explained; all targets met. Recommendation: proceed to Phase 1. Report at docs/reports/phase-0-spike-20260920.md. | Agnes |
 
+## Phase 6 Completion
+
+- **Phase:** 6 -- Semantic Embedding Upgrade
+- **Status:** Complete (12 sub-phases; 44 commits, `f799d99`..`6ca4a82`, 158 files,
+  +19,518/-774; not pushed)
+- **Final report:** `docs/reports/phase-6-final-report.md`
+- **Audits:** `docs/reports/phase-6-static-audit.md`, `docs/reports/phase-6-doc-audit.md`,
+  `docs/reports/phase-6-test-audit.md`, `docs/reports/phase-6-embedding-benchmark.md`
+- **Test chain:** 73 entries (1 benchmark + 72 test files), 0 failures per the 6.12
+  verification run; the assertion total was not recounted in the reporting pass
+  (last measured: 1746 across 60 files, Sub-Phase 6.6)
+- **Coverage:** not re-measured at 6.12. `logs/coverage-2026-09-25.json` (6.6) --
+  mean line 87.55%, branch 68.70%, function 83.23%, 91 modules, 23 at 100% line
+- **BM25 baseline:** unchanged — Top-1 0.9231 (120/130), Recall@3 0.8923, Set Recall@5
+  1.0000 (116/116), no-skill 0.0846 (11/130)
+- **Embedding decision:** default provider stays FNV-1a; ONNX ships opt-in and inert
+  (semantic weight 0.0). ONNX is +5.18 pp Set Recall@5 (0.9052 vs 0.8534) at 1212 ms
+  median against a 100 ms budget -- decision D28
+- **Open issues carried forward:** `P6-H-001`–`P6-H-026` in `docs/problems.md` (21 High,
+  5 Medium); the reranker's held-out R-squared is -4.58 (`P6-H-026`) and the adaptation
+  loop has still never run against real user data
+
 ## Active Phase
 
-- **Phase:** 5 -- The Feedback Loop (Implicit User Corrections → Adaptive Weights)
-- **Status:** Complete (final report written 2026-09-24 at docs/reports/phase-5-final-report.md)
-- **Next:** TBD
+- **Phase:** 6 -- The Semantic Embedding Upgrade
+- **Status:** Complete (final report written 2026-09-26 at docs/reports/phase-6-final-report.md)
+- **Next:** Phase 7 -- Hardening and Corpus Truth. Roadmap in
+  `docs/implementation-plan.md`; priorities in the final report's Recommendation section.
 
 ## Known Constraints
 
 - Node >= 20 required.
 - ZCode >= 3.14.1 required.
-- No external npm dependencies permitted.
+- One runtime dependency is now declared (`@huggingface/transformers`, used only by the
+  opt-in ONNX provider); the default FNV-1a path needs nothing installed.
 - Repo will be public -- no secrets, no personal data.
 
 ## Next Actions
 
-1. **Human review of Phase 5 changes** -- Verify tune CLI commands work end-to-end, guardrails block invalid changes, and attribution data is accurate.
-2. **Push to GitHub** -- `git push origin main` when ready.
+1. **Human review of Phase 6 changes** -- Read docs/reports/phase-6-final-report.md, then
+   the three audit reports it links.
+2. **Push to GitHub** -- `git push origin main` (the 6.3 range is already pushed; the
+   remaining Phase 6 commits are local).
 3. **Deploy to ZCode** -- `node bin/skill-router.mjs deploy` then restart ZCode.
-4. **Use for 2–4 weeks** -- Accumulate routing decisions and feedback signals for reliable weight adaptation.
-5. **Run `tune --auto --dry-run`** -- Review proposed changes before applying.
-6. **Phase 6 planning** -- Evaluate pre-trained embedding models (ONNX transformer, tiny-BERT) to replace FNV-1a n-gram embeddings.
+4. **Use for 2–4 weeks** -- Accumulate real routing decisions and feedback signals. This
+   is the only way the adaptation loop gets exercised against real data.
+5. **Run `tune --auto --dry-run`** -- Review proposed changes before applying. Do not raise
+   MAX_DELTA to make a proposal apply; the 6.11 refusal was correct.
+6. **Phase 7 planning** -- Start with the three silent destructive failures
+   (`P6-H-014`, `P6-H-015`, `P6-H-016`) and `--help` (`P6-H-020`).

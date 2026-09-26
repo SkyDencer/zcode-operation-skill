@@ -15,7 +15,7 @@ It solves three problems:
 2. **Relevance** -- BM25 ranking surfaces the most appropriate skill for the current task.
 3. **Performance** -- fully local, zero network calls, median latency around 2 ms.
 
-The system is intentionally lightweight: no external dependencies, no ML models, no persistent state beyond a pre-built JSON index.
+The system is intentionally lightweight: fully local, zero network calls, and no persistent state beyond a pre-built JSON index. The default retrieval path needs nothing installed. Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used **only** by the opt-in ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`); it is not required to run the plugin. See [docs/embeddings.md](./docs/embeddings.md) and the decision in `docs/decision-dictionary.md` (D28).
 
 ## One-Command Install
 
@@ -206,16 +206,18 @@ Run `tune --auto` after a few weeks of usage when you have enough routing decisi
 
 ## Scale
 
-BM25 benchmark results on 130 prompts against 54 real skills:
+BM25 benchmark results on 130 prompts. Two corpora are in play and both are current — do not conflate them:
 
-| Metric | Value | Notes |
-|--------|-------|-------|
-| Top-1 Accuracy (BM25) | 96.9% (126/130) | Current baseline, domain-prefixed skills |
-| Recall@3 | 89.2% (116/130) | |
-| Median Latency | 2 ms | |
-| P95 Latency | 3 ms | |
-| Fallback Rate | 8.5% (11/130) | |
-| Cache Hit Rate | <1% | Single-run benchmark; low-repeat prompts |
+| Metric | 60-entry benchmark index | 54-leaf corpus (what the hook searches) |
+|--------|------------------------|----------------------------------------|
+| Top-1 Accuracy (BM25) | **92.31% (120/130)** | **96.92% (126/130)** |
+| Recall@3 | 89.23% (116/130) | 89.23% (116/130) |
+| Set Recall@5 (116 skill prompts) | 100% (116/116) | 100% (116/116) |
+| Median / P95 Latency | 3-5 ms / 5-6.6 ms | 3 ms / 4 ms |
+| No-Skill (Fallback) Rate | 8.46% (11/130) | 8.46% (11/130) |
+| Cache Hit Rate | <1% | <1% |
+
+`node tests/run-benchmark.mjs --mode bm25` ranks all 60 index entries, so **92.31% is the number it prints**, and that is the figure frozen in `data/baseline.json` and compared by every tuning guardrail. The hook's implicit path filters out the 6 `router-*` entries before ranking (`hooks/route.mjs`), which is the 96.92% column. Both are recorded in `data/baseline.json` under `corpora`.
 
 Synthetic scale benchmarks (N skills, generated prompts matching skill names/keywords):
 
@@ -232,11 +234,11 @@ Synthetic scale benchmarks (N skills, generated prompts matching skill names/key
 | 500 | flat | 39.5% | 64.2% | 15 | 16 | 0.0% |
 | 500 | hierarchical | 39.4% | 64.0% | 17 | 18 | 0.2% |
 
-**Note on synthetic benchmarks:** These use randomly generated skill names with no domain vocabulary. The accuracy drop on synthetic data reflects lexical poverty (random tokens don't match prompts), not a scalability limitation of BM25. Real-world performance is anchored by the 96.9% Top-1 result on the actual 54-skill corpus. Larger real corpora remain untested.
+**Note on synthetic benchmarks:** These use randomly generated skill names with no domain vocabulary. The accuracy drop on synthetic data reflects lexical poverty (random tokens don't match prompts), not a scalability limitation of BM25. Real-world performance is anchored by the real corpus: 92.31% Top-1 over the 60-entry benchmark index and 96.92% over the 54-leaf corpus the hook searches. Larger real corpora remain untested.
 
 Key findings from scale benchmarks:
 - Flat BM25 is faster than hierarchical at ALL corpus sizes (2x faster at N=50, narrowing to 1.13x at N=500).
-- Flat wins on the real 54-skill corpus (96.9% Top-1); larger real corpora are untested.
+- Flat wins on the real 54-leaf corpus (96.92% Top-1, against 92.31% over the 60-entry index); larger real corpora are untested.
 - Hierarchical routing is deprecated as default; flat is the primary path. It is available programmatically via `selectRouter(corpusSize, { mode: 'hierarchical' })` in `src/routing/selector.mjs`.
 
 Full scale report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
@@ -462,8 +464,8 @@ node bin/skill-router.mjs analytics --json   # machine-readable output
 
 ## Limitations
 
-- **Synonym expansion degrades Top-1** on the current 54-skill corpus (80% vs 97% with expansion off). Keep expansion off by default.
-- **Synthetic scale accuracy is low** due to prompt-skill distribution mismatch, not algorithm failure. The real 54-skill corpus achieves 96.9% Top-1.
+- **Synonym expansion degrades Top-1** on the real corpus (80.0% vs 92.31% with expansion off). Keep expansion off by default.
+- **Synthetic scale accuracy is low** due to prompt-skill distribution mismatch, not algorithm failure. The real corpus achieves 92.31% Top-1 over the 60-entry benchmark index and 96.92% over the 54-leaf corpus the hook searches.
 - **FNV-1a n-gram embeddings** (256-dim) cannot represent meaning: "add a login page" and "implement user authentication" are unrelated to it. The ONNX provider added in Phase 6 can, but on the current corpus it costs accuracy and 1.4 s per prompt, so it stays opt-in.
 - **Hierarchical routing is slower** than flat at all corpus sizes. It is deprecated as default but remains available experimentally.
 - **Disable mechanism is filesystem-based** and depends on ZCode's skill discovery behavior. It may not work in all ZCode configurations.

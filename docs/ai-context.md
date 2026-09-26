@@ -658,7 +658,7 @@ List parameters accept comma-separated values (e.g., `SKILL_ROUTER_BM25_NAME_WEI
 
 ## Constraints
 
-- **No external dependencies.** The plugin ships as plain ESM; zero `npm install`.
+- **No required dependencies.** The default path ships as plain ESM and needs no `npm install`. Phase 6 added one optional runtime dependency, `@huggingface/transformers`, used only by the opt-in ONNX embedding provider (`SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`); with the shipped default (`fnv1a`, semantic weight 0.0) it is never loaded. See `docs/embeddings.md` and decision D28.
 - **No network calls.** All data is local to the project directory.
 - **Deterministic.** Same input always produces the same ranking.
 - **Memory bounded.** The index is loaded into memory at build time; capped at

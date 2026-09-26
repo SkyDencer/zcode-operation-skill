@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Skill Router is a zero-dependency Node.js plugin for ZCode that intercepts authoring prompts, retrieves relevant skill documentation via BM25 lexical search, and injects it into the model context. Phase 2 added hierarchical routing, quality validation, adaptive threshold tuning, synonym expansion, query caching, context budget management, usage analytics, and an external skill import pipeline. Phase 3 added ZCode skill sync (SHA-256 based), a disable mechanism for mirror skills, a two-source index with collision resolution, verify/doctor diagnostic CLIs, and a routing selector that makes flat BM25 the default path.
+The Skill Router is a dependency-light Node.js plugin for ZCode that intercepts authoring prompts, retrieves relevant skill documentation via BM25 lexical search, and injects it into the model context. Phase 2 added hierarchical routing, quality validation, adaptive threshold tuning, synonym expansion, query caching, context budget management, usage analytics, and an external skill import pipeline. Phase 3 added ZCode skill sync (SHA-256 based), a disable mechanism for mirror skills, a two-source index with collision resolution, verify/doctor diagnostic CLIs, and a routing selector that makes flat BM25 the default path. Phase 5 added the adaptive feedback loop; Phase 6 added an embedding provider abstraction with an opt-in ONNX backend (the default retrieval path still installs nothing; see docs/embeddings.md and decision D28). Phase 5 added the adaptive feedback loop and Phase 6 added an embedding provider abstraction with an opt-in ONNX backend (the default retrieval path still installs nothing; see docs/embeddings.md and decision D28).
 
 ## Data Flow
 
@@ -407,7 +407,7 @@ Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-ben
 
 ## Design Decisions
 
-1. **Zero dependencies** -- No npm packages. All algorithms implemented from scratch.
+1. **No required dependencies** -- the default path needs no npm packages; every algorithm (BM25, FNV-1a embeddings, RRF, feature extraction) is implemented from scratch. `@huggingface/transformers` is a Phase 6 addition used only by the opt-in ONNX provider.
 2. **Deterministic embeddings** -- FNV-1a hashing ensures reproducible results without ML models.
 3. **Flat routing is default** -- Phase 3 scale benchmark proved flat is faster and equally accurate at all corpus sizes. Hierarchical is deprecated as default but available via `--experimental`.
 4. **Synonym expansion is opt-in** -- Defaults to off because expanding with low-IDF terms adds noise on the current corpus. Enabled via `--expand on`.
@@ -646,7 +646,7 @@ These bounds ensure the feedback loop can nudge weights toward better performanc
 - **BM25 alone is strong.** Top-1 96.9% (126/130) on 130 prompts against 54 real skills. Fast, deterministic, reliable. Median latency 2 ms. This is the mode to use in production when precision matters.
 - **Multi-domain routing is functional.** The detector produces reasonable plans using a composite of BM25 signal, coverage signal, and embedding signal. Thresholds (single >= 0.90 with gap > 0.15; multi >= 0.50) are tuned for the current 54-skill / 11-domain corpus and may need re-tuning at scale.
 - **Telemetry stack works cleanly.** JSONL logging, ring-buffer metrics, and the human-readable reporter all function as designed with no regressions.
-- **Zero-dependency design holds.** All algorithms (BM25, FNV-1a embeddings, RRF, feature extraction) run from pure ESM with no npm packages.
+- **The default path still runs from pure ESM.** BM25, the FNV-1a embeddings, RRF and feature extraction need no npm packages. Phase 6 added the @huggingface/transformers package for the opt-in ONNX provider only; it is not on the default path.
 - **Quality validation fixes real problems.** Running `validate` on the real corpus fixed 52 skills with incorrect name prefixes and 54 skills with insufficient content tokens.
 - **Sync subsystem works correctly.** SHA-256 based comparison detects drift accurately; mirror protection prevents corruption of user-managed skills.
 
@@ -665,6 +665,13 @@ Given what we know now, we would skip the hand-rolled n-gram embedding engine en
 For the reranker specifically, we would either (a) collect implicit feedback data first and learn the feature weights, or (b) omit it entirely until the corpus grows large enough that lexical overlap becomes a discriminative signal.
 
 ### Benchmark Summary (Real Corpus, 130 prompts / 54 skills)
+
+> Phase 1 measurements, kept as the record of that phase. **The current figures
+> are different and are not interchangeable with these:** BM25 over the 60-entry
+> benchmark index (what `node tests/run-benchmark.mjs --mode bm25` ranks) scores
+> **92.31% (120/130)**, and over the 54-leaf corpus the hook actually searches
+> **96.92% (126/130)**. Both are recorded in `data/baseline.json` under
+> `corpora`; see `docs/reports/phase-6-final-report.md` for the current state.
 
 | Mode | Top-1 | Recall@3 | Median Latency | Verdict |
 |------|-------|----------|----------------|---------|
