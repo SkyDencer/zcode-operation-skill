@@ -92,8 +92,9 @@
 - **Audits:** `docs/reports/phase-6-static-audit.md`, `docs/reports/phase-6-doc-audit.md`,
   `docs/reports/phase-6-test-audit.md`, `docs/reports/phase-6-embedding-benchmark.md`
 - **Test chain:** 73 entries (1 benchmark + 72 test files), 0 failures per the 6.12
-  verification run; the assertion total was not recounted in the reporting pass
-  (last measured: 1746 across 60 files, Sub-Phase 6.6)
+  verification run. A concurrent 6.12 reporting pass re-ran every step individually
+  and summed 2024 assertions; that figure was not independently verified here, and
+  the 1746 quoted elsewhere was measured over 60 files in Sub-Phase 6.6
 - **Coverage:** not re-measured at 6.12. `logs/coverage-2026-09-25.json` (6.6) --
   mean line 87.55%, branch 68.70%, function 83.23%, 91 modules, 23 at 100% line
 - **BM25 baseline:** unchanged — Top-1 0.9231 (120/130), Recall@3 0.8923, Set Recall@5

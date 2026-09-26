@@ -18,7 +18,7 @@ this host):
 | Category | Passed | Failed | Total |
 |----------|--------|--------|-------|
 | Test-chain steps | 73 | 0 | 73 |
-| Assertions | not recounted in the 6.12 reporting pass | 0 | last measured: 1746 across 60 files (6.6) |
+| Assertions | 2024 (as summed by a concurrent 6.12 reporting pass; not independently verified) | 0 | 2024 |
 
 All tests pass with zero regressions. The chain grew from 43 to 73 steps during
 Phase 6 (30 test files added, none removed).
