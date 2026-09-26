@@ -2,7 +2,7 @@
 
 - **Date:** 2026-09-26
 - **Scope:** Sub-Phases 6.1 – 6.12 (Parts A – D of the Phase 6 mission)
-- **Commits:** 44 Phase 6 commits, `f799d99`..`6ca4a82`, plus this report's commit — 158 files, +19,518/−774. 32 commits ahead of `origin/main`; **not pushed** (the first push was in 6.3; this pass did not push, by instruction).
+- **Commits:** 44 Phase 6 commits, `f799d99`..`6ca4a82`, plus this report's commit — 158 files, +19,518/−774. Two pushes: the first in Sub-Phase 6.3 (`84317a6`) and the final push in Sub-Phase 6.12, after which local `HEAD` matches `origin/main`.
 
 ## 1. Status
 
@@ -154,11 +154,10 @@ and with both providers. Promoting ONNX would trade a working default for a
 regression, plus 591 MB of packages and a 122 MB model cache.
 
 **Cost, measured in 6.10:** ONNX cold embed 469 ms (model load), warm 5.92 ms
-median, `buildIndex(60)` 1407 ms; FNV-1a 0.470 ms cold, 0.079 ms warm,
-`buildIndex(60)` 51.0 ms. Disk: `node_modules` 591 MB (`onnxruntime-node` 288,
-`onnxruntime-web` 141, `@huggingface` 135) plus a 122 MB model cache, of which
-35 MB is a stale partial download — the earlier "~254 MB total" estimate was
-wrong by 337 MB. The retriever rebuilds all 60 vectors per prompt, which is where
+median, `buildIndex(60)` 1407 ms; FNV-1a 0.470 ms cold, 0.079 ms warm, `buildIndex(60)`
+51.0 ms. Disk: `node_modules` 591 MB (`onnxruntime-node` 288, `onnxruntime-web` 141,
+`@huggingface` 135) plus a 122 MB model cache, of which 35 MB is a stale partial
+download — the earlier "~254 MB total" estimate was wrong by 337 MB. The retriever rebuilds all 60 vectors per prompt, which is where
 ONNX spends its 1.2 s; caching them is the lever if the decision is revisited.
 
 **The real reason the answer is negative is the corpus, not the model:** 60 short,
@@ -175,10 +174,11 @@ hybrid` 30 prompts Top-1 0.4667, Set Recall 0.7000, p50 3 ms.
 test files (`test:cli` 11, `test:e2e` 5). It held 43 steps at Sub-Phase 6.2, so
 **30 test files were added during the phase and none removed**.
 The Sub-Phase 6.12 verification run reported **0 failures across all 73
-steps**. The chain was then re-run step by step, each as its own `node <file>`
-process: **73 of 73 exit 0, 0 failures, 2024 assertions**. That recount supersedes
-the **1746 assertions across 60 files** figure from the Sub-Phase 6.6 coverage run,
-which was measured when the chain was 30 steps shorter.
+steps**. A concurrent 6.12 reporting pass re-ran the chain step by step,
+each as its own `node <file>` process, and summed **2024 assertions**; that pass's
+figures are recorded in `HANDOFF.md` and `docs/current-state.md` and were not
+independently verified here. The **1746 assertions across 60 files** figure below
+is the Sub-Phase 6.6 coverage run, measured when the chain was 30 steps shorter.
 
 **Coverage.** **80 of 86 modules are reachable by at least one test (93.0%)** —
 the test audit's own figure (§4). Six are unreachable: `src/logger.mjs`,
@@ -259,8 +259,9 @@ are quoted in §5 and labelled), and `git push` (the run script pushes in 6.3 an
    `src/cli/health.mjs` (463), `hooks/route.mjs` (393),
    `src/sync/disabler.mjs` (300), and nine documents (`docs/cli-reference.md` 707,
    `src/deploy/writer.mjs` 503, …).
-10. **The remaining Phase 6 commits are unpushed**; the project manager runs the
-    push.
+10. **The adaptation loop has still never run against real user data** — every
+    signal on disk is test-generated and ages past the 10-minute stale window,
+    which is why `feedback --outcomes` legitimately reports zero negatives.
 
 ## 9. Recommendation for Phase 7
 
