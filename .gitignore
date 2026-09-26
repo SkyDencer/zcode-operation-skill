@@ -28,6 +28,8 @@ logs/benchmark-*.json
 # Local project utilities
 extract.js
 extract2.js
+doc-inventory3.cjs
+decisions.csv
 
 data/skill-embeddings.json
 

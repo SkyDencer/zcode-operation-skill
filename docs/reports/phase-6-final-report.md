@@ -175,10 +175,10 @@ hybrid` 30 prompts Top-1 0.4667, Set Recall 0.7000, p50 3 ms.
 test files (`test:cli` 11, `test:e2e` 5). It held 43 steps at Sub-Phase 6.2, so
 **30 test files were added during the phase and none removed**.
 The Sub-Phase 6.12 verification run reported **0 failures across all 73
-steps**. The chain was **not** re-run in this reporting pass, which excluded the
-full suite, so the assertion total is not restated here: the last figure measured
-anywhere in the tree is **1746 assertions across 60 files**, from the Sub-Phase
-6.6 coverage run, when the chain was 30 steps shorter.
+steps**. The chain was then re-run step by step, each as its own `node <file>`
+process: **73 of 73 exit 0, 0 failures, 2024 assertions**. That recount supersedes
+the **1746 assertions across 60 files** figure from the Sub-Phase 6.6 coverage run,
+which was measured when the chain was 30 steps shorter.
 
 **Coverage.** **80 of 86 modules are reachable by at least one test (93.0%)** —
 the test audit's own figure (§4). Six are unreachable: `src/logger.mjs`,
