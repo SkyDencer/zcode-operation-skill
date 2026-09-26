@@ -11,11 +11,17 @@
  * full-index top1 0.9077").
  *
  * Tests:
- *   1. default reindex includes router-* entries (54 leaf + 6 router = 60)
+ *   1. default reindex includes router-* entries (every leaf + 6 router)
  *   2. `reindex --sources project` includes router-* entries
  *   3. `reindex --sources all` includes router-* entries
  *   4. reindexed index matches the build-index corpus (same skill names)
  *   5. router entries are tagged source: "project" and carry a valid path
+ *
+ * The leaf count is read from `data/skills/` at run time rather than pinned.
+ * Sub-Phase 7.3 grew that directory from 54 to 252 leaves by importing real
+ * third-party skills, and the assertion that matters is the one this test
+ * exists for: `reindex` must produce every leaf the corpus holds *plus* the
+ * six dispatchers, so a pinned 54 would test a number nothing depends on.
  *
  * The generated artifacts (data/skill-index.json, data/skill-embeddings.json)
  * are backed up and restored in `finally`, so the test is non-destructive.
@@ -23,6 +29,7 @@
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,7 +39,25 @@ const INDEX_PATH = resolve(ROOT, 'data', 'skill-index.json');
 const EMBEDDINGS_PATH = resolve(ROOT, 'data', 'skill-embeddings.json');
 
 const ROUTER_COUNT = 6;
-const LEAF_COUNT = 54;
+
+/**
+ * Count the SKILL.md files under `data/skills/` on disk, so the expected index
+ * size follows the corpus instead of a constant that every import invalidates.
+ *
+ * @param {string} root
+ * @returns {number}
+ */
+function countSkillFiles(root) {
+  let total = 0;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const full = resolve(root, entry.name);
+    if (entry.isDirectory()) total += countSkillFiles(full);
+    else if (entry.name === 'SKILL.md') total += 1;
+  }
+  return total;
+}
+
+const LEAF_COUNT = countSkillFiles(resolve(ROOT, 'data', 'skills'));
 
 let passed = 0;
 let failed = 0;

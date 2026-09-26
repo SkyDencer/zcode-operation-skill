@@ -19,8 +19,25 @@ let passed = 0;
 let failed = 0;
 
 function assert(condition, message) {
-  if (condition) { passed++; console.log(`  ✓ ${message}`); }
-  else { failed++; console.error(`  ✗ ${message}`); }
+  if (condition) { passed++; console.log('  ✓', message); }
+  else { failed++; console.error('  ✗', message); }
+}
+
+/**
+ * Count SKILL.md files under a root, independently of the loader under test,
+ * so "the loader found them all" is a real comparison and not a tautology.
+ *
+ * @param {string} root
+ * @returns {number}
+ */
+function countSkillFiles(root) {
+  let total = 0;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const full = resolve(root, entry.name);
+    if (entry.isDirectory()) total += countSkillFiles(full);
+    else if (entry.name === 'SKILL.md') total += 1;
+  }
+  return total;
 }
 
 console.log('\n=== Benchmark metrics tests ===\n');
@@ -80,7 +97,20 @@ assert(fm.name === 'demo-skill', 'frontmatter scalars parse');
 assert(Array.isArray(fm.keywords) && fm.keywords.length === 2, 'frontmatter lists parse');
 assert(parseFrontmatter('no frontmatter here').name === undefined, 'a document without frontmatter yields {}');
 const realSkills = loadSkillsFromDir(resolve('data/skills'));
-assert(realSkills.length === 54, `the project leaf corpus is 54 SKILL.md files (got ${realSkills.length})`);
+// Sub-Phase 7.3 imported 198 real third-party skills on top of the 54 this
+// repository generates, so the count stopped being a snapshot. What is still
+// asserted is that the loader finds EVERY SKILL.md on disk — counted here from
+// the filesystem, not from the loader — and that the corpus clears the floor
+// the sub-phase set.
+const onDisk = countSkillFiles(resolve('data/skills'));
+assert(
+  realSkills.length === onDisk,
+  `the loader finds every SKILL.md on disk (${realSkills.length} of ${onDisk})`
+);
+assert(
+  realSkills.length >= 200,
+  `the corpus holds at least 200 skills (got ${realSkills.length})`
+);
 assert(
   realSkills.every((s, i) => i === 0 || realSkills[i - 1].name.localeCompare(s.name) <= 0),
   'loaded skills are sorted by name'

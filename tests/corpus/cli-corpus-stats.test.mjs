@@ -12,12 +12,29 @@
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { corpusStats } from '../../src/corpus/importer.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
+
+/**
+ * Count SKILL.md files under a root, independently of corpusStats(), so the
+ * comparison below is a real cross-check rather than the same walk twice.
+ *
+ * @param {string} root
+ * @returns {number}
+ */
+function countSkillFiles(root) {
+  let total = 0;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const full = resolve(root, entry.name);
+    if (entry.isDirectory()) total += countSkillFiles(full);
+    else if (entry.name === 'SKILL.md') total += 1;
+  }
+  return total;
+}
 const CLI = resolve(ROOT, 'bin', 'skill-router.mjs');
 const FIXTURES = resolve(__dirname, 'fixtures');
 
@@ -107,11 +124,17 @@ try {
   assert(stats.avgDescriptionLength > 0, 'the average description length is computed');
   assert(stats.avgContentTokens > 0, 'the average content token count is computed');
 
-  // The shipped corpus is all-valid under these four rules.
-  const shipped = await corpusStats(resolve(ROOT, 'data', 'skills'));
-  assertEqual(shipped.total, 54, 'data/skills holds 54 skills');
+  // The shipped corpus is all-valid under these four rules. The total is read
+  // from the filesystem rather than pinned: Sub-Phase 7.3 grew data/skills from
+  // 54 to 252 by importing real third-party skills, and the invariant this
+  // block exists for is "everything shipped validates", not a magic number.
+  const shippedDir = resolve(ROOT, 'data', 'skills');
+  const shippedOnDisk = countSkillFiles(shippedDir);
+  const shipped = await corpusStats(shippedDir);
+  assertEqual(shipped.total, shippedOnDisk, 'corpusStats() sees every SKILL.md on disk');
+  assert(shippedOnDisk >= 200, `data/skills holds at least 200 skills (got ${shippedOnDisk})`);
   assertEqual(shipped.invalid, 0, 'every shipped skill passes the four corpus rules');
-  assertEqual(shipped.valid, 54, 'corpusStats() agrees: 54 valid');
+  assertEqual(shipped.valid, shipped.total, 'corpusStats() agrees on the valid count');
 
   // A tree with 3 invalid skills exits 1: `stats` and `validate` share the
   // invalid-count rule, so a stats run can gate a corpus. This assertion used

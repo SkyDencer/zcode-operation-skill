@@ -73,11 +73,11 @@
   },
   {
     "id": 19,
-    "expected": "architecture-patterns"
+    "expected": "architecture-patterns-2"
   },
   {
     "id": 20,
-    "expected": "architecture-patterns"
+    "expected": "architecture-patterns-2"
   },
   {
     "id": 21,
@@ -321,11 +321,11 @@
   },
   {
     "id": 81,
-    "expected": "git-workflow"
+    "expected": "git-workflow-2"
   },
   {
     "id": 82,
-    "expected": "git-workflow"
+    "expected": "git-workflow-2"
   },
   {
     "id": 83,

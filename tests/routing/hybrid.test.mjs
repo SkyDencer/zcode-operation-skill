@@ -169,7 +169,12 @@ test('SLM returns invalid names → filtered, fallback to BM25', async () => {
 });
 
 test('SLM returns 10 skills → capped at maxSelected (7)', async () => {
-  const knownNames = skillList.slice(0, 10).map((s) => s.name);
+  // With the 252-leaf corpus the original `skillList.slice(0, 10)` names no
+  // longer appear in the top-20 BM25 for this prompt, so parseMultiSelection
+  // drops them and the tier falls back to bm25. Use the actual BM25 top-10
+  // so the SLM response is valid against the candidate pool.
+  const bm25Top = rankSkills('Generic task to surface many skills', skillList, { topK: 20 });
+  const knownNames = bm25Top.slice(0, 10).map((s) => s.skill.name);
   const skills = knownNames.map((n, i) => ({ name: n, score: 0.95 - i * 0.01, reason: `r${i}` }));
   const { port, server } = await startMockServer(() =>
     JSON.stringify({ skills, confidence: 0.95 }),

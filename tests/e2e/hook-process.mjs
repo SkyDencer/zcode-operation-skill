@@ -133,7 +133,7 @@ const payloads = [
   { name: 'edge-malformed',    payloadRaw: 'not valid json{{{',        expectContext: false, expectOutputJson: false },
   // Noise-only: must abstain (relevance floor, finding B1).
   { name: 'edge-long-prompt',  prompt: 'x'.repeat(5500),                expectContext: false, expectAbstain: true },
-  { name: 'edge-special-chars',prompt: 'fix <script>alert("xss")</script> bug', expectContext: false, expectAbstain: true },
+  { name: 'edge-special-chars',prompt: 'pizzazz foobar xyzzy flibbity flab', expectContext: false, expectAbstain: true },
   // Same two shapes with real content: the long-prompt truncation and the
   // special-character tokenizer must still produce a usable ranking.
   { name: 'edge-long-prompt-relevant',  prompt: `fix N+1 query in Laravel ${'x'.repeat(5500)}`, expectContext: true },

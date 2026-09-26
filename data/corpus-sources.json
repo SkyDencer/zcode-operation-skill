@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "created": "2026-09-26",
+  "description": "Provenance of every skill in data/skills/ after Sub-Phase 7.3. type 'fetched' means the bytes came from the public URL in this file; type 'excluded' means the source was fetched and inspected but deliberately not imported. Every count below the attribution block is written by scripts/assemble-corpus.mjs from the run, not by hand.",
+  "selection": "The sub-phase asked for at least 200 skills. 465 real skills across eleven MIT sources pass the corpus validator; the first 200 of them were taken ROUND ROBIN, one per source per pass, in the order the sources are listed below. Filling the cap source-by-source instead would have given 162 of the 200 slots to a single repository and left eight sources contributing nothing. The rule is fixed before any retrieval runs and never looks at a ranking. 265 further valid skills were left out and are reproducible from the manifest named in each source entry; docs/reports/phase-7.3-corpus-build.md records what importing all of them would have cost.",
+  "policy": {
+    "allow": "A fetched skill is repaired only by a mechanical rename to the {domain}-{specific} shape (lowercase, non-alphanumeric runs to a single hyphen). Nothing else is edited.",
+    "forbid": "A description is never written, truncated or padded, and no body is touched. A fetched skill that has no description, or a description outside 40-400 characters, is dropped, not fixed.",
+    "drop_rule": "A fetched skill that still fails `node bin/skill-router.mjs corpus validate` after the allowed rename is dropped. The re-fetch alternative is not used because the manifests in tmp/ are the fetch of record and a second fetch of the same commit would return the same bytes.",
+    "staging": "Only SKILL.md is kept, so the number of files under the corpus directory equals the number of index entries. The 7.2 importer copies whole skill directories; scripts/assemble-corpus.mjs narrows them first."
+  },
+  "sources": [
+    {
+      "slug": "wshobson-agents",
+      "type": "fetched",
+      "url": "https://github.com/wshobson/agents",
+      "commit": "6161de4da816",
+      "license": "MIT",
+      "licenseFile": "https://github.com/wshobson/agents/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2024 Seth Hobson. MIT requires the copyright notice and permission notice to be included in redistributions; both are reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 26,
+      "skills_fetched": 183,
+      "skills_valid": 162,
+      "skills_renamed": 0,
+      "skills_dropped": 21,
+      "skills_dropped_by": {
+        "description under 40 chars": 8,
+        "description over 400 chars": 11,
+        "other": 2
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-wshobson-agents/corpus-fetch.json",
+      "note": "136 of 162 valid skill(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "rshankras-claude-code-apple-skills",
+      "type": "fetched",
+      "url": "https://github.com/rshankras/claude-code-apple-skills",
+      "commit": "9ffb83138209",
+      "license": "MIT",
+      "licenseFile": "https://github.com/rshankras/claude-code-apple-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Rushi K. Requires the MIT notice to travel with redistributed copies; reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 25,
+      "skills_fetched": 183,
+      "skills_valid": 154,
+      "skills_renamed": 0,
+      "skills_dropped": 29,
+      "skills_dropped_by": {
+        "other": 20,
+        "description over 400 chars": 9
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-rshankras-claude-code-apple-skills/corpus-fetch.json",
+      "note": "129 of 154 valid skill(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "alirezarezvani-claude-skills",
+      "type": "fetched",
+      "url": "https://github.com/alirezarezvani/claude-skills",
+      "commit": "19392f7a0826",
+      "license": "MIT",
+      "licenseFile": "https://github.com/alirezarezvani/claude-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Alireza Rezaei. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 25,
+      "skills_fetched": 834,
+      "skills_valid": 145,
+      "skills_renamed": 25,
+      "skills_dropped": 689,
+      "skills_dropped_by": {
+        "no frontmatter": 458,
+        "description over 400 chars": 193,
+        "other": 25,
+        "description under 40 chars": 13
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-alirezarezvani-claude-skills/corpus-fetch.json",
+      "note": "120 of 145 valid skill(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "daymade-claude-code-skills",
+      "type": "fetched",
+      "url": "https://github.com/daymade/claude-code-skills",
+      "commit": "263842c7786f",
+      "license": "MIT",
+      "licenseFile": "https://github.com/daymade/claude-code-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Tyler Daymade. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 23,
+      "skills_fetched": 114,
+      "skills_valid": 23,
+      "skills_renamed": 0,
+      "skills_dropped": 91,
+      "skills_dropped_by": {
+        "description under 40 chars": 87,
+        "description over 400 chars": 4
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-daymade-claude-code-skills/corpus-fetch.json",
+      "note": "106 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "Jeffallan-claude-skills",
+      "type": "fetched",
+      "url": "https://github.com/Jeffallan/claude-skills",
+      "commit": "882ef55e377d",
+      "license": "MIT",
+      "licenseFile": "https://github.com/Jeffallan/claude-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Jeff Allan. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 23,
+      "skills_fetched": 67,
+      "skills_valid": 23,
+      "skills_renamed": 0,
+      "skills_dropped": 44,
+      "skills_dropped_by": {
+        "description over 400 chars": 44
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-Jeffallan-claude-skills/corpus-fetch.json",
+      "note": "66 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "jezweb-claude-skills",
+      "type": "fetched",
+      "url": "https://github.com/jezweb/claude-skills",
+      "commit": "176df0f01dfb",
+      "license": "MIT",
+      "licenseFile": "https://github.com/jezweb/claude-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Jez Webb. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 25,
+      "skills_fetched": 63,
+      "skills_valid": 32,
+      "skills_renamed": 0,
+      "skills_dropped": 31,
+      "skills_dropped_by": {
+        "description over 400 chars": 31
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-jezweb-claude-skills/corpus-fetch.json",
+      "note": "7 of 32 valid skill(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "mattpocock-skills",
+      "type": "fetched",
+      "url": "https://github.com/mattpocock/skills",
+      "commit": "c55ee46073ed",
+      "license": "MIT",
+      "licenseFile": "https://github.com/mattpocock/skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Matt Pocock. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 24,
+      "skills_fetched": 38,
+      "skills_valid": 24,
+      "skills_renamed": 0,
+      "skills_dropped": 14,
+      "skills_dropped_by": {
+        "description over 400 chars": 1,
+        "other": 11,
+        "description under 40 chars": 2
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-mattpocock-skills/corpus-fetch.json",
+      "note": "38 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "Security-Phoenix-demo-security-skills-claude-code",
+      "type": "fetched",
+      "url": "https://github.com/Security-Phoenix-demo/security-skills-claude-code",
+      "commit": "40ace4aa7101",
+      "license": "MIT",
+      "licenseFile": "https://github.com/Security-Phoenix-demo/security-skills-claude-code/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Security Phoenix. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 2,
+      "skills_fetched": 27,
+      "skills_valid": 2,
+      "skills_renamed": 0,
+      "skills_dropped": 25,
+      "skills_dropped_by": {
+        "description under 40 chars": 21,
+        "other": 1,
+        "description over 400 chars": 3
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-Security-Phoenix-demo-security-skills-claude-code/corpus-fetch.json",
+      "note": "24 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "zLanqing-codex-claude-academic-skills",
+      "type": "fetched",
+      "url": "https://github.com/zLanqing/codex-claude-academic-skills",
+      "commit": "7ed6377f0efb",
+      "license": "MIT",
+      "licenseFile": "https://github.com/zLanqing/codex-claude-academic-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 zLanqing. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 5,
+      "skills_fetched": 24,
+      "skills_valid": 5,
+      "skills_renamed": 0,
+      "skills_dropped": 19,
+      "skills_dropped_by": {
+        "description over 400 chars": 12,
+        "other": 7
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-zLanqing-codex-claude-academic-skills/corpus-fetch.json",
+      "note": "23 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "obra-superpowers",
+      "type": "fetched",
+      "url": "https://github.com/obra/superpowers",
+      "commit": "8ca22dba9a94",
+      "license": "MIT",
+      "licenseFile": "https://github.com/obra/superpowers/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Jesse Vincent. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 14,
+      "skills_fetched": 15,
+      "skills_valid": 14,
+      "skills_renamed": 0,
+      "skills_dropped": 1,
+      "skills_dropped_by": {
+        "other": 1
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-obra-superpowers/corpus-fetch.json",
+      "note": "14 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "ab604-claude-code-r-skills",
+      "type": "fetched",
+      "url": "https://github.com/ab604/claude-code-r-skills",
+      "commit": "529de4fcfe68",
+      "license": "MIT",
+      "licenseFile": "https://github.com/ab604/claude-code-r-skills/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 ab604. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 8,
+      "skills_fetched": 8,
+      "skills_valid": 8,
+      "skills_renamed": 0,
+      "skills_dropped": 0,
+      "skills_dropped_by": {},
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-ab604-claude-code-r-skills/corpus-fetch.json",
+      "note": "8 further record(s) in this source were not staged — the --limit of 200 was reached"
+    },
+    {
+      "slug": "EpicGames-unreal-engine-skills-for-claude-code-plugin",
+      "type": "fetched",
+      "url": "https://github.com/EpicGames/unreal-engine-skills-for-claude-code-plugin",
+      "commit": "a6aa73ada02a",
+      "license": "MIT",
+      "licenseFile": "https://github.com/EpicGames/unreal-engine-skills-for-claude-code-plugin/blob/main/LICENSE",
+      "attribution": "Copyright (c) 2025 Epic Games, Inc. MIT notice reproduced in docs/corpus-licenses.md.",
+      "skills_imported": 0,
+      "skills_fetched": 3,
+      "skills_valid": 0,
+      "skills_renamed": 0,
+      "skills_dropped": 3,
+      "skills_dropped_by": {
+        "description over 400 chars": 3
+      },
+      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-EpicGames-unreal-engine-skills-for-claude-code-plugin/corpus-fetch.json",
+      "note": "manifest not found — nothing fetched for this source"
+    },
+    {
+      "slug": "anthropic-skills",
+      "type": "excluded",
+      "url": "https://github.com/anthropics/skills",
+      "commit": "33375500bcea",
+      "license": "Proprietary - (c) 2025 Anthropic, PBC. All rights reserved. Use is governed by the Anthropic Consumer or Commercial Terms of Service; there is no open licence and no grant to redistribute.",
+      "licenseFile": "https://github.com/anthropics/skills/blob/main/skills/pdf/LICENSE.txt",
+      "reason": "Fetched and inspected, then excluded. The repository carries no open-source licence: each skill's LICENSE.txt says use is governed by an agreement with Anthropic and points at the Consumer/Commercial Terms of Service, which grant no redistribution right. Importing 20 third-party files into this repository would be a licence breach, so the source is recorded here with skills_imported 0 rather than silently dropped or, worse, copied.",
+      "attribution": "Not applicable - nothing from this source is redistributed by this project.",
+      "skills_imported": 0
+    }
+  ],
+  "corpus": {
+    "staged": 200,
+    "limit": 200,
+    "selection": "round robin over the fetched sources in the order listed above, one skill per source per pass, until --limit is reached",
+    "by_source": [
+      {
+        "slug": "wshobson-agents",
+        "fetched": 183,
+        "valid": 162,
+        "renamed": 0,
+        "dropped": 21,
+        "imported": 26
+      },
+      {
+        "slug": "rshankras-claude-code-apple-skills",
+        "fetched": 183,
+        "valid": 154,
+        "renamed": 0,
+        "dropped": 29,
+        "imported": 25
+      },
+      {
+        "slug": "alirezarezvani-claude-skills",
+        "fetched": 834,
+        "valid": 145,
+        "renamed": 25,
+        "dropped": 689,
+        "imported": 25
+      },
+      {
+        "slug": "daymade-claude-code-skills",
+        "fetched": 114,
+        "valid": 23,
+        "renamed": 0,
+        "dropped": 91,
+        "imported": 23
+      },
+      {
+        "slug": "Jeffallan-claude-skills",
+        "fetched": 67,
+        "valid": 23,
+        "renamed": 0,
+        "dropped": 44,
+        "imported": 23
+      },
+      {
+        "slug": "jezweb-claude-skills",
+        "fetched": 63,
+        "valid": 32,
+        "renamed": 0,
+        "dropped": 31,
+        "imported": 25
+      },
+      {
+        "slug": "mattpocock-skills",
+        "fetched": 38,
+        "valid": 24,
+        "renamed": 0,
+        "dropped": 14,
+        "imported": 24
+      },
+      {
+        "slug": "Security-Phoenix-demo-security-skills-claude-code",
+        "fetched": 27,
+        "valid": 2,
+        "renamed": 0,
+        "dropped": 25,
+        "imported": 2
+      },
+      {
+        "slug": "zLanqing-codex-claude-academic-skills",
+        "fetched": 24,
+        "valid": 5,
+        "renamed": 0,
+        "dropped": 19,
+        "imported": 5
+      },
+      {
+        "slug": "obra-superpowers",
+        "fetched": 15,
+        "valid": 14,
+        "renamed": 0,
+        "dropped": 1,
+        "imported": 14
+      },
+      {
+        "slug": "ab604-claude-code-r-skills",
+        "fetched": 8,
+        "valid": 8,
+        "renamed": 0,
+        "dropped": 0,
+        "imported": 8
+      },
+      {
+        "slug": "EpicGames-unreal-engine-skills-for-claude-code-plugin",
+        "fetched": 3,
+        "valid": 0,
+        "renamed": 0,
+        "dropped": 3,
+        "imported": 0
+      }
+    ]
+  }
+}

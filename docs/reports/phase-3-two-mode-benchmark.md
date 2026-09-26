@@ -1,7 +1,7 @@
 # Phase 3 — Two-Mode Benchmark Report
 
 > Generated: 2026-09-26
-> Index: 60 skills (54 leaf)
+> Index: 258 skills (252 leaf)
 > Prompts: 40 (15 explicit, 25 implicit, 5 ambiguous)
 
 ## Methodology
@@ -36,14 +36,14 @@ For each prompt:
 | exp-015 | explicit | explicit | router-meta | meta-refactoring | ✓ |
 | imp-001 | implicit | implicit | - | backend-eloquent | ✓ |
 | imp-002 | implicit | implicit | - | frontend-forms | ✓ |
-| imp-003 | implicit | implicit | - | backend-graphql-basics | ✓ |
+| imp-003 | implicit | implicit | - | api-designer | ✗ |
 | imp-004 | implicit | implicit | - | design-accessibility | ✓ |
 | imp-005 | implicit | implicit | - | testing-vitest | ✓ |
 | imp-006 | implicit | implicit | - | backend-middleware | ✓ |
 | imp-007 | implicit | implicit | - | backend-seeding | ✓ |
 | imp-008 | implicit | implicit | - | frontend-portals | ✓ |
 | imp-009 | implicit | implicit | - | frontend-data-fetching | ✓ |
-| imp-010 | implicit | implicit | - | design-color-theory | ✓ |
+| imp-010 | implicit | implicit | - | color-palette | ✗ |
 | imp-011 | implicit | implicit | - | testing-tdd-basics | ✓ |
 | imp-012 | implicit | implicit | - | meta-architecture | ✓ |
 | imp-013 | implicit | implicit | - | frontend-performance | ✓ |
@@ -51,13 +51,13 @@ For each prompt:
 | imp-015 | implicit | implicit | - | backend-pagination | ✓ |
 | imp-016 | implicit | implicit | - | testing-integration-testing | ✓ |
 | imp-017 | implicit | implicit | - | design-spacing | ✓ |
-| imp-018 | implicit | implicit | - | frontend-hooks-basics | ✓ |
+| imp-018 | implicit | implicit | - | react-expert | ✗ |
 | imp-019 | implicit | implicit | - | backend-service-container | ✓ |
-| imp-020 | implicit | implicit | - | frontend-static-generation | ✓ |
-| amb-001 | ambiguous | implicit | - | backend-sanctum | ✓ |
-| amb-002 | ambiguous | implicit | - | backend-errors | ✓ |
-| amb-003 | ambiguous | implicit | - | testing-integration-testing | ✓ |
-| amb-004 | ambiguous | implicit | - | meta-documentation | ✓ |
+| imp-020 | implicit | implicit | - | before-you-build | ✗ |
+| amb-001 | ambiguous | implicit | - | shopify-setup | ✗ |
+| amb-002 | ambiguous | implicit | - | hono-api-scaffolder | ✗ |
+| amb-003 | ambiguous | implicit | - | mcp-builder | ✗ |
+| amb-004 | ambiguous | implicit | - | architecture-spec | ✗ |
 | amb-005 | ambiguous | implicit | - | backend-migrations | ✓ |
 
 ### Metrics Summary
@@ -66,16 +66,28 @@ For each prompt:
 |--------|-------|
 | Mode Detection Accuracy (explicit) | 1.0000 |
 | Router Selection Accuracy (explicit) | 1.0000 (15/15) |
-| Top-1 Accuracy (implicit) | 1.0000 (25/25) |
-| Overall Success Rate | 1.0000 (40/40) |
-| Explicit Latency p50 | 1 ms |
-| Explicit Latency p95 | 4 ms |
-| Implicit Latency p50 | 2 ms |
-| Implicit Latency p95 | 3 ms |
-| Overall Latency p50 | 2 ms |
-| Overall Latency p95 | 3 ms |
+| Top-1 Accuracy (implicit) | 0.6800 (17/25) |
+| Overall Success Rate | 0.8000 (32/40) |
+| Explicit Latency p50 | 2 ms |
+| Explicit Latency p95 | 8 ms |
+| Implicit Latency p50 | 57 ms |
+| Implicit Latency p95 | 86 ms |
+| Overall Latency p50 | 46 ms |
+| Overall Latency p95 | 75 ms |
 
-**All 40 prompts passed.** Both explicit and implicit routing modes achieve 100% accuracy on this dataset.
+**Overall accuracy: 0.8000** (32/40 passed).
+
+### Failures
+
+- **imp-003** (implicit): got `api-designer`, expected [backend-graphql-basics]
+- **imp-010** (implicit): got `color-palette`, expected [design-color-theory]
+- **imp-018** (implicit): got `react-expert`, expected [frontend-hooks-basics]
+- **imp-020** (implicit): got `before-you-build`, expected [frontend-static-generation]
+- **amb-001** (ambiguous): got `shopify-setup`, expected [backend-sanctum, debugging-debugging]
+- **amb-002** (ambiguous): got `hono-api-scaffolder`, expected [backend-errors, debugging-debugging]
+- **amb-003** (ambiguous): got `mcp-builder`, expected [testing-pest-php, testing-integration-testing]
+- **amb-004** (ambiguous): got `architecture-spec`, expected [frontend-app-router, meta-documentation]
+
 
 ## Conclusions
 
@@ -84,5 +96,5 @@ For each prompt:
 - Ambiguous prompts are handled gracefully: either routing path yields an acceptable skill.
 - Both explicit and implicit paths complete in under 1 ms median, well within the hook timeout budget.
 
-Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260926T082540.json`
+Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260926T150132.json`
 This report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-3-two-mode-benchmark.md`

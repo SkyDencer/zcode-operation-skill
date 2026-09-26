@@ -611,7 +611,7 @@
   },
   {
     "id": 81,
-    "prompt": "How do I apply the git-workflow skill for my project workflow?",
+    "prompt": "How do I apply the git-workflow-2 skill for my project workflow?",
     "form": "question"
   },
   {
@@ -706,7 +706,7 @@
   },
   {
     "id": 20,
-    "prompt": "How do I apply the architecture-patterns skill for my project workflow?",
+    "prompt": "How do I apply the architecture-patterns-2 skill for my project workflow?",
     "form": "question"
   },
   {
@@ -731,7 +731,7 @@
   },
   {
     "id": 19,
-    "prompt": "Follow the architecture-patterns skill for project management.",
+    "prompt": "Follow the architecture-patterns-2 skill for project management.",
     "form": "imperative"
   },
   {

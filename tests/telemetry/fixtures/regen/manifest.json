@@ -11,16 +11,16 @@
     "semantic": 0
   },
   "minBm25Score": 0.35,
-  "indexSize": 60,
-  "leafIndexSize": 54,
+  "indexSize": 258,
+  "leafIndexSize": 252,
   "promptCount": 130,
-  "top1": 0.9692,
+  "top1": 0.6538,
   "counts": {
-    "correct": 126,
-    "miss": 4,
-    "positive": 126,
-    "negative": 4,
-    "signals": 4
+    "correct": 85,
+    "miss": 45,
+    "positive": 85,
+    "negative": 45,
+    "signals": 45
   },
   "replay": "per-decision fixed clock: now = first corrective signal ts, else decision ts + 60s",
   "handCrafted": [
