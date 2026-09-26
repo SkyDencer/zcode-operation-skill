@@ -2,6 +2,7 @@
   "benchmark": {
     "top1": 0.9231,
     "recallAt3": 0.8923,
+    "setRecallAt5": 1.0,
     "medianLatencyMs": 3,
     "p95LatencyMs": 5,
     "noSkillRate": 0.0846
@@ -15,7 +16,32 @@
     "high": 0.85,
     "medium": 0.6
   },
-  "baselineAt": "2026-09-26T00:55:23.713Z",
-  "indexSize": 60,
-  "promptCount": 130
+  "retrieval": {
+    "provider": "fnv1a",
+    "rrfWeights": {
+      "bm25": 1.0,
+      "semantic": 0.0
+    },
+    "relevanceFloor": 0.35,
+    "rerank": false
+  },
+  "corpora": {
+    "full": {
+      "indexSize": 60,
+      "top1": 0.9231,
+      "note": "54 leaf skills + 6 router-* dispatchers; this is the corpus `node tests/run-benchmark.mjs --mode bm25` ranks, and therefore the number every guardrail check compares against"
+    },
+    "leaf": {
+      "indexSize": 54,
+      "top1": 0.9692,
+      "note": "leaf-only index with the 0.35 relevance floor, i.e. what hooks/route.mjs:139 actually searches at implicit-routing time; reproduced by `node scripts/regenerate-fixtures.mjs`"
+    },
+    "prompts": 130
+  },
+  "measuredBy": [
+    "node tests/run-benchmark.mjs --mode bm25",
+    "node tests/run-benchmark.mjs --mode hybrid --provider fnv1a",
+    "node scripts/regenerate-fixtures.mjs"
+  ],
+  "baselineAt": "2026-09-26T01:38:41.171Z"
 }

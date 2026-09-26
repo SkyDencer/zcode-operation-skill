@@ -1,151 +1,236 @@
 /**
- * Regenerate telemetry fixture files for the current default embedding provider.
+ * Regenerate the adaptation-loop telemetry fixtures for the CURRENT default
+ * retrieval configuration.
  *
- * Safety policy:
- *   - The hand-crafted fixture pair
- *       tests/telemetry/fixtures/outcomes-decisions.jsonl
- *       tests/telemetry/fixtures/signals-20260924.jsonl
- *     is preserved as-is when the default provider is unchanged (fnv1a).
- *     These fixtures encode a known outcome distribution (3 negative,
- *     3 positive, 1 unknown) that downstream tests depend on; overwriting
- *     them with live-benchmark output would silently break section 6 of
- *     tests/telemetry/outcomes.test.mjs.
- *   - Date-stamped copies (routing-YYYYMMDD.jsonl, signals-YYYYMMDD.jsonl)
- *     are regenerated from the live BM25 benchmark when the default differs
- *     from the last regeneration, or when called with --force.
+ * Phase 5 built the adaptive feedback loop (decision -> signal -> outcome ->
+ * attribution -> weight update) against FNV-1a embeddings. Sub-phase 6
+ * replaced the embedding backend behind `embeddings.provider` and re-froze the
+ * shipped RRF weights. This script re-derives the fixtures the loop is
+ * exercised against, so a provider or weight change cannot silently leave the
+ * loop validated against a stale corpus.
  *
- * Current default: fnv1a (no semantic channel). Fixture signals remain valid.
+ * What it does
+ *   1. Resolves the provider exactly as the hook does (resolveProvider() +
+ *      getConfig(), so SKILL_ROUTER_* overrides are honoured).
+ *   2. Replays the 130-prompt real corpus through the hook's default implicit
+ *      path: leaf-only index (hooks/route.mjs:139) and
+ *      hybridRetrieve({ provider, rerank: false, minBm25Score }) with the
+ *      relevance floor from slm.bm25MinThreshold, degrading to floored
+ *      rankSkills() when no provider is usable.
+ *   3. Emits log-shaped decision + signal records plus a manifest recording
+ *      the configuration they were produced under.
+ *
+ * Determinism
+ *   Timestamps are anchored to a fixed epoch and every field is derived from
+ *   the retrieval result -- there is no Math.random(). Re-running with the
+ *   same index, weights and provider reproduces byte-identical fixtures, so
+ *   `--check` can gate on it.
+ *
+ * Privacy
+ *   Records carry no raw prompt text (the hook never logs it). The corpus id
+ *   is stored instead so tests can recover the prompt from tests/prompts.json,
+ *   which is what attribution.mjs needs.
+ *
+ * The hand-crafted fixture pair asserted by tests/telemetry/outcomes.test.mjs
+ * (outcomes-decisions.jsonl, signals-20260924.jsonl) encodes a fixed
+ * positive/negative/unknown distribution and is never overwritten.
+ *
+ * Usage
+ *   node scripts/regenerate-fixtures.mjs           regenerate the fixtures
+ *   node scripts/regenerate-fixtures.mjs --check   fail if they are stale
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getConfig } from '../src/config/env.mjs';
+import { resolveProvider } from '../src/core/embeddings/resolve.mjs';
+import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
 import { rankSkills } from '../src/core/retriever/bm25.mjs';
-import { getDefaults } from '../src/config/defaults.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const FIXTURES_DIR = resolve(ROOT, 'tests', 'telemetry', 'fixtures');
 const INDEX_PATH = resolve(ROOT, 'data', 'skill-index.json');
 const PROMPTS_PATH = resolve(ROOT, 'tests', 'prompts.json');
 const EXPECTED_PATH = resolve(ROOT, 'tests', 'expected-routes.json');
+const OUT_DIR = resolve(ROOT, 'tests', 'telemetry', 'fixtures', 'regen');
 
-const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+/** Fixed anchor so regenerating under one config is byte-stable. */
+const FIXTURE_EPOCH = Date.parse('2026-09-26T00:00:00.000Z');
+/** Spacing between consecutive decisions, in ms. */
+const DECISION_STRIDE_MS = 30_000;
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+const HAND_CRAFTED = ['outcomes-decisions.jsonl', 'signals-20260924.jsonl'];
 
+/**
+ * @param {string} path
+ * @returns {any}
+ */
 function loadJson(path) {
   return JSON.parse(readFileSync(path, 'utf-8'));
 }
 
+/**
+ * @param {string} path
+ * @param {object[]} records
+ */
 function writeJsonl(path, records) {
   writeFileSync(path, records.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf-8');
 }
 
 /**
- * Check whether the hand-crafted fixtures have the expected shape and content.
- * Returns true when the 6-decision / 4-signal structure is intact.
+ * Run one prompt through the hook's default implicit retrieval path.
+ *
+ * @param {string} prompt
+ * @param {object[]} leaf
+ * @param {object|null} provider
+ * @param {number} minBm25Score
+ * @returns {Promise<{selected: object[], topSkill: string|null, confidence: number}>}
  */
-function fixturesIntact() {
-  const decisionsFile = resolve(FIXTURES_DIR, 'outcomes-decisions.jsonl');
-  const signalsFile = resolve(FIXTURES_DIR, 'signals-20260924.jsonl');
-  if (!existsSync(decisionsFile) || !existsSync(signalsFile)) return false;
-  const decisions = readFileSync(decisionsFile, 'utf-8')
-    .split('\n')
-    .filter((l) => l.trim())
-    .map((l) => JSON.parse(l));
-  const signals = readFileSync(signalsFile, 'utf-8')
-    .split('\n')
-    .filter((l) => l.trim())
-    .map((l) => JSON.parse(l));
-  return decisions.length === 6 && signals.length === 4;
+async function retrieve(prompt, leaf, provider, minBm25Score) {
+  let ranked;
+  if (provider) {
+    ranked = await hybridRetrieve(prompt, leaf, { provider, rerank: false, minBm25Score });
+  } else {
+    ranked = rankSkills(prompt, leaf).filter((r) => r.score >= minBm25Score);
+  }
+  return {
+    selected: ranked.map((r) => r.skill.name),
+    topSkill: ranked.length > 0 ? ranked[0].skill.name : null,
+    confidence: ranked.length > 0 ? (ranked[0].bm25Score ?? ranked[0].score ?? 0) : 0,
+  };
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────────
-
-const force = process.argv.includes('--force');
-const defaults = getDefaults();
-const provider = defaults.embeddings.provider;
-
-console.log(`[regenerate-fixtures] provider=${provider}  today=${today}`);
-
-// Always verify the hand-crafted fixtures are intact.
-if (!force && provider === 'fnv1a' && fixturesIntact()) {
-  console.log('[regenerate-fixtures] Hand-crafted fixtures are intact for fnv1a default. Skipping overwrite.');
-  console.log('  outcomes-decisions.jsonl : 6 decisions (3 neg, 3 pos, 1 unk)');
-  console.log('  signals-20260924.jsonl   : 4 signals (retry, override, rephrase, stale)');
-  process.exit(0);
+/**
+ * Deterministic corrective-signal type for the nth miss.
+ * @param {number} n
+ * @returns {{type: string, offsetMs: number, details: object}}
+ */
+function correctiveSignal(n) {
+  const table = [
+    { type: 'retry', offsetMs: 90_000, details: { attemptCount: 2 } },
+    { type: 'rephrase', offsetMs: 120_000, details: { similarity: 0.72 } },
+    { type: 'explicit_override', offsetMs: 150_000, details: { previousHash: 'sha256:regen-override' } },
+  ];
+  return table[n % table.length];
 }
 
-// Force path or provider change: regenerate date-stamped copies from the live
-// benchmark.  Hand-crafted files are NOT overwritten.
-console.log('[regenerate-fixtures] Regenerating date-stamped fixtures from live benchmark ...');
+// ── Main ──────────────────────────────────────────────────────────────────────
+
+const config = getConfig();
+const resolution = resolveProvider(config, { onWarn: () => {} });
+const provider = resolution.provider;
+const minBm25Score = config.slm?.bm25MinThreshold ?? 0.35;
+const weights = config.embeddings?.weights ?? { bm25: 1, semantic: 0 };
 
 const index = loadJson(INDEX_PATH);
 const leaf = index.filter((s) => !s.name.startsWith('router-'));
 const prompts = loadJson(PROMPTS_PATH);
-const expected = loadJson(EXPECTED_PATH);
-const byId = new Map(expected.map((e) => [e.id, e]));
+const expectedById = new Map(loadJson(EXPECTED_PATH).map((e) => [e.id, e.expected]));
+
+console.log(`[regenerate-fixtures] provider requested=${resolution.requested} used=${resolution.used}` +
+  (resolution.fellBack ? ' (fell back)' : ''));
+console.log(`[regenerate-fixtures] rrf weights bm25=${weights.bm25} semantic=${weights.semantic}` +
+  `  floor=${minBm25Score}  index=${index.length} (leaf ${leaf.length})  prompts=${prompts.length}`);
 
 const decisions = [];
-const negatives = [];
-let pos = 0, neg = 0, unk = 0;
+const signals = [];
+let positive = 0;
+let negative = 0;
+let correct = 0;
+let miss = 0;
+const started = Date.now();
 
 for (let i = 0; i < prompts.length; i++) {
   const p = prompts[i];
-  const exp = byId.get(p.id);
-  const expName = exp?.expected === null ? null : String(exp?.expected ?? '');
-  const ranking = rankSkills(p.prompt, leaf);
-  const topSkill = ranking.length > 0 ? ranking[0].skill.name : null;
+  const ts = new Date(FIXTURE_EPOCH + i * DECISION_STRIDE_MS).toISOString();
+  const result = await retrieve(p.prompt, leaf, provider, minBm25Score);
+  const expected = expectedById.get(p.id) ?? null;
+  const isCorrect = expected === null ? result.topSkill === null : result.topSkill === expected;
 
-  let outcome = 'unknown';
-  if (expName === null && topSkill === null) outcome = 'positive';
-  else if (topSkill === expName) outcome = 'positive';
-  else if (topSkill !== null) outcome = 'negative';
-
-  if (outcome === 'positive') pos++;
-  else if (outcome === 'negative') neg++;
-  else unk++;
-
-  if (outcome === 'negative') negatives.push(i);
-
-  const ts = new Date(Date.now() - (prompts.length - i) * 5 * 60 * 1000).toISOString();
+  const promptHash = `sha256:regen${String(p.id).padStart(58, '0')}`;
   decisions.push({
     ts,
     mode: 'implicit',
     router: null,
-    tier: topSkill ? 'bm25' : 'none',
-    selectedSkills: topSkill ? [topSkill] : [],
-    latencyMs: { total: Math.max(1, Math.round(Math.log2(i + 2))), bm25: Math.max(1, Math.round(Math.log2(i + 2))) },
-    confidence: topSkill ? 0.85 + Math.random() * 0.1 : 0.0,
-    promptHash: `sha256:${String(p.id).padStart(64, '0')}`,
+    tier: result.topSkill === null ? 'none' : 'bm25',
+    selectedSkills: result.selected,
+    latencyMs: { total: 1, bm25: 1 },
+    confidence: Number(result.confidence.toFixed(6)),
+    promptHash,
     sessionId: `sess-regen-${String(i + 1).padStart(3, '0')}`,
     version: '0.2.0',
+    corpusId: p.id,
   });
+
+  if (isCorrect) {
+    correct++;
+    positive++;
+  } else {
+    miss++;
+    negative++;
+    const sig = correctiveSignal(negative - 1);
+    signals.push({
+      ts: new Date(Date.parse(ts) + sig.offsetMs).toISOString(),
+      decisionHash: promptHash,
+      type: sig.type,
+      details: sig.details,
+    });
+  }
 }
 
-// Generate deterministic synthetic signals for the first 30 negative outcomes.
-const signalTypes = ['retry', 'explicit_override', 'rephrase'];
-const signals = negatives.slice(0, 30).map((idx, si) => {
-  const d = decisions[idx];
-  const type = signalTypes[si % signalTypes.length];
-  const ts = new Date(Date.parse(d.ts) + (2 + (si % 3)) * 60 * 1000).toISOString();
-  return {
-    ts,
-    decisionHash: d.promptHash,
-    type,
-    details: type === 'retry' ? { attemptCount: 2 }
-      : type === 'explicit_override' ? { previousHash: 'sha256:prev' }
-      : { similarity: 0.72, previousHash: 'sha256:orig' },
-  };
-});
+const manifest = {
+  generatedBy: 'scripts/regenerate-fixtures.mjs',
+  fixtureEpoch: new Date(FIXTURE_EPOCH).toISOString(),
+  provider: { requested: resolution.requested, used: resolution.used, fellBack: resolution.fellBack },
+  rrfWeights: { bm25: weights.bm25, semantic: weights.semantic },
+  minBm25Score,
+  indexSize: index.length,
+  leafIndexSize: leaf.length,
+  promptCount: prompts.length,
+  top1: Number((correct / prompts.length).toFixed(4)),
+  counts: { correct, miss, positive, negative, signals: signals.length },
+  replay: 'per-decision fixed clock: now = first corrective signal ts, else decision ts + 60s',
+  handCrafted: HAND_CRAFTED,
+};
 
-mkdirSync(FIXTURES_DIR, { recursive: true });
-writeJsonl(resolve(FIXTURES_DIR, `routing-${today}.jsonl`), decisions);
-writeJsonl(resolve(FIXTURES_DIR, `signals-${today}.jsonl`), signals);
+const check = process.argv.includes('--check');
+mkdirSync(OUT_DIR, { recursive: true });
+const decisionsPath = resolve(OUT_DIR, 'routing.jsonl');
+const signalsPath = resolve(OUT_DIR, 'signals.jsonl');
+const manifestPath = resolve(OUT_DIR, 'manifest.json');
 
-console.log(`[regenerate-fixtures] Wrote ${decisions.length} decisions, ${signals.length} signals`);
-console.log(`  positive=${pos}  negative=${neg}  unknown=${unk}`);
-console.log(`  routing-${today}.jsonl`);
-console.log(`  signals-${today}.jsonl`);
-if (!fixturesIntact()) {
-  console.log('  WARNING: hand-crafted fixtures were not intact; date-stamped copies written alongside.');
+if (check) {
+  let stale_ = false;
+  for (const [label, path, expectedContent] of [
+    ['routing.jsonl', decisionsPath, decisions.map((r) => JSON.stringify(r)).join('\n') + '\n'],
+    ['signals.jsonl', signalsPath, signals.map((r) => JSON.stringify(r)).join('\n') + '\n'],
+    ['manifest.json', manifestPath, JSON.stringify(manifest, null, 2) + '\n'],
+  ]) {
+    if (!existsSync(path)) {
+      console.error(`[regenerate-fixtures] STALE: ${label} is missing`);
+      stale_ = true;
+      continue;
+    }
+    const actual = readFileSync(path, 'utf-8');
+    if (actual !== expectedContent) {
+      console.error(`[regenerate-fixtures] STALE: ${label} does not match the current default configuration`);
+      stale_ = true;
+    }
+  }
+  if (stale_) {
+    console.error('[regenerate-fixtures] Run: node scripts/regenerate-fixtures.mjs');
+    process.exit(1);
+  }
+  console.log('[regenerate-fixtures] Fixtures are current for this configuration.');
+  process.exit(0);
 }
+
+writeJsonl(decisionsPath, decisions);
+writeJsonl(signalsPath, signals);
+writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
+
+console.log(`[regenerate-fixtures] wrote ${decisions.length} decisions, ${signals.length} signals in ${Date.now() - started} ms`);
+console.log(`  correct=${correct}  miss=${miss}  top1=${manifest.top1}`);
+console.log(`  ${decisionsPath}`);
+console.log(`  ${signalsPath}`);
+console.log(`  ${manifestPath}`);
+console.log('  hand-crafted fixtures preserved: ' + HAND_CRAFTED.join(', '));

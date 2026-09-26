@@ -1,0 +1,30 @@
+{
+  "generatedBy": "scripts/regenerate-fixtures.mjs",
+  "fixtureEpoch": "2026-09-26T00:00:00.000Z",
+  "provider": {
+    "requested": "fnv1a",
+    "used": "fnv1a",
+    "fellBack": false
+  },
+  "rrfWeights": {
+    "bm25": 1,
+    "semantic": 0
+  },
+  "minBm25Score": 0.35,
+  "indexSize": 60,
+  "leafIndexSize": 54,
+  "promptCount": 130,
+  "top1": 0.9692,
+  "counts": {
+    "correct": 126,
+    "miss": 4,
+    "positive": 126,
+    "negative": 4,
+    "signals": 4
+  },
+  "replay": "per-decision fixed clock: now = first corrective signal ts, else decision ts + 60s",
+  "handCrafted": [
+    "outcomes-decisions.jsonl",
+    "signals-20260924.jsonl"
+  ]
+}
