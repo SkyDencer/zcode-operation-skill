@@ -23,16 +23,27 @@ corpus, so it ships opt-in rather than as the default.
   benchmarked and available behind `SKILL_ROUTER_EMBEDDING_PROVIDER`. With the
   semantic channel on it costs 1445 ms median against a 100 ms budget and scores
   0.9052 Set Recall@5 where the shipped pure-BM25 configuration scores 1.0000.
+  "Opt-in" describes the *provider*; the 591 MB install is not opt-in, because
+  `@huggingface/transformers` sits in `dependencies`.
 - **The default provider therefore stays FNV-1a and the semantic RRF weight
   stays 0.0**, which also keeps the default path free of a 469 ms model load.
 - Three audits ran: static code (4 Critical fixed, 19 High open), documentation
-  (two passes, 30 issues fixed), and test coverage (80 of 86 modules reachable,
+  (two passes, 30 issues fixed), and test coverage (80 of 86 modules reachable
+  *as of the 6.5/6.6 tree* -- the shipping tree holds 94 modules under `src/`,
+  `hooks/` and `bin/`, so that figure needs re-measuring rather than restating;
   0 non-deterministic tests across 183 runs).
 - The test chain grew from 43 to 73 steps; the 6.12 verification run reported 0
   failures across all 73. The assertion total was not recounted in the 6.12
-  reporting pass (last measured: 1746 across 60 files, Sub-Phase 6.6).
+  reporting pass: **2024** is the 73-step chain's figure, while **1746** is a
+  different measurement -- Sub-Phase 6.6's coverage run, over the 60 test files
+  its own file list resolved to. A 43-step chain cannot produce 60 files. That
+  coverage run also recorded 2 failing test files, so its percentages are
+  understated.
 
-Final report: `docs/reports/phase-6-final-report.md`.
+Final report: `docs/reports/phase-6-final-report.md`. Release triage for the 27
+open findings: `docs/reports/phase-6-finding-triage.md`. What an independent
+reader found wrong in the final report, and how each point was corrected:
+`docs/reports/phase-6-report-corrections.md`.
 
 ## Ordering Rationale
 

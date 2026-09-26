@@ -8,8 +8,9 @@
 
 Phases 0, 0.5a, 0.5b, 1, 2, 2.5, 3, 4, 5 and 6 are complete. Phase 7
 (Hardening and Corpus Truth) is the next planned work. Phase 6 is 12
-sub-phases and 44 commits (`f799d99`..`6ca4a82`, 158 files, +19,518/-774);
-see `docs/reports/phase-6-final-report.md`.
+sub-phases and 44 commits (`f799d99`..`6ca4a82`, 155 files, +18,673/-767), plus
+four documentation-only commits after that for 156 files and +19,264/-823 at
+`10c910b`; see `docs/reports/phase-6-final-report.md`.
 
 **Test results** (Sub-Phase 6.12 verification run, `package.json` `scripts.test`
 driven step by step with `node <file>`; npm is not on the subprocess PATH on
@@ -25,9 +26,14 @@ Phase 6 (30 test files added, none removed).
 
 **Coverage** (not re-measured at 6.12): `logs/coverage-2026-09-25.json`, written
 by the Sub-Phase 6.6 run, reports mean line 87.55%, branch 68.70%, function
-83.23% across 91 modules, 23 of them at 100% line coverage. The 6.6 test audit
-separately measured 80/86 modules reachable by at least one test (93.0%), with 6
-unreachable.
+83.23% across 91 modules, 23 of them at 100% line coverage. **That run was not
+green** — the same file records `testFilesRun: 60` and `testFilesFailed: 2`
+(`tests/embeddings/provider.test.mjs`, `tests/hybrid-provider.test.mjs`), so the
+percentages are understated and the 1746-assertion total excludes those two
+files. The 6.6 test audit separately measured 80/86 modules reachable by at
+least one test (93.0%), with 6 unreachable — also a 6.5/6.6 figure: the tree now
+holds 94 modules under `src/ hooks/ bin/`, 75 `.test.mjs` files, and 9 test files
+registered to no chain.
 
 **BM25 real-corpus benchmark** (N=60 index entries, 130 prompts):
 
@@ -81,12 +87,18 @@ The refusal is the correct outcome and was not forced through.
 
 **Decision: the default provider stays FNV-1a and the semantic weight stays 0.0.**
 The first three rows are identical because with `semantic = 0.0` the provider is
-never constructed. With the semantic channel switched on, ONNX clears the
-accuracy half of the decision rule (+5.18 pp Set Recall@5) but fails the latency
-half by 12-14x (1445 ms median in Sub-Phase 6.10, 1212 ms when re-measured in the
-6.12 reporting pass, against a 100 ms budget), and both semantic-on modes score
-below the pure-BM25 configuration that ships. ONNX remains available as an
-opt-in.
+never constructed. Read the decision rule with its third comparison in view: the
+rule ("+5 pp Set Recall over FNV-1a, under 100 ms") has two clauses and ONNX
+**passes the accuracy one** at +5.18 pp; what decided against shipping is that
+0.9052 is a regression against the incumbent BM25 configuration's 1.0000. ONNX
+also misses the latency half by 12-14x (1445 ms median in Sub-Phase 6.10, 1212 ms
+when re-measured in the 6.12 reporting pass, against a 100 ms budget). Note that
+`hook.timeoutMs` 200 is the *internal race timer* the hybrid branch is wrapped in
+(`hooks/route.mjs:196-201`, BM25 fallback at `:203-205`); the hook itself is
+registered with 3500 ms at `hooks/hooks.json:12`, so ONNX is latency-safe for
+the hook and accuracy-negative, not availability-negative. ONNX remains
+available as an opt-in, but `@huggingface/transformers` sits in `dependencies`,
+so every consumer pays its 591 MB install whether or not it is selected.
 
 Caveat: synthetic scale benchmarks (N=50..500) show accuracy dropping from 85% to ~39%. This is lexical poverty of randomly generated skill names, not a BM25 scalability wall. The real 60-skill corpus holds at 92.31%.
 
@@ -95,7 +107,7 @@ Caveat: synthetic scale benchmarks (N=50..500) show accuracy dropping from 85% t
 - BM25 flat retrieval with weighted fields (name x3, description x2, keywords x1)
 - Explicit `$mention` detection with 6 router aliases (next, react, laravel, design, test, meta)
 - Implicit routing on the leaf-skill corpus (filters out router-* entries) with a relevance floor, so the hook abstains instead of injecting skills for every prompt
-- **Embedding provider abstraction** (`createProvider`) with two backends: FNV-1a (256-dim, default, zero dependency) and ONNX / `Xenova/all-MiniLM-L6-v2` (384-dim, opt-in via `SKILL_ROUTER_EMBEDDING_PROVIDER`)
+- **Embedding provider abstraction** (`createProvider`) with two backends: FNV-1a (256-dim, the default, and itself dependency-free) and ONNX / `Xenova/all-MiniLM-L6-v2` (384-dim, opt-in via `SKILL_ROUTER_EMBEDDING_PROVIDER`) — the ONNX backend is not, because its package is a hard `dependencies` entry
 - **Hybrid retrieval on weighted RRF** (k=60) with runtime-configurable `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`, fail-open provider fallback, and an `embeddingSimilarity` reranker feature
 - SLM opt-in infrastructure (Qwen2.5-0.5B); disabled by default due to underperformance
 - Hierarchical domain-first routing (available as the `selectRouter()` `experimental` option; deprecated as default — there is no `--experimental` CLI flag)
@@ -115,7 +127,7 @@ Caveat: synthetic scale benchmarks (N=50..500) show accuracy dropping from 85% t
 - **Adaptive feedback loop**: implicit user-signal collection, outcome correlation, per-field BM25 attribution, gradient-free weight adjustment with MAX_DELTA and accuracy-tolerance guardrails, snapshot rollback, drift-gated fixtures
 - **Coverage tooling** (`node tests/run-coverage.mjs`) keyed by repo-relative path
 - **CLI with 18 subcommands**: list, add, remove, validate, reindex, benchmark, stats, import, sync, sources, verify, doctor, deploy, analytics, feedback, health, tune, help
-- One runtime dependency, used only by the opt-in ONNX provider; the default path installs nothing
+- One runtime dependency, `@huggingface/transformers`, used only by the opt-in ONNX provider. It is in `dependencies`, so the install is mandatory even though the default retrieval path never loads a model
 
 ## 2. What Is Not Done
 
@@ -126,14 +138,14 @@ Caveat: synthetic scale benchmarks (N=50..500) show accuracy dropping from 85% t
 - SLM (Qwen2.5-0.5B) underperforms BM25 and exceeds hook timeout; not ready for production
 - No log rotation cleanup (logs accumulate indefinitely; Phase 4 was planned but implementation deferred)
 - Adaptation has never been exercised against real user data — the signals on disk are test-generated and age out past the 10-minute stale window, which is why `feedback --outcomes` legitimately reports 0 negative on live logs
-- 19 High static-audit findings remain open (`P6-H-001`–`P6-H-019`), plus `P6-H-020`–`P6-H-026`
-- Nine hand-written documents and nine code files exceed the 300-line rule
+- 19 High static-audit findings remain open (`P6-H-001`–`P6-H-019`), plus `P6-H-020`–`P6-H-027` — 27 open High/Medium rows in total. `docs/reports/phase-6-finding-triage.md` sorts them into release-blocking, ship-with-caveat and defer
+- Four source files are over the 300-line rule (`src/cli/health.mjs` 463, `hooks/route.mjs` 393, `src/sync/disabler.mjs` 301, `src/deploy/writer.mjs` 502), as is `docs/cli-reference.md` (711) among the documents
 
 ## 3. Steps for User (ordered checklist)
 
 1. Review `docs/reports/phase-6-final-report.md` and the three audit reports it links
 2. Review commits: `git log --oneline -40`
-3. Push to GitHub when ready: `git push origin main` (the 6.3 range is already pushed; the rest of Phase 6 is local)
+3. Push to GitHub when ready: `git push origin main` (Phase 6 is already pushed — `HEAD` and `origin/main` are both `10c910b`; push again only after new commits land)
 4. Deploy routers to ZCode mirror: `node bin/skill-router.mjs deploy`
 5. Restart ZCode and test these 8 prompts:
    - "Laravel eager loading optimization"
@@ -211,7 +223,7 @@ individually; that is what produced the 73/73 result in the Phase 6 final report
 | `router-skills/` | 6 router skill manifests (router-next, router-react, etc.) |
 | `data/` | Skill manifests, built index, embeddings, synonyms, thresholds, baseline, weights, domain metadata |
 | `tests/` | 73-step test chain, unit / integration / E2E suites, scale and SLM benchmarks, coverage runner |
-| `docs/` | Architecture, reports (including the four Phase 6 audit reports), CLI reference, getting-started, problem tracker, tuning guide, embeddings guide |
+| `docs/` | Architecture, reports (the four Phase 6 audit reports, the final report, its finding triage and its corrections log), CLI reference, getting-started, problem tracker, tuning guide, embeddings guide |
 | `scripts/` | Utility, install and fixture-regeneration scripts |
 | `logs/` | Runtime JSONL logs (rotated by date; no automatic cleanup) |
 
