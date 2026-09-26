@@ -203,14 +203,11 @@ async function main() {
             await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
             ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
           }
-          // When hybrid abstains because the relevance floor rejected every skill
-          // (e.g. a prompt of random characters or HTML that produces no lexical
-          // matches above threshold), fall back to pure BM25 without the floor so
-          // the hook still surfaces the best lexical matches rather than exiting
-          // with no output.
-          if (!ranked || ranked.length === 0) {
-            ranked = rankSkills(query, idx);
-          }
+          // No unfloored fallback here. An empty `ranked` means the relevance
+          // floor rejected every skill, i.e. the prompt has no lexical match
+          // worth injecting; re-running rankSkills() without the filter would
+          // reinstate review finding B1 (all 54 leaf skills injected into
+          // unrelated prompts, 20k+ chars, confidence 0.016). Abstain instead.
           const bm25Ms = Math.round(performance.now() - hybridStart);
           // Confidence is reported on the BM25 scale (normalised [0,1]) so it
           // stays comparable with confidence.highThreshold/mediumThreshold;

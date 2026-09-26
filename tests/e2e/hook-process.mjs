@@ -1,20 +1,35 @@
 /**
  * Hook process E2E test.
  *
- * Spawns real Node subprocesses to test hooks/route.mjs against 20 payloads:
+ * Spawns real Node subprocesses to test hooks/route.mjs against 22 payloads:
  *   - 10 normal prompts
  *   - 5 explicit $mention prompts ($next, $laravel, $react, $design, $test, $meta)
  *   - 1 empty prompt
  *   - 1 malformed JSON
- *   - 1 very long prompt (>5000 chars)
+ *   - 1 very long prompt (>5000 chars) of pure noise
  *   - 1 prompt with special characters
- *   - 1 prompt containing </script>
+ *   - 1 very long prompt (>5000 chars) with real content
+ *   - 1 prompt with special characters and real content
  *
  * For each payload verifies:
  *   - Exit code is 0 (fail-open behavior)
  *   - .zcode/output.json is valid JSON (or absent for fail-open cases)
- *   - For valid prompts: additionalContext is present and non-empty
+ *   - For relevant prompts: additionalContext is present and non-empty
  *   - For empty/malformed: fail-open (no output.json)
+ *   - For lexically irrelevant prompts: abstention, no output.json
+ *
+ * The abstention cases and their relevant twins were split in Sub-Phase
+ * 6.9-review-fix-repair-1. Both shapes used to assert a non-empty
+ * additionalContext, which was true while the hook injected an unfiltered
+ * top-5 into every prompt — the blocking finding B1. With the relevance floor
+ * (config.slm.bm25MinThreshold, 0.35) both of those prompts score 0.0000
+ * against all 54 leaf skills ('x'.repeat(5500) is one unmatched token;
+ * "fix <script>alert("xss")</script> bug" tokenizes to fix/script/alert/xss/
+ * bug, none of which occur in the corpus), so the hook now correctly abstains.
+ * Asserting output for them would have reinstated B1, so each shape is kept
+ * twice: once noise-only (must abstain) and once with real content (must
+ * still route, which is what the long-prompt and special-character handling
+ * was originally there to prove).
  *
  * Uses the project directory as cwd since the hook resolves INDEX_PATH
  * relative to its own location (hooks/../data/skill-index.json).
@@ -113,14 +128,19 @@ const payloads = [
   { name: 'mention-design',  prompt: '$design color palette for dashboard',expectContext: true, expectExplicit: true,  expectRouter: 'router-design'  },
   { name: 'mention-test',    prompt: '$test integration tests with Playwright', expectContext: true, expectExplicit: true, expectRouter: 'router-test'  },
   { name: 'mention-meta',    prompt: '$meta code review best practices',  expectContext: true, expectExplicit: true,  expectRouter: 'router-meta'    },
-  // 17-20: Edge cases (fail-open)
+  // 17-22: Edge cases
   { name: 'edge-empty',        prompt: '',                              expectContext: false, expectOutputJson: false },
   { name: 'edge-malformed',    payloadRaw: 'not valid json{{{',        expectContext: false, expectOutputJson: false },
-  { name: 'edge-long-prompt',  prompt: 'x'.repeat(5500),                expectContext: true  },
-  { name: 'edge-special-chars',prompt: 'fix <script>alert("xss")</script> bug', expectContext: true  },
+  // Noise-only: must abstain (relevance floor, finding B1).
+  { name: 'edge-long-prompt',  prompt: 'x'.repeat(5500),                expectContext: false, expectAbstain: true },
+  { name: 'edge-special-chars',prompt: 'fix <script>alert("xss")</script> bug', expectContext: false, expectAbstain: true },
+  // Same two shapes with real content: the long-prompt truncation and the
+  // special-character tokenizer must still produce a usable ranking.
+  { name: 'edge-long-prompt-relevant',  prompt: `fix N+1 query in Laravel ${'x'.repeat(5500)}`, expectContext: true },
+  { name: 'edge-special-chars-relevant',prompt: 'fix <script>alert("xss")</script> bug in my React component', expectContext: true },
 ];
 
-console.log('\n=== Running 20 payloads ===\n');
+console.log(`\n=== Running ${payloads.length} payloads ===\n`);
 
 const results = [];
 
@@ -143,6 +163,18 @@ for (const t of payloads) {
     assert(outputJson === null, `[${t.name}] no output.json for ${isMalformed ? 'malformed' : 'empty'} input (fail-open)`);
     result.extra.failOpen = true;
     results.push(result);
+    continue;
+  }
+
+  // 2b. A lexically irrelevant prompt must abstain rather than inject an
+  //     unfiltered top-5 (finding B1). It still has to exit 0.
+  if (t.expectAbstain) {
+    assert(outputJson === null, `[${t.name}] no output.json for an irrelevant prompt (relevance floor abstains)`);
+    result.extra.abstained = true;
+    results.push(result);
+    if (existsSync(ZCODE_OUT)) {
+      rmSync(ZCODE_OUT, { force: true });
+    }
     continue;
   }
 
@@ -195,12 +227,17 @@ const allExitZero = results.filter(r => r.exitCode === 0).length;
 const ctxPresent = results.filter(r => r.extra.mode === 'explicit' || r.extra.mode === 'implicit').length;
 const explicitCount = results.filter(r => r.extra.mode === 'explicit').length;
 const failOpenCount = results.filter(r => r.extra.failOpen).length;
+const abstainedCount = results.filter(r => r.extra.abstained).length;
+const expectedExplicit = payloads.filter(p => p.expectExplicit).length;
+const expectedFailOpen = payloads.filter(p => p.expectOutputJson === false && !p.expectAbstain).length;
+const expectedAbstain = payloads.filter(p => p.expectAbstain).length;
 
 console.log(`  Total payloads:      ${total}`);
 console.log(`  All exit 0:          ${allExitZero}/${total}`);
-console.log(`  Context produced:    ${ctxPresent}/${total - failOpenCount} (non-fail-open)`);
-console.log(`  Explicit routed:     ${explicitCount}/6`);
-console.log(`  Fail-open cases:     ${failOpenCount}/2`);
+console.log(`  Context produced:    ${ctxPresent}/${total - failOpenCount - abstainedCount} (non-fail-open, non-abstaining)`);
+console.log(`  Explicit routed:     ${explicitCount}/${expectedExplicit}`);
+console.log(`  Fail-open cases:     ${failOpenCount}/${expectedFailOpen}`);
+console.log(`  Abstained (no match):${abstainedCount}/${expectedAbstain}`);
 
 console.log(`\n  Passed assertions:   ${passed}`);
 console.log(`  Failed assertions:   ${failed}`);
