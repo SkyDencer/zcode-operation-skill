@@ -52,7 +52,7 @@ const semanticOnly = hybridRetrieve(query, leafIndex, {
   _weightSemantic: 1,
 });
 // With equal weighting (via options), results should match bm25-only or semantic-only
-// But with default weights (0.4/0.6), the result is a blend.
+// But with default weights (1.0/0.0), only BM25 contributes.
 assert(defaultResult.length > 0, 'default weighted result is non-empty');
 assert(typeof defaultResult[0].score === 'number', 'default result has numeric score');
 assert(typeof defaultResult[0].bm25Score === 'number', 'default result has bm25Score');
@@ -72,8 +72,12 @@ assert(bm25Weighted[0].skill.name === pureBm25[0].skill.name, 'bm25=1 top result
 // 3. Configured weights are readable from defaults
 console.log('\n3. Configured weights from defaults');
 const defaults = getDefaults();
-assert(defaults.embeddings.weights.bm25 === 0.4, 'bm25 weight is 0.4');
-assert(defaults.embeddings.weights.semantic === 0.6, 'semantic weight is 0.6');
+// NOTE: The default weights are bm25=1.0, semantic=0.0 because the
+// Phase 6.10 benchmark sweep showed semantic embedding similarity was
+// a net negative for Top-1 at every weight tested. See
+// docs/reports/phase-6-embedding-benchmark.md for the full data.
+assert(defaults.embeddings.weights.bm25 === 1.0, 'bm25 weight is 1.0 (semantic disabled by default)');
+assert(defaults.embeddings.weights.semantic === 0.0, 'semantic weight is 0.0 (disabled by default)');
 
 // 4. Weights sum to 1 (convex combination)
 console.log('\n4. Weights form a convex combination');
@@ -140,28 +144,15 @@ console.log('\n9. Default weights scale each RRF term');
 const topDefault = defaultResult[0];
 const bm25RankOfTop =
   rankSkills(query, leafIndex).findIndex((r) => r.skill.name === topDefault.skill.name) + 1;
+// With bm25=1.0, semantic=0.0: bm25Rrf = 1/(60+rank), semanticRrf = 0
 assert(
-  bm25RankOfTop > 0 && Math.abs(topDefault.bm25Rrf - 0.4 / (60 + bm25RankOfTop)) < 1e-12,
-  `bm25Rrf equals 0.4/(60+rank) with k=60 (got ${topDefault.bm25Rrf}, rank ${bm25RankOfTop})`,
+  bm25RankOfTop > 0 && Math.abs(topDefault.bm25Rrf - 1.0 / (60 + bm25RankOfTop)) < 1e-12,
+  `bm25Rrf equals 1.0/(60+rank) with k=60 (got ${topDefault.bm25Rrf}, rank ${bm25RankOfTop})`,
 );
-const semanticRankOfTop = (() => {
-  const sims = new Map();
-  const prebuilt = provider.buildIndex(leafIndex);
-  const q = provider.embed(query);
-  for (const s of leafIndex) {
-    const v = prebuilt.get(s.name);
-    let dot = 0;
-    if (v) for (let i = 0; i < v.length; i++) dot += v[i] * q[i];
-    sims.set(s.name, dot);
-  }
-  return [...sims.entries()].sort((a, b) => b[1] - a[1]).findIndex(
-    ([n]) => n === topDefault.skill.name,
-  ) + 1;
-})();
+// Semantic RRF should be 0 because semantic weight is 0.0
 assert(
-  semanticRankOfTop > 0 &&
-    Math.abs(topDefault.semanticRrf - 0.6 / (60 + semanticRankOfTop)) < 1e-12,
-  `semanticRrf equals 0.6/(60+rank) with k=60 (got ${topDefault.semanticRrf}, rank ${semanticRankOfTop})`,
+  topDefault.semanticRrf === 0,
+  `semanticRrf equals 0 when semantic weight is 0 (got ${topDefault.semanticRrf})`,
 );
 
 // ─── Summary ─────────────────────────────────────────────────────────────────

@@ -63,17 +63,24 @@ const fullResult = hybridRetrieve(prompts[0].prompt, index, { provider: fnv1a })
 assert(Array.isArray(fullResult), 'full corpus returns array');
 assert(fullResult.length > 0, 'full corpus non-empty');
 
-// 4. OnnxProvider throws ProviderNotAvailableError during retrieval when not available
-console.log('\n4. OnnxProvider throws in hybridRetrieve (cold start)');
-// Use a cold provider (non-existent cache) to ensure it throws
+// 4. OnnxProvider falls back to Fnv1aProvider during retrieval when not available
+console.log('\n4. OnnxProvider falls back to Fnv1a in hybridRetrieve (cold start)');
+// Use a cold provider (non-existent cache) to ensure it's unavailable
 const coldOnnx = new OnnxProvider({ cacheDir: '/nonexistent-cache-abc123' });
-let threwOnnx = false;
+let fellBackToFnv1a = false;
+let fallbackResult = null;
 try {
-  hybridRetrieve(prompts[0].prompt, leafIndex, { provider: coldOnnx });
+  fallbackResult = hybridRetrieve(prompts[0].prompt, leafIndex, {
+    provider: coldOnnx,
+    onDegrade: () => {} // suppress console output
+  });
+  // If we get here without throwing, the fallback happened
+  fellBackToFnv1a = fallbackResult?.length > 0;
 } catch (err) {
-  threwOnnx = err instanceof ProviderNotAvailableError;
+  // Fail-open: should not throw, should return Fnv1a results
+  fellBackToFnv1a = false;
 }
-assert(threwOnnx, 'hybridRetrieve throws ProviderNotAvailableError with unavailable OnnxProvider');
+assert(fellBackToFnv1a && fallbackResult?.length > 0, 'hybridRetrieve falls back to Fnv1a when OnnxProvider is unavailable');
 
 // 5. Pre-built embeddings still work alongside provider
 console.log('\n5. Pre-built embeddings with explicit provider');

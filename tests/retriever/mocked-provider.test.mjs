@@ -56,9 +56,10 @@ const mockProvider = {
 const resultMock = hybridRetrieve('test query', leafIndex, {
   provider: mockProvider,
   rerank: false,
+  _weightSemantic: 0.6, // Non-zero to ensure embed is called
 });
 assert(resultMock.length > 0, 'mock provider returns results');
-assert(embedCallCount > 0, 'provider.embed was called');
+assert(embedCallCount > 0, 'provider.embed was called (with semantic weight > 0)');
 // With identical embeddings, embedding similarity is equal for all skills.
 // The ranking should match pure BM25 order (since semantic contribution is flat).
 const bm25Only = rankSkills('test query', leafIndex);
@@ -153,10 +154,11 @@ const resultRerank = hybridRetrieve('test query', leafIndex, {
   provider: mockProviderWithRerank,
   rerank: true,
   topK: 3,
+  _weightSemantic: 0.6, // Non-zero to ensure embed is called during reranking
 });
 assert(resultRerank.length <= 3, 'reranked result respects topK');
 // The provider should have been used for feature extraction
-assert(rerankCalls.length > 0, 'provider.embed was called during reranking');
+assert(rerankCalls.length > 0, 'provider.embed was called during reranking (with semantic weight > 0)');
 
 // ─── Summary ─────────────────────────────────────────────────────────────────
 

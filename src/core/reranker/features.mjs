@@ -17,7 +17,8 @@ import { tokenize, bigrams } from '../../utils/text.mjs';
  * @param {object} skill — { name, description, keywords, domains }
  * @param {object} [options]
  * @param {object} [options.provider] — embedding provider (optional; when absent, embeddingSimilarity is 0)
- * @returns {Record<string, number>}
+ * @returns {Record<string, number>|Promise<Record<string, number>>} a Promise when
+ *   the provider's `embed()` is asynchronous (e.g. the ONNX provider)
  */
 export function extractFeatures(query, skill, options = {}) {
   const { provider } = options;
@@ -54,6 +55,23 @@ export function extractFeatures(query, skill, options = {}) {
     try {
       const queryVec = provider.embed(query);
       const descVec = provider.embed(skill.description);
+      // Both sync providers (FNV-1a) and async providers (ONNX) are supported.
+      // If either embed call returns a Promise, return a Promise from this
+      // function so the caller can await the result.
+      const queryIsPromise = queryVec instanceof Promise;
+      const descIsPromise = descVec instanceof Promise;
+      if (queryIsPromise || descIsPromise) {
+        return Promise.all([
+          queryIsPromise ? queryVec : Promise.resolve(queryVec),
+          descIsPromise ? descVec : Promise.resolve(descVec),
+        ]).then(([q, d]) => ({
+          exactKeyword,
+          bigramOverlap,
+          domainMatch,
+          titleMatch,
+          embeddingSimilarity: cosineSimilarity(q, d),
+        }));
+      }
       embeddingSimilarity = cosineSimilarity(queryVec, descVec);
     } catch {
       // Provider unavailable — fall back to 0

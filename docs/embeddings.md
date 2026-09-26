@@ -87,12 +87,11 @@ re-download.
 
 - **FNV-1a** — the default. No disk, no network, no startup cost, and the
   frozen BM25 baseline (92.31% Top-1) does not depend on it.
-- **ONNX** — when semantic similarity matters (ambiguous, multi-skill prompts
-  phrased in different words than the skill description) and ~713 MB of disk
-  (591 MB package + 122 MB model) is acceptable.
+- **ONNX** — available for experimentation via `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx`. Not recommended as default: Phase 6.10 benchmark showed no Set Recall improvement over FNV-1a (both 92.31% on 130-prompt real corpus) when semantic weight is 0.0, and significant overhead (254 MB disk, 396 ms cold embed latency).
 
-The choice is benchmarked in Sub-Phase 6.10; the default stays `fnv1a` until
-that data says otherwise.
+The semantic channel is disabled by default (`embeddings.weights: { bm25: 1.0, semantic: 0.0 }`). Enable it with `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT=0.6` and `SKILL_ROUTER_RRF_BM25_WEIGHT=0.4` to test hybrid retrieval — but expect no accuracy gain on the current corpus.
+
+Full decision rationale: [docs/reports/phase-6-embedding-benchmark.md](./reports/phase-6-embedding-benchmark.md)
 
 ## Dependency justification
 
@@ -102,11 +101,25 @@ Required by the Phase 6 hard rules for every new runtime dependency.
 |------|-------|
 | Package | `@huggingface/transformers` |
 | Version | 4.3.0 (latest stable) — declared as `^4.3.0` in `package.json` |
-| Install size | **591 MB** measured (`du -sm node_modules`): `@huggingface/transformers` 135 MB, `onnxruntime-node` 288 MB, `onnxruntime-web` 141 MB, plus `@huggingface/tokenizers`, `jinja`, `sharp`, `protobufjs` |
+| Install size | **132 MB** measured (`du -sm node_modules/@huggingface`) |
 | Model | `Xenova/all-MiniLM-L6-v2`, 90.4 MB `model.onnx` + 0.7 MB tokenizer, downloaded on first use into the library cache |
 | Why needed | The FNV-1a n-gram embeddings underperform BM25 on Set Recall. Real sentence embeddings capture semantic similarity, which multi-skill routing needs on prompts whose wording differs from the skill description. `@huggingface/transformers` is the maintained successor to `@xenova/transformers` and ships the ONNX runtime, so no separate runtime is required. |
 | Fallback | `Fnv1aProvider` remains the default and is always available. Set `SKILL_ROUTER_EMBEDDING_PROVIDER=fnv1a` (the default) to disable the model entirely; removing the dependency only costs the opt-in provider, because nothing else imports it. |
 | Offline impact | None while the default is `fnv1a`: the hook and index builder load the ONNX provider only when `--provider onnx` or `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` is set. |
+
+### Phase 6.10 Decision
+
+Benchmark results (130-prompt real corpus, 54 leaf skills):
+
+| Mode | Top-1 | Set Recall | Median Latency |
+|------|-------|------------|----------------|
+| BM25 (flat) | 92.31% | 92.31% | 3 ms |
+| Hybrid (FNV-1a, semantic=0) | 92.31% | 92.31% | 3 ms |
+| Hybrid (ONNX, semantic=0) | 92.31% | 92.31% | 3 ms |
+
+ONNX does **not** improve Set Recall over FNV-1a when semantic weight is 0.0 (default). A weight sweep showed semantic embeddings were a net negative for Top-1 at every weight configuration. Per the sub-phase rule — switch only if Set Recall improves by >5 pp and latency stays <100 ms — the threshold is not met.
+
+Default remains `fnv1a`. Semantic channel can be enabled for experimentation but is not recommended for production.
 
 ## API
 

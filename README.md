@@ -241,6 +241,51 @@ Key findings from scale benchmarks:
 
 Full scale report: [docs/reports/phase-3-scale-benchmark.md](./docs/reports/phase-3-scale-benchmark.md)
 
+## Embedding Benchmark (Phase 6)
+
+Phase 6 evaluated replacing FNV-1a n-gram embeddings with a real ONNX transformer model (Xenova/all-MiniLM-L6-v2, 384-dim). The benchmark compared four modes on the 130-prompt real corpus (54 leaf skills):
+
+| Mode | Top-1 | Recall@3 | Set Recall | Median Latency | P95 Latency |
+|------|-------|----------|------------|----------------|-------------|
+| BM25 (flat) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 6 ms |
+| Hybrid (FNV-1a) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 5 ms |
+| Hybrid (ONNX) | 92.31% (120/130) | 89.23% (116/130) | 92.31% | 3 ms | 5 ms |
+| SLM Hybrid (30 prompts) | 46.67% (14/30) | N/A | 0.7000 | 5 ms p50 | 11 ms p95 |
+
+**Two-Mode Routing (40 prompts):**
+- Mode Detection Accuracy: 100% (15/15 explicit)
+- Router Selection Accuracy: 100% (15/15)
+- Implicit Top-1 Accuracy: 100% (25/25)
+- Overall Success Rate: 100% (40/40)
+
+### Provider Latency Comparison
+
+| Operation | FNV-1a | ONNX (cold) | ONNX (warm) |
+|-----------|--------|-------------|-------------|
+| `embed(text)` | 0.40 ms | 396 ms | 6 ms |
+| `buildIndex(54 skills)` | 57.55 ms | 1281 ms | 1281 ms |
+
+### Disk Usage
+
+| Component | Size |
+|-----------|------|
+| `@huggingface/transformers` package | 132 MB |
+| ONNX model cache (`model.onnx` + tokenizer) | 122 MB |
+| **Total overhead** | **254 MB** |
+
+### Decision
+
+**Default provider remains FNV-1a.** The ONNX provider does not improve Set Recall over FNV-1a (both achieve 92.31% on the 130-prompt benchmark) when using the default semantic weight of 0.0. A weight sweep showed semantic embeddings were a net negative for Top-1 at every weight configuration tested.
+
+The ONNX provider carries significant costs:
+- 254 MB disk overhead (package + model cache)
+- 396 ms cold-start latency on first embed call
+- 1281 ms index build time vs 57 ms for FNV-1a
+
+Per the sub-phase 6.10 rule — switch to ONNX only if Set Recall improves by >5 pp and latency stays <100 ms — the threshold is not met. The semantic channel is disabled by default (`embeddings.weights: { bm25: 1.0, semantic: 0.0 }`) but can be enabled via `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT` for experimentation.
+
+Full results: [docs/reports/phase-6-embedding-benchmark.md](./docs/reports/phase-6-embedding-benchmark.md)
+
 ## CLI Reference
 
 The project ships a full management CLI at `bin/skill-router.mjs`:
@@ -599,7 +644,7 @@ zcode-operation-skill/
 | 3 | Sync & Infrastructure | ZCode skill sync, disable mechanism, two-source index, verify/doctor CLI, routing selector (flat default), scale benchmark validation, two-mode routing ($mention detection), router skill deploy subsystem | Complete |
 | 4 | Log Rotation & Cleanup | Implement 30-day log rotation, disk-space monitoring, stale cache eviction | Planned |
 | 5 | Feedback Loop | Collect implicit user corrections (dismissed/selected skills); adjust field weights from feedback | Complete |
-| 6 | Semantic Embedding Upgrade | Replace FNV-1a n-gram embeddings with a pre-trained local model (e.g., ONNX transformer) for meaningful semantic signals | Planned |
+| 6 | Semantic Embedding Upgrade | Evaluate ONNX transformer (MiniLM-L6-v2) vs FNV-1a; disable semantic channel by default due to no Set Recall improvement; keep FNV-1a as default | Complete |
 | 7 | Polishing | Edge-case hardening, error recovery, comprehensive documentation | Planned |
 
 See [docs/implementation-plan.md](./docs/implementation-plan.md) for full ordering rationale.

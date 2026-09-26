@@ -56,15 +56,23 @@ try {
 }
 assert(threwBuild, 'cold OnnxProvider buildIndex throws ProviderNotAvailableError');
 
-// 3. hybridRetrieve with cold OnnxProvider throws (no auto-fallback at library level)
-console.log('\n3. hybridRetrieve with cold OnnxProvider throws');
-let threwHybrid = false;
+// 3. hybridRetrieve with cold OnnxProvider falls back to Fnv1aProvider (fail-open)
+console.log('\n3. hybridRetrieve with cold OnnxProvider falls back to Fnv1a');
+let fellBackToFnv1a = false;
+let fallbackResult = null;
 try {
-  hybridRetrieve('test prompt', leafIndex, { provider: coldOnnx, rerank: false });
+  fallbackResult = hybridRetrieve('test prompt', leafIndex, {
+    provider: coldOnnx,
+    rerank: false,
+    onDegrade: () => { /* suppress console output */ }
+  });
+  // If we get here without throwing, the fallback happened
+  fellBackToFnv1a = fallbackResult?.length > 0;
 } catch (err) {
-  threwHybrid = err instanceof ProviderNotAvailableError;
+  // Fall-open: should not throw, should return Fnv1a results
+  fellBackToFnv1a = false;
 }
-assert(threwHybrid, 'hybridRetrieve throws ProviderNotAvailableError with cold OnnxProvider');
+assert(fellBackToFnv1a && fallbackResult?.length > 0, 'hybridRetrieve falls back to Fnv1a when OnnxProvider is unavailable');
 
 // 4. Fnv1aProvider works as expected (baseline for fallback comparison)
 console.log('\n4. Fnv1aProvider works as baseline');
@@ -87,8 +95,12 @@ console.log('\n6. Config defaults to fnv1a provider');
 const defaults = getDefaults();
 assert(defaults.embeddings.provider === 'fnv1a', 'embeddings.provider defaults to fnv1a');
 assert(defaults.embeddings.fallbackToFnv1a === true, 'fallbackToFnv1a defaults to true');
-assert(defaults.embeddings.weights.bm25 === 0.4, 'bm25 weight is 0.4');
-assert(defaults.embeddings.weights.semantic === 0.6, 'semantic weight is 0.6');
+// NOTE: The RRF weights default to bm25=1.0, semantic=0.0 because the
+// Phase 6.10 benchmark sweep showed semantic embedding similarity was a
+// net negative for Top-1 at every weight tested against both providers.
+// See docs/reports/phase-6-embedding-benchmark.md for the full data.
+assert(defaults.embeddings.weights.bm25 === 1.0, 'bm25 weight is 1.0 (semantic disabled by default)');
+assert(defaults.embeddings.weights.semantic === 0.0, 'semantic weight is 0.0 (disabled by default)');
 
 // 7. Verify fallback behavior: OnnxProvider with non-existent cache
 //    isAvailable() should return false
