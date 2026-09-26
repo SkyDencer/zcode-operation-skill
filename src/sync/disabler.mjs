@@ -149,9 +149,10 @@ export function disableSkill(mirrorPath, entry, mechanism = 'mirror') {
   }
 
   if (mechanism === 'shadow') {
-    // Ensure the parent directory exists
-    const parentDir = dirname(mirrorSkillDir);
-    mkdirSync(parentDir, { recursive: true });
+    // Ensure the target directory exists so we can write the shadow file.
+    // mirrorSkillDir is a direct child of mirrorRoot; creating it (recursively)
+    // is safe because we already validated containment above.
+    mkdirSync(mirrorSkillDir, { recursive: true });
 
     const shadowContent = [
       '---',

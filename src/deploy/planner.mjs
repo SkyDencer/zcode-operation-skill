@@ -1,5 +1,5 @@
 /**
- * Deploy planner — compare router-skills/ source with the ZCode mirror and
+ * Plan a deploy operation: compare router-skills/ with the ZCode mirror and
  * classify each router as add / update / unchanged.
  *
  * The planner also reads the disabled-registry to classify leaf skills that
@@ -69,6 +69,54 @@ function isWithinRoot(checkPath, root) {
   const normPath = normalize(checkPath);
   const normRoot = normalize(root);
   return normPath === normRoot || normPath.startsWith(normRoot + '/');
+}
+
+/**
+ * Scan the project skills directory and build a name→relative-path map.
+ * Used to resolve the correct mirror path when disabling a leaf skill
+ * by name (e.g. "backend-eloquent" → "backend/laravel/eloquent").
+ *
+ * @param {string} projectRoot — absolute path to the project root
+ * @returns {Map<string, string>} name → relative path
+ */
+function buildSkillPathMap(projectRoot) {
+  const skillsDir = resolve(projectRoot, 'data', 'skills');
+  const nameToPath = new Map();
+
+  function walk(dir, relPrefix) {
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const child of entries) {
+        const fullPath = join(dir, child.name);
+        const relPath = relPrefix ? `${relPrefix}/${child.name}` : child.name;
+        if (child.isDirectory()) {
+          // Check if this dir has a SKILL.md directly (leaf skill)
+          const skillMd = join(fullPath, 'SKILL.md');
+          if (existsSync(skillMd)) {
+            try {
+              const content = readFileSync(skillMd, 'utf-8');
+              const fmMatch = content.match(/^---\s*\n([\s\S]+?)\n---\s*\n?/);
+              if (fmMatch) {
+                const nameMatch = fmMatch[1].match(/^name:\s*(.+)$/m);
+                if (nameMatch) {
+                  nameToPath.set(nameMatch[1].trim(), relPath);
+                }
+              }
+            } catch { /* skip unreadable files */ }
+          }
+          walk(fullPath, relPath);
+        }
+      }
+    } catch { /* skip unreadable dirs */ }
+  }
+
+  try {
+    if (existsSync(skillsDir)) {
+      walk(skillsDir, '');
+    }
+  } catch { /* skills dir missing — map stays empty */ }
+
+  return nameToPath;
 }
 
 // ── Core API ───────────────────────────────────────────────────────────────────
@@ -179,18 +227,28 @@ export function planDeploy(projectDir, zcodeDir, options = {}) {
     warnings.push('Failed to read disabled registry — leaves will be treated as untouched');
   }
 
+  // Build name→relative-path map from project skills to resolve correct mirror paths
+  const skillPathMap = buildSkillPathMap(projectRoot);
+
   const disable = [];
   const alreadyDisabled = [];
   const untouched = [];
 
   for (const name of disabledNames) {
+    // Look up the correct relative path from the project skills index.
+    // Using only the raw name (e.g. "backend-laravel-eloquent") produces a
+    // wrong mirror path when the actual SKILL.md lives under a subdirectory
+    // like backend/laravel/eloquent/ — that path does not exist on disk and
+    // disableSkill() fails, which previously caused deploy to rollback the
+    // successful router additions.
+    const relPath = skillPathMap.get(name) ?? name;
     // Check if already disabled in mirror (directory absent or shadowed)
-    const mirrorSkillDir = join(mirrorRoot, name);
+    const mirrorSkillDir = join(mirrorRoot, relPath);
     const meta = readMeta(mirrorSkillDir);
     if (meta && meta.disabled === true) {
       alreadyDisabled.push({ name });
     } else {
-      disable.push({ name });
+      disable.push({ name, path: relPath });
     }
   }
 
