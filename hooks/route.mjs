@@ -203,6 +203,14 @@ async function main() {
             await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
             ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
           }
+          // When hybrid abstains because the relevance floor rejected every skill
+          // (e.g. a prompt of random characters or HTML that produces no lexical
+          // matches above threshold), fall back to pure BM25 without the floor so
+          // the hook still surfaces the best lexical matches rather than exiting
+          // with no output.
+          if (!ranked || ranked.length === 0) {
+            ranked = rankSkills(query, idx);
+          }
           const bm25Ms = Math.round(performance.now() - hybridStart);
           // Confidence is reported on the BM25 scale (normalised [0,1]) so it
           // stays comparable with confidence.highThreshold/mediumThreshold;
