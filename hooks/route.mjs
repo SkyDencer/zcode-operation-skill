@@ -1,17 +1,15 @@
 /**
  * ZCode route hook — intercepts UserPromptSubmit, retrieves relevant
  * skills via hybrid SLM+BM25 routing, and injects context into the model.
+ * Explicit $-mentions scope BM25 to the matched router's domain; otherwise
+ * routeHybrid() runs. Writes the plan to .zcode/output.json.
  *
- * Reads JSON from stdin, detects explicit `$`-mentions (e.g. `$next`,
- * `$laravel`) before retrieval, scopes BM25 to the matched router's
- * domain when found, otherwise falls back to routeHybrid(). Writes the
- * output plan to .zcode/output.json alongside an additionalContext block.
- *
- * Embedding provider is resolved from config.embeddings.provider with
- * automatic fallback to Fnv1aProvider when the configured provider
- * (e.g. ONNX) is not available and config.embeddings.fallbackToFnv1a is true.
- * The default mode is 'bm25-only' (Phase 7.1 decision D29); the experimental
- * 'onnx' mode emits an `experimental_mode` event and a stderr warning.
+ * D29: default embedding mode 'bm25-only' (FNV-1a fallback); the
+ * experimental 'onnx' mode emits an experimental_mode event.
+ * Sub-Phase 7.6: every exit path — including fail-open — emits a complete
+ * route record with indexLoadMs, bm25Ms, contextBuildMs and totalMs, and
+ * retrieval reuses the builder's pre-tokenized parsed-index cache when it
+ * is present and still valid (prebuilt: on|off in telemetry).
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -19,57 +17,51 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { rankSkills, readSkillContent } from '../src/index.mjs';
 import { hybridRetrieve } from '../src/core/retriever/hybrid.mjs';
+import { preparePrebuiltFor } from '../src/core/retriever/prebuilt.mjs';
 import { logRetrieve, logError, logRecord } from '../src/core/telemetry/logger.mjs';
 import { increment, recordTiming } from '../src/core/telemetry/metrics.mjs';
 import { logDecision } from '../src/telemetry/feedback.mjs';
 import { trackPrompt } from '../src/telemetry/session-tracker.mjs';
 import { recordSignal } from '../src/telemetry/signals.mjs';
+import { emitRouteEvent, emitMemProfile } from '../src/telemetry/route-telemetry.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { resolveProvider } from '../src/core/embeddings/resolve.mjs';
 import { emitExperimentalMode } from '../src/core/embeddings/experimental.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
-import { now } from '../src/utils/time.mjs';
 import { QueryCache } from '../src/core/cache/query-cache.mjs';
 
 const HOOK_DIR = resolve(fileURLToPath(import.meta.url), '..');
 const INDEX_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.json');
+// Parsed-index cache written by the index builders next to the index
+// (Sub-Phase 7.6): pre-tokenized BM25 corpus side. Optional — the hook
+// falls back to the slow path when it is missing or stale.
+const PREBUILT_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.prebuilt.json');
 
 const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
 
-// Resolve the embedding provider from config. When the model is not cached,
-// resolveProvider() logs a warning and hands back the FNV-1a provider; when
-// no provider is usable at all the hook degrades to pure BM25. Resolution is
-// a filesystem probe only — it never loads a model.
+// Resolve the embedding provider from config (a filesystem probe only —
+// it never loads a model). Falls back to FNV-1a, or null for pure BM25.
 const providerResolution = resolveProvider(config);
 
-// Phase 7.1 (D29): the default mode is 'bm25-only'; the experimental 'onnx'
-// mode emits `experimental_mode` telemetry before the decision path. Fail-open:
-// the emitter never throws, and this guard keeps the hook at exit 0.
+// Phase 7.1 (D29): experimental 'onnx' mode emits `experimental_mode`
+// telemetry before the decision path; the guard keeps the hook at exit 0.
 await emitExperimentalMode(config).catch(() => {});
 
 /**
  * Get the active embedding provider, or null when the caller should fall
  * back to pure BM25 retrieval.
- *
- * @returns {object|null} provider instance
  */
 function getProvider() {
   return providerResolution.provider;
 }
 
 /**
- * Build the additionalContext string from ranked skills.
- *
- * Includes a Mode line that distinguishes explicit ([$mention]) from
- * implicit (BM25/SLM) routing, plus routerMatched info for telemetry.
- *
- * @param {Array<{name:string, content:string}>} skillsWithContent
- * @param {{tier:string, confidence:number, skills:Array<{name:string}>, explicit?:boolean, routerMatched?:string|null, mode?:string}} decision
- * @returns {string}
+ * Build the additionalContext string: Mode/Router/Tier/Selected/Confidence
+ * header plus one `--- SKILL: name ---` section per selected skill.
  */
 function buildContext(skillsWithContent, decision) {
   if (skillsWithContent.length === 0) return '';
@@ -94,21 +86,17 @@ function buildContext(skillsWithContent, decision) {
   return lines.join('\n');
 }
 
-/**
- * Main entry point for the route hook.
- */
 async function main() {
   let input = '';
   const chunks = [];
-
-  // Read all stdin
   for await (const chunk of process.stdin) {
     chunks.push(chunk);
   }
   input = Buffer.concat(chunks).toString('utf-8');
 
-  // Input validation
   if (!input.trim()) {
+    await emitRouteEvent({ query: null, tier: 'fail-open', reason: 'empty input' });
+    emitMemProfile();
     process.exit(0);
   }
 
@@ -116,59 +104,76 @@ async function main() {
   try {
     payload = JSON.parse(input);
   } catch {
-    // Malformed JSON — fail open
+    await emitRouteEvent({ query: null, tier: 'fail-open', reason: 'malformed json input' });
+    emitMemProfile();
     process.exit(0);
   }
 
   const { prompt, cwd } = payload;
-
-  // Missing fields → safe defaults
   const safePrompt = typeof prompt === 'string' ? prompt : '';
   const safeCwd = typeof cwd === 'string' ? cwd : process.cwd();
 
-  // Truncate oversized prompts
   const trimmedPrompt =
     safePrompt.length > maxPromptLength
       ? safePrompt.slice(0, maxPromptLength)
       : safePrompt;
 
   if (trimmedPrompt.trim() === '') {
+    await emitRouteEvent({ query: null, tier: 'fail-open', reason: 'empty prompt after defaults' });
+    emitMemProfile();
     process.exit(0);
   }
 
   const startTime = performance.now();
 
   let index;
+  let prebuilt = null;
+  const indexLoadStart = performance.now();
+  let indexLoadMs = 0;
   try {
     const raw = readFileSync(INDEX_PATH, 'utf-8');
     index = JSON.parse(raw);
+    // Parsed-index cache (Sub-Phase 7.6): optional; absent/corrupt stays on
+    // the slow path. Loading it is part of the "load the index" stage.
+    try {
+      prebuilt = JSON.parse(readFileSync(PREBUILT_PATH, 'utf-8'));
+    } catch {
+      prebuilt = null;
+    }
+    indexLoadMs = performance.now() - indexLoadStart;
   } catch {
-    // Index not found — fail open
+    // Index not found — fail open (timings still emitted, Sub-Phase 7.6)
+    indexLoadMs = performance.now() - indexLoadStart;
     increment('errors.index_missing');
     await logError({ query: trimmedPrompt, error: 'index not found' });
+    await emitRouteEvent({ query: trimmedPrompt, tier: 'fail-open', reason: 'index not found', indexLoadMs });
+    emitMemProfile();
     process.exit(0);
   }
 
-  // Build name→index-entry map for path lookup
   const indexByName = new Map();
   for (const entry of index) {
     indexByName.set(entry.name, entry);
   }
 
-  // Detect explicit $-mention BEFORE retrieval
   const explicitMatch = detectExplicitSkill(trimmedPrompt, index);
   const hasExplicit = explicitMatch !== null;
   const explicitSkill = hasExplicit ? explicitMatch.skill : null;
-  // Use cleaned prompt for routing when explicit match found
   const routingPrompt = hasExplicit ? explicitMatch.cleanedPrompt : trimmedPrompt;
 
-  // Build a leaf-only index for implicit BM25 routing.
-  // Router skills (router-*) are dispatchers, not content skills — they must
-  // not compete in lexical ranking. They remain available for explicit detection
-  // via detectExplicitSkill above.
+  // Leaf-only index: router-* dispatchers must not compete in lexical
+  // ranking; they stay available for explicit detection above.
   const leafIndex = index.filter((s) => !s.name.startsWith('router-'));
 
-  // Timeout guard: wrap retrieval in Promise.race
+  // Sub-Phase 7.6: reuse the builder's pre-tokenized corpus when it still
+  // matches this index; reported in telemetry as prebuilt: on|off.
+  let prepared = null;
+  try {
+    prepared = prebuilt ? preparePrebuiltFor(index, leafIndex, prebuilt) : null;
+  } catch {
+    prepared = null; // stale/malformed cache falls back to the slow path
+  }
+
   const cache = new QueryCache({ index: leafIndex, maxSize: 64, ttlMs: 300000 });
   let decision;
   try {
@@ -177,48 +182,37 @@ async function main() {
         // Explicit routing: scope BM25 to the router's domain
         return routeWithExplicit(query, index, explicitSkill);
       }
-      // Implicit routing: full hybrid pipeline on leaf skills only.
       // `slm.enabled` is false by default, so the branch below is the
       // production path; `routeHybrid` only runs when the operator opts in.
       const slmEnabled = config.slm?.enabled !== false;
       if (!slmEnabled) {
-        // Lexical relevance floor. Neither retrieval source can abstain on
-        // its own — rankSkills returns every indexed skill and every skill
-        // has a non-zero cosine similarity — so without this the hook would
-        // inject five skills into every prompt, including unrelated ones.
-        // Same threshold routeHybrid() applies for the SLM path.
+        // Lexical relevance floor: rankSkills returns every skill and every
+        // skill has a non-zero cosine similarity, so without it the hook
+        // would inject skills into unrelated prompts. Abstain instead.
         const minBm25Score = config.slm?.bm25MinThreshold ?? 0.35;
-        // Implicit routing: use hybrid retrieval (BM25 + embeddings via RRF)
-        // when a provider is available; fall back to pure BM25 otherwise.
         const provider = getProvider();
         if (provider) {
           const hybridStart = performance.now();
-          // Await: providers such as ONNX build their embedding index
-          // asynchronously, so hybridRetrieve() may hand back a Promise.
-          // The race keeps a cold model load (measured ~2 s) from blowing
-          // through hook.timeoutMs on every prompt; the hook must never
-          // block, so a timeout degrades to pure BM25 rather than failing.
+          // Providers such as ONNX build their index asynchronously; the
+          // race keeps a cold load from blowing through hook.timeoutMs.
           let ranked;
           try {
             ranked = await Promise.race([
-              hybridRetrieve(query, idx, { provider, rerank: false, minBm25Score }),
+              hybridRetrieve(query, idx, { provider, rerank: false, minBm25Score, _prebuilt: prepared }),
               new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('embedding retrieval timeout')), timeoutMs)
               ),
             ]);
           } catch (err) {
             await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
-            ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
+            ranked = rankSkills(query, idx, { _prebuilt: prepared }).filter((r) => r.score >= minBm25Score);
           }
-          // No unfloored fallback here. An empty `ranked` means the relevance
-          // floor rejected every skill, i.e. the prompt has no lexical match
-          // worth injecting; re-running rankSkills() without the filter would
-          // reinstate review finding B1 (all 54 leaf skills injected into
-          // unrelated prompts, 20k+ chars, confidence 0.016). Abstain instead.
+          // No unfloored fallback: empty `ranked` means the floor rejected
+          // every skill (finding B1); abstain rather than re-run unfloored.
           const bm25Ms = Math.round(performance.now() - hybridStart);
-          // Confidence is reported on the BM25 scale (normalised [0,1]) so it
-          // stays comparable with confidence.highThreshold/mediumThreshold;
-          // the fused RRF score is on a different scale entirely.
+          // Confidence is on the BM25 scale (normalised [0,1]), comparable
+          // with the confidence thresholds; the RRF score is on a different
+          // scale entirely.
           const confidence = ranked.length > 0 ? ranked[0].bm25Score : 0;
           return {
             skills: ranked.map((r) => ({ name: r.skill.name, score: r.score })),
@@ -232,11 +226,11 @@ async function main() {
             latencyMs: { total: bm25Ms, bm25: bm25Ms, slmEnabled: false },
           };
         }
-        // No provider available — pure BM25 fallback
-        // The relevance floor applies here too: an empty list means the
-        // prompt has no lexical match worth injecting, so the hook abstains
-        // rather than falling back to an unfiltered top-5.
-        const ranked = rankSkills(query, idx).filter((r) => r.score >= minBm25Score);
+        // No provider — pure BM25 fallback; the relevance floor applies
+        // here too, so an empty list means the hook abstains.
+        const bm25Start = performance.now();
+        const ranked = rankSkills(query, idx, { _prebuilt: prepared }).filter((r) => r.score >= minBm25Score);
+        const bm25Ms = Math.round(performance.now() - bm25Start);
         const tier = ranked.length > 0 ? 'bm25' : 'none';
         const confidence = ranked.length > 0 ? ranked[0].score : 0;
         return {
@@ -248,7 +242,7 @@ async function main() {
             description: r.skill.description,
             bm25Score: r.score,
           })),
-          latencyMs: { total: 0, bm25: 0, slmEnabled: false },
+          latencyMs: { total: bm25Ms, bm25: bm25Ms, slmEnabled: false },
         };
       }
       return await Promise.race([
@@ -261,6 +255,8 @@ async function main() {
   } catch (err) {
     increment('errors.rerouting');
     await logError({ query: trimmedPrompt, error: err.message });
+    await emitRouteEvent({ query: trimmedPrompt, tier: 'fail-open', reason: `retrieval error: ${err.message}`, indexLoadMs });
+    emitMemProfile();
     process.exit(0);
   }
 
@@ -280,7 +276,6 @@ async function main() {
     durationMs: latency,
   });
 
-  // Log cache stats when available
   if (cache) {
     const cs = cache.getStats();
     await logRecord({
@@ -294,23 +289,19 @@ async function main() {
     });
   }
 
-  // Log routing-specific telemetry including explicit/implicit mode
-  await logRecord({
-    event: 'route',
-    query: trimmedPrompt,
-    tier,
-    candidates: candidates.map((c) => c.name),
-    slmLatency,
-    bm25Latency,
+  // Shared fields for the route record (Sub-Phase 7.6); bm25Ms repeats
+  // bm25Latency under its canonical name for new consumers.
+  const routeExtra = {
+    slmLatency, bm25Latency, bm25Ms: bm25Latency,
     explicit: decision.explicit ?? false,
     routerMatched: decision.routerMatched ?? null,
     mode: decision.mode ?? tier,
     slmEnabled: config.slm?.enabled ?? false,
     embeddingProvider: providerResolution.used,
     embeddingProviderFallback: providerResolution.fellBack,
-  });
+    prebuilt: prepared ? 'on' : 'off',
+  };
 
-  // Log structured routing decision for feedback analytics
   const modeLabel = (decision.explicit ?? false) ? 'explicit' : 'implicit';
   await logDecision({
     mode: modeLabel,
@@ -333,13 +324,19 @@ async function main() {
     // Signal logging failures must never block the hook
   }
 
+  const contextBuildStart = performance.now();
+  let contextBuildMs = 0;
+
   if (rankedNames.length === 0) {
+    // Legitimate abstention (relevance floor), not a fail-open; the context
+    // build was skipped and records 0.
+    await emitRouteEvent({ query: trimmedPrompt, tier, candidates: candidates.map((c) => c.name), indexLoadMs, ...routeExtra });
+    emitMemProfile();
     process.exit(0);
   }
 
   increment(`mode.${tier}`);
 
-  // Augment ranked names with full index entries (for path resolution)
   const ranked = rankedNames.map((s) => ({
     skill: indexByName.get(s.name) ?? { name: s.name, path: '' },
     score: s.score,
@@ -347,13 +344,11 @@ async function main() {
 
   const skillsWithContent = await readSkillContent(ranked);
 
-  // Fit into context budget with paragraph-safe truncation
   const { selected, totalChars } = fitWithinBudget(skillsWithContent, {
     maxChars: budgetMaxChars,
     minPerSkill: budgetMinPerSkill,
   });
 
-  // Log actual injected context size for telemetry
   await logRecord({
     event: 'budget',
     query: trimmedPrompt,
@@ -365,6 +360,7 @@ async function main() {
   });
 
   const additionalContext = buildContext(selected, decision);
+  contextBuildMs = performance.now() - contextBuildStart;
 
   const output = {
     hookSpecificOutput: {
@@ -380,21 +376,25 @@ async function main() {
     },
   };
 
-  // Write output alongside additionalContext
+  // Write output.json alongside additionalContext
   const outputPath = join(safeCwd, '.zcode', 'output.json');
   try {
     const fs = await import('node:fs/promises');
     await fs.mkdir(join(safeCwd, '.zcode'), { recursive: true });
     await fs.writeFile(outputPath, JSON.stringify(output), 'utf-8');
-  } catch (err) {
+  } catch {
     writeFileSync(join(safeCwd, '.zcode', 'output.json'), JSON.stringify(output), 'utf-8');
   }
 
+  // Complete route telemetry (emitted last so totalMs covers the whole invocation).
+  await emitRouteEvent({ query: trimmedPrompt, tier, candidates: candidates.map((c) => c.name), indexLoadMs, contextBuildMs, ...routeExtra });
+  emitMemProfile();
   process.exit(0);
 }
 
 // Error boundary: any uncaught error → exit 0, log to stderr
-main().catch((err) => {
+main().catch(async (err) => {
   if (process.env.SKILL_ROUTER_DEBUG) console.error('[skill-router] unhandled error:', err.message);
+  await emitRouteEvent({ query: null, tier: 'fail-open', reason: `unhandled error: ${err.message}` }).catch(() => {});
   process.exit(0);
 });

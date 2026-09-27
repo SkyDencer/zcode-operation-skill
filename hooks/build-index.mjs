@@ -28,9 +28,11 @@ import { populateDomainsFromSkills } from '../src/core/routing/domain-registry.m
 import { resolveCollisions } from '../src/index/dedupe.mjs';
 import { projectSources } from '../src/index/sources.mjs';
 import { createProvider } from '../src/core/embeddings/provider.mjs';
+import { buildPrebuiltIndex } from '../src/core/retriever/prebuilt.mjs';
 
 const config = getConfig();
 const INDEX_PATH = resolve('data/skill-index.json');
+const PREBUILT_PATH = resolve('data/skill-index.prebuilt.json');
 const EMBEDDINGS_256_PATH = resolve('data/skill-embeddings.json');
 const EMBEDDINGS_384_PATH = resolve('data/skill-embeddings-384.json');
 
@@ -197,6 +199,19 @@ async function main() {
 
   // Build BM25 index (list of skill objects)
   await writeFile(INDEX_PATH, JSON.stringify(deduplicated, null, 2), 'utf-8');
+
+  // Parsed-index cache for the hook (Sub-Phase 7.6): pre-tokenized corpus
+  // side so rankSkills() skips per-call tokenization/IDF at scale. Written
+  // next to the index; the hook re-validates it (fingerprint + weights) and
+  // falls back to the slow path when it is stale.
+  try {
+    await writeFile(PREBUILT_PATH, JSON.stringify(buildPrebuiltIndex(deduplicated)), 'utf-8');
+    console.log(`  Parsed index: ${PREBUILT_PATH}`);
+  } catch (err) {
+    // The cache is an optimization, not a correctness dependency: a write
+    // failure is reported, and the hook simply stays on the slow path.
+    console.warn(`[skill-router] prebuilt index not written: ${err.message}`);
+  }
 
   // Build and persist embedding index
   if (provider) {

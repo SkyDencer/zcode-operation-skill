@@ -405,6 +405,35 @@ Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-ben
 | Hybrid (BM25+FNV-1a) | 53.8% | 77.7% | 31 ms | 41 ms |
 | Routing overhead | -- | -- | +3 ms | +5 ms |
 
+### Hook spawn cost at scale (Sub-Phase 7.6, measured 2026-09-27)
+
+Full-hook spawn wall time (fresh `node` process per prompt, Windows, Node
+v26.8.2), prebuilt parsed-index cache on:
+
+| Corpus | p50 ms | p95 ms | rss MB |
+|---|---|---|---|
+| 50–500 synthetic skills | 126–138 | 138–228 (load-noise tails) | 52–57 |
+| production 258-entry index | 138 | 180 | 57 |
+| 1000-skill fixture | 152–165 | 180–249 | 64–66 |
+
+- **The corpus-size-dependent cost is gone**: p50 is flat across 50 → 1000
+  skills because `rankSkills` reuses the builder-written parsed-index cache
+  (`src/core/retriever/prebuilt.mjs`, `data/skill-index.prebuilt.json`);
+  pure retrieval at 1000 skills is ~0.4 ms/call vs ~35–120 ms without it.
+  Rankings are bit-identical to the slow path (`tests/retriever/prebuilt.test.mjs`).
+- **Memory stays under the 100 MB per-invocation budget** at every size
+  (max measured 72.8 MB without the cache, 65.6 MB with it, at 1000 skills).
+- **The fixed floor is the process, not the retrieval**: a hook spawn with
+  empty stdin p95s at ~120–129 ms (interpreter startup ~30 ms + ESM import
+  graph ~40–60 ms + module-scope config/provider work). The pre-registered
+  100 ms wall-clock p95 gate is therefore not reachable for a fresh ESM
+  spawn on this host; the hook's own post-startup work at 1000 skills
+  (~40–60 ms) is inside it. Full breakdown and the gate status:
+  `docs/reports/phase-7.6-hook-performance.md`.
+- Relevance floor (abstention) does not scale (finding B1, Sub-Phases 7.3/7.5):
+  at 1000 skills a matching prompt always normalises its top score to 1.0,
+  so gibberish prompts partially route; documented, not a defect.
+
 ## Design Decisions
 
 1. **No required dependencies** -- the default path needs no npm packages; every algorithm (BM25, FNV-1a embeddings, RRF, feature extraction) is implemented from scratch. `@huggingface/transformers` is a Phase 6 addition used only by the opt-in ONNX provider.

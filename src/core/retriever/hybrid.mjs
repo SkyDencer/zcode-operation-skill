@@ -78,7 +78,10 @@ const DEFAULT_SEMANTIC_WEIGHT = embeddings.weights.semantic;
  * @param {Map<string, Float32Array>} [options.embeddings] — pre-built embedding index (optional)
  * @param {number} [options._weightBm25] — per-call BM25 RRF weight override (test-only)
  * @param {number} [options._weightSemantic] — per-call semantic RRF weight override (test-only)
- * @returns {Array<{skill: object, score: number, bm25Score: number, embeddingScore: number}>|Promise<Array>}
+ * @param {object} [options._prebuilt] — prebuilt BM25 corpus side
+ *   (src/core/retriever/prebuilt.mjs) forwarded to rankSkills; see its
+ *   `options._prebuilt` there
+ * @returns {Array<{skill: object, score: number, bm25Score: number, embeddingScore: number}>|Promise<Array<object>>}
  */
 export function hybridRetrieve(prompt, index, options = {}) {
   const k = options.k ?? rrf.k;
@@ -100,7 +103,7 @@ export function hybridRetrieve(prompt, index, options = {}) {
   let provider = null;
 
   // ── BM25 retrieval ────────────────────────────────────────────────────────
-  const bm25Results = rankSkills(prompt, index);
+  const bm25Results = rankSkills(prompt, index, { _prebuilt: options._prebuilt });
 
   /**
    * Shape fused rows for the public API and apply the reranking stage.

@@ -12,11 +12,13 @@ import { populateDomainsFromSkills } from '../core/routing/domain-registry.mjs';
 import { writeFile } from 'node:fs/promises';
 import { resolveCollisions } from '../index/dedupe.mjs';
 import { projectSources } from '../index/sources.mjs';
+import { buildPrebuiltIndex } from '../core/retriever/prebuilt.mjs';
 
 // Default corpus must match hooks/build-index.mjs: leaf skills + router skills.
 // Reindexing with data/skills alone silently dropped the 6 router-* entries.
 const DEFAULT_SOURCES = projectSources();
 const INDEX_PATH = resolve('data/skill-index.json');
+const PREBUILT_PATH = resolve('data/skill-index.prebuilt.json');
 const EMBEDDINGS_PATH = resolve('data/skill-embeddings.json');
 
 /**
@@ -135,6 +137,14 @@ export async function main(argv) {
   const deduplicated = resolveCollisions(tagged);
 
   await writeFile(INDEX_PATH, JSON.stringify(deduplicated, null, 2), 'utf-8');
+
+  // Parsed-index cache for the hook (Sub-Phase 7.6); reported on failure,
+  // never fatal — the hook falls back to the slow path.
+  try {
+    await writeFile(PREBUILT_PATH, JSON.stringify(buildPrebuiltIndex(deduplicated)), 'utf-8');
+  } catch (err) {
+    console.warn(`[skill-router] prebuilt index not written: ${err.message}`);
+  }
 
   const embeddingIndex = buildEmbeddingIndex(deduplicated);
   const embeddingsForJson = {};

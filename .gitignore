@@ -8,6 +8,7 @@ logs/*.json
 data/skill-index.json
 nul
 data/skill-index.json
+data/skill-index.prebuilt.json
 .env
 .env.*
 !.env.example
