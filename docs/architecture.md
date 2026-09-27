@@ -284,7 +284,7 @@ Configuration via `SKILL_ROUTER_SOURCES` env var (colon-separated paths) or `rei
 - Tie-breakers: (1) lower fallback rate, (2) closest to current defaults
 - Evaluates 45 combinations on the 130-prompt benchmark in ~12 seconds
 - Writes results to `data/thresholds.json` -- consumed by `defaults.mjs` at startup
-- Optimized thresholds (current): high=0.85, medium=0.60, Top-1=96.9%, fallback=8.46%
+- Optimized thresholds (current): high=0.85, medium=0.60, Top-1=78.43% (247-skill scale ceiling), fallback=3.92%
 
 ### Skill Quality Validator (`src/quality/validator.mjs`)
 
@@ -349,7 +349,7 @@ Phase 3 conducted a rigorous scale benchmark comparing flat BM25 against hierarc
 1. **Flat BM25 is faster at every scale.** At N=50 it is 2x faster; the gap narrows to 1.13x at N=500 but flat never loses.
 2. **Accuracy is tied or slightly better for flat.** Hierarchical never outperforms flat; at N=300 and N=500 flat edges ahead by 0.1-0.2%.
 3. **Fallback rate is higher for hierarchical** at larger scales (0.3% vs 0.0%).
-4. **The inflection point** where Top-1 drops below 95% is at N=50 on synthetic prompts. This is a corpus-distribution issue, not an algorithm failure -- the real 54-skill corpus achieves 96.9% Top-1.
+4. **The inflection point** where Top-1 drops below 95% is at N=50 on synthetic prompts. This is a corpus-distribution issue, not an algorithm failure -- the real 252-leaf corpus achieves 78.43% Top-1 at the 247-skill ceiling.
 5. **Decision**: hierarchical routing is deprecated as the default. Flat is the primary path. Hierarchical remains available to callers that pass `selectRouter(corpusSize, { mode: 'hierarchical' })` or `{ experimental: true }`; there is no `--experimental` CLI flag.
 
 Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-benchmark.md)
@@ -394,7 +394,7 @@ Full report: [docs/reports/phase-3-scale-benchmark.md](reports/phase-3-scale-ben
 
 | Mode | Top-1 | Recall@3 | Median Latency | P95 Latency |
 |------|-------|----------|----------------|-------------|
-| BM25 (real, 54 skills) | 96.9% | 89.2% | 2 ms | 3 ms |
+| BM25 (real, 252 leaves) | 78.43% | 86.27% | 29 ms | 44 ms |
 | BM25 (synthetic, 50) | 85.0% | 97.0% | 2 ms | 3 ms |
 | BM25 (synthetic, 100) | 76.0% | 93.5% | 3 ms | 4 ms |
 | BM25 (synthetic, 200) | 50.2% | 84.5% | 6 ms | 7 ms |
@@ -662,7 +662,7 @@ The feedback loop adjusts BM25 field weights but does so under strict constraint
 
 5. **Sum preservation** — After clamping, weights are normalized so their sum equals the original sum. This prevents the total signal strength from drifting upward or downward.
 
-6. **Frozen baseline** — `data/baseline.json` records the authoritative BM25 Top-1 (92.31%) and the default weights (`name: 3, description: 2, keywords: 1`). All guardrail checks reference this file. Users should update it manually via `tune --apply` after a successful run, or regenerate it after a corpus change.
+6. **Frozen baseline** — `data/baseline.json` records the authoritative BM25 Top-1 (64.62% over the 258-entry index; 78.43% over the 247-skill scale ceiling) and the default weights (`name: 3, description: 2, keywords: 1`). All guardrail checks reference this file. Users should update it manually via `tune --apply` after a successful run, or regenerate it after a corpus change.
 
 7. **Snapshots** — Every successful `--apply` writes a snapshot to `logs/weights/weights-*.json`. `tune --rollback` restores the most recent snapshot. Rollback is manual; the system never auto-rolls back beyond the pre-benchmark safeguard.
 
@@ -672,8 +672,8 @@ These bounds ensure the feedback loop can nudge weights toward better performanc
 
 ### What Worked
 
-- **BM25 alone is strong.** Top-1 96.9% (126/130) on 130 prompts against 54 real skills. Fast, deterministic, reliable. Median latency 2 ms. This is the mode to use in production when precision matters.
-- **Multi-domain routing is functional.** The detector produces reasonable plans using a composite of BM25 signal, coverage signal, and embedding signal. Thresholds (single >= 0.90 with gap > 0.15; multi >= 0.50) are tuned for the current 54-skill / 11-domain corpus and may need re-tuning at scale.
+- **BM25 alone is strong.** Top-1 78.43% (160/204) on 204 prompts against the 247-skill scale ceiling of the 252-leaf real corpus. Fast, deterministic, reliable. Median latency 29 ms. This is the mode to use in production when precision matters.
+- **Multi-domain routing is functional.** The detector produces reasonable plans using a composite of BM25 signal, coverage signal, and embedding signal. Thresholds (single >= 0.90 with gap > 0.15; multi >= 0.50) are tuned for the original 54-skill / 11-domain Phase 2-era corpus and may need re-tuning at scale.
 - **Telemetry stack works cleanly.** JSONL logging, ring-buffer metrics, and the human-readable reporter all function as designed with no regressions.
 - **The default path still runs from pure ESM.** BM25, the FNV-1a embeddings, RRF and feature extraction need no npm packages. Phase 6 added the @huggingface/transformers package for the opt-in ONNX provider only; it is not on the default path.
 - **Quality validation fixes real problems.** Running `validate` on the real corpus fixed 52 skills with incorrect name prefixes and 54 skills with insufficient content tokens.
@@ -693,18 +693,17 @@ Given what we know now, we would skip the hand-rolled n-gram embedding engine en
 
 For the reranker specifically, we would either (a) collect implicit feedback data first and learn the feature weights, or (b) omit it entirely until the corpus grows large enough that lexical overlap becomes a discriminative signal.
 
-### Benchmark Summary (Real Corpus, 130 prompts / 54 skills)
+### Benchmark Summary (Real Corpus)
 
-> Phase 1 measurements, kept as the record of that phase. **The current figures
-> are different and are not interchangeable with these:** BM25 over the 60-entry
-> benchmark index (what `node tests/run-benchmark.mjs --mode bm25` ranks) scores
-> **92.31% (120/130)**, and over the 54-leaf corpus the hook actually searches
-> **96.92% (126/130)**. Both are recorded in `data/baseline.json` under
-> `corpora`; see `docs/reports/phase-6-final-report.md` for the current state.
+> Historical figures from earlier corpus sizes are kept for reference but are
+> superseded by the current 258-entry baseline in `data/baseline.json`.
+> Current Top-1: **64.62% (84/130)** over the full index; **78.43% (160/204)**
+> over the 247-skill scale ceiling. Both are recorded in `data/baseline.json`.
 
 | Mode | Top-1 | Recall@3 | Median Latency | Verdict |
 |------|-------|----------|----------------|---------|
-| BM25 | 96.9% (126/130) | 89.2% (116/130) | 2 ms | Production-ready |
+| BM25 (current, 258 entries) | 64.62% (84/130) | 70.77% | 32 ms | Production-ready |
+| BM25 (scale ceiling, 247 skills) | 78.43% (160/204) | 86.27% | 29 ms | Production-ready |
 | BM25 + synonym expand | 80.0% (104/130) | 87.7% | 2 ms | Opt-in; caution -- dilutes signal |
 | Hybrid (BM25+FNV-1a) | 53.8% (70/130) | 77.7% | 31 ms | Degrades BM25 baseline |
 | Hierarchical (200 skills, exp.) | 50.2% | 84.3% | 9 ms | Slower than flat; not recommended |

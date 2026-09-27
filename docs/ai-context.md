@@ -413,7 +413,7 @@ calls, and no persistent state beyond the JSON skill index.
 - Grid: high in [0.70, 0.95] step 0.05; medium in [0.40, 0.75] step 0.05; medium < high.
 - Objective: maximize Top-1 accuracy subject to fallback rate < 15%.
 - Tie-breakers: (1) lower fallback rate, (2) closer to default thresholds.
-- Current result: high=0.85, medium=0.60, Top-1=96.9%, fallback=8.46%.
+- Current result: high=0.85, medium=0.60, Top-1=78.43% (247-skill scale ceiling), fallback=3.92%.
 - Writes `data/thresholds.json` consumed by `defaults.mjs`.
 
 ### Sync Planner (`src/sync/planner.mjs`)
@@ -584,9 +584,9 @@ build time.
 | `version` | string | From the manifest frontmatter |
 | `source` | `"project"` \| `"zcode-user"` | Origin, set only on multi-source builds |
 
-The current index holds 60 entries: 54 leaf skills plus 6 `router-*` dispatchers.
+The current index holds 258 entries: 252 leaf skills plus 6 `router-*` dispatchers.
 The hook filters `router-*` out before implicit retrieval
-(`hooks/route.mjs:139`), so the effective retrieval corpus is 54.
+(`hooks/route.mjs:139`), so the effective retrieval corpus is 252.
 
 Note: the `path` field is absolute, which makes the file machine-specific (see
 `docs/problems.md` P6-H-009).

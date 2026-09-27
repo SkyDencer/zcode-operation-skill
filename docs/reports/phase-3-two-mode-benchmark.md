@@ -70,10 +70,10 @@ For each prompt:
 | Overall Success Rate | 0.8000 (32/40) |
 | Explicit Latency p50 | 1 ms |
 | Explicit Latency p95 | 5 ms |
-| Implicit Latency p50 | 30 ms |
-| Implicit Latency p95 | 50 ms |
-| Overall Latency p50 | 28 ms |
-| Overall Latency p95 | 36 ms |
+| Implicit Latency p50 | 31 ms |
+| Implicit Latency p95 | 57 ms |
+| Overall Latency p50 | 29 ms |
+| Overall Latency p95 | 45 ms |
 
 **Overall accuracy: 0.8000** (32/40 passed).
 
@@ -96,5 +96,5 @@ For each prompt:
 - Ambiguous prompts are handled gracefully: either routing path yields an acceptable skill.
 - Both explicit and implicit paths complete in under 1 ms median, well within the hook timeout budget.
 
-Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260927T084710.json`
+Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260927T103749.json`
 This report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-3-two-mode-benchmark.md`
