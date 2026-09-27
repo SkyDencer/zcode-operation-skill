@@ -293,9 +293,3 @@ export function writeDisabledRegistry(disabled, projectRoot = process.cwd()) {
   }, null, 2) + '\n', 'utf-8');
 }
 
-// ── CLI entry point ────────────────────────────────────────────────────────────
-const _cliArgv1 = process.argv[1]?.replace(/\\/g, '/') ?? '';
-if (_cliArgv1 && import.meta.url.endsWith(_cliArgv1)) {
-  console.log('This module is not meant to be run directly. Use: node bin/skill-router.mjs sync');
-  process.exit(1);
-}

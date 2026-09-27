@@ -15,7 +15,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
-import { rankSkills } from '../retriever.mjs';
+import { rankSkills } from '../core/retriever/bm25.mjs';
 
 const INDEX_PATH = resolve('data/skill-index.json');
 const SYNC_STATE_PATH = resolve('.skill-router-sync-state.json');

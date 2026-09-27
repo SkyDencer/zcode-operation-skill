@@ -2,26 +2,11 @@
  * Text utility functions for tokenization, normalization, stopword filtering,
  * and bigram extraction.
  *
- * Re-exports tokenize from scorer.mjs and adds complementary helpers.
+ * Imports tokenize from scorer.mjs and STOPWORDS for internal use only;
+ * adds complementary helpers. STOPWORDS is not re-exported — consumers
+ * that need it should import directly from '../scorer.mjs'.
  */
-import { tokenize as _tokenize } from '../scorer.mjs';
-
-/** Common English stopwords to filter out during tokenization. */
-const STOPWORDS = new Set([
-  'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
-  'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
-  'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
-  'would', 'could', 'should', 'may', 'might', 'can', 'shall', 'not',
-  'no', 'nor', 'so', 'if', 'then', 'than', 'that', 'this', 'what',
-  'when', 'where', 'which', 'who', 'whom', 'why', 'how', 'all', 'each',
-  'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'only',
-  'own', 'same', 'too', 'very', 'just', 'about', 'above', 'after', 'again',
-  'also', 'any', 'because', 'before', 'between', 'during', 'into', 'its',
-  'it\'s', 'my', 'your', 'his', 'her', 'our', 'their', 'we', 'they', 'you',
-  'i', 'me', 'him', 'them', 'us', 'up', 'out', 'over', 'under', 'further',
-  'once', 'here', 'there', 'through', 'while', 's', 't', 've', 're', 'll',
-  'd', 'm',
-]);
+import { tokenize as _tokenize, STOPWORDS } from '../scorer.mjs';
 
 /**
  * Tokenize text: lowercase, split on non-alphanumeric, remove stopwords.

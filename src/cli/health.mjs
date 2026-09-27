@@ -111,10 +111,10 @@ function checkPluginDirectory() {
   // Check that key source files exist
   const requiredFiles = [
     'src/index.mjs',
-    'src/retriever.mjs',
+    'src/core/retriever/bm25.mjs',
     'src/scorer.mjs',
     'src/loader.mjs',
-    'src/logger.mjs',
+    'src/core/telemetry/logger.mjs',
     'src/cli/verify.mjs',
     'src/deploy/planner.mjs',
     'src/deploy/writer.mjs',

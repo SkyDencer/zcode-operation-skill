@@ -170,19 +170,3 @@ export async function scanSource(path, options = {}) {
   return candidates;
 }
 
-// ── CLI entry point ────────────────────────────────────────────────────────────
-
-const _cliArgv1 = process.argv[1]?.replace(/\\/g, '/') ?? '';
-if (_cliArgv1 && import.meta.url.endsWith(_cliArgv1)) {
-  const sourceDir = process.argv[2];
-  if (!sourceDir) {
-    console.error('Usage: node src/import/scanner.mjs <source-directory>');
-    process.exit(1);
-  }
-
-  const candidates = await scanSource(sourceDir);
-  console.log(`Found ${candidates.length} skill candidate(s):`);
-  for (const c of candidates) {
-    console.log(`  • ${c.name}  —  ${c.sourcePath}`);
-  }
-}

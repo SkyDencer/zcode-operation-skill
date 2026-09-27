@@ -1,5 +1,5 @@
 /** Common English stopwords to filter out during tokenization. */
-const STOPWORDS = new Set([
+export const STOPWORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
   'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'be',
   'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
