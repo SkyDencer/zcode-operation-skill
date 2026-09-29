@@ -77,6 +77,49 @@ All notable changes to this project will be documented in this file.
 - The benchmark ranks 60 index entries while the hook searches 54 leaves; both Top-1 figures are now recorded separately in `data/baseline.json`, but the harness gap itself is unfixed.
 - `node bin/skill-router.mjs health` warns (and exits 1) when the optional local SLM (llama-server on port 8080) is not running **and** `SKILL_ROUTER_SLM_ENABLED=true`. With the SLM disabled, which is the shipped default, its absence is a pass and `health` exits 0.
 
+## [1.0.0] — 2026-09-27 — Phase 7: Hardening and Release Prep
+
+### Added (Phase 7)
+
+- **Real 200-skill corpus** imported from eleven public MIT repositories via new `corpus fetch|validate|stats|import` CLI; 198 third-party skills retained, 967 dropped for missing frontmatter, out-of-range descriptions, or invalid names. See `docs/reports/phase-7.3-corpus-build.md`.
+- **Corpus tooling** (`src/corpus/`) — fetcher with git/local source support, clone-lifetime contract, deduplication by identity and content keys, self-contained manifest format, validator with four hard rules, and importer with force-overwrite guard. See `docs/reports/phase-7.2-corpus-tooling.md`.
+- **Scale benchmark** (`tests/scale-benchmark/`) — stratified sampler and runner measuring Top-1, Recall@3, Set Recall@5, median/p95 latency, and fallback rate at N=54/200/500/1000 on the real leaf corpus. See `docs/reports/phase-7.4-scale-benchmark.md` and `phase-7.5-scale-analysis.md`.
+- **Threshold tuning analysis** — grid-search optimizer re-run against the 247-skill ceiling; final thresholds high=0.85 / medium=0.60 confirmed invariant; `data/thresholds.json` and `data/baseline.json` rewritten with scale blocks. See `docs/reports/phase-7.5-scale-analysis.md`.
+- **Hook performance at 1000 skills** — parsed-index cache (`src/core/retriever/prebuilt.mjs`) reduces warm retrieval to 0.4 ms/call; p50 wall-clock 126–144 ms flat across 50→1000 skills. The 100 ms p95 gate is host-limited (measured 175–249 ms); the hard assertion in `tests/hooks/perf.test.mjs` is kept red and flagged. See `docs/reports/phase-7.6-hook-performance.md`.
+- **Release-prep automation** — `scripts/release-check.mjs` runs the full test suite, health check, real benchmark, and scale benchmark in sequence with a per-check pass/fail table and final verdict; known failures from `logs/pre-existing-failures.json` are surfaced as KNOWN rather than blockers.
+- **Operational documentation** — `docs/install.md`, `docs/troubleshooting.md`, `docs/corpus-licenses.md`, and updated architecture diagrams. See `docs/reports/phase-7.10-release-prep.md`.
+
+### Fixed
+
+- **Dead modules removed** — `src/retriever.mjs` and `src/logger.mjs` deleted (P6-H-018, P6-H-019); analytics and health checks repointed to canonical paths. See `docs/reports/phase-7.9-cleanup.md`.
+- **README fictional command removed** — `deploy --unregister-hook` replaced with correct manual unregister steps.
+- **Stale counts corrected** — `docs/ai-context.md` updated from 60 to 258 index entries; effective retrieval corpus 54 → 252 leaves.
+- **JSDoc type regression fixed** — `_weightBm25` / `_weightSemantic` restored to `{number}` in `src/core/retriever/hybrid.mjs`.
+- **Report inaccuracies fixed** — fixture status, prebuilt file size, and working-tree enumeration corrected in phase-7.6 report.
+
+### Changed
+
+- **Frozen baseline refreshed** — `data/baseline.json` now records the 258-entry-corpus figures: Top-1 0.6462 (84/130), Recall@3 0.7077, Set Recall@5 0.8538, median 32 ms / p95 39.1 ms, plus a `scale` block (247-sampled ceiling: 0.7843/0.8627/0.9265/0.0392) and `guardrails` block.
+- **Version bumped to 1.0.0** — reflects stable production readiness after Phase 7 hardening.
+
+### Benchmark Results (Phase 7)
+
+| Metric | Value | Notes |
+|---|---|---|
+| Top-1 (BM25, real 258) | 64.62% (84/130) | Frozen baseline re-measured on expanded corpus |
+| Top-1 (BM25, 247-skill ceiling) | 78.43% (160/204) | Scale benchmark at N=500=N=1000 |
+| Recall@3 (BM25, real 258) | 70.77% (92/130) | |
+| Set Recall@5 (BM25, real 258) | 85.38% (116/116 skill prompts) | |
+| Median / p95 latency (BM25, 1000 skills) | 126–144 ms / 180–249 ms | Wall-clock; internal retrieval 0.4 ms/call with prebuilt cache |
+| Fallback rate (247-skill ceiling) | 3.92% (8/204) | |
+
+### Key Findings (Phase 7)
+
+- **The relevance floor does not scale.** With 258 skills at least one matches every prompt token, so the normalised maximum is non-zero and `fix <script>alert("xss")</script>` routes instead of abstaining. An absolute score or runner-up margin is needed (P6-H-001 follow-up).
+- **BM25 Top-1 plateaus near 78% at the 252-leaf ceiling** — the 90% target is not reached on this prompt set; the gap is dominated by negative prompts (B1).
+- **The 100 ms hook p95 wall-clock gate is host-limited.** A fresh node spawn costs ~120–129 ms even with empty stdin; the hook's own post-startup work at 1000 skills (~40–60 ms) is inside budget.
+- **Phase 7 is restorative, not additive.** No new retrieval capability was introduced; the phase closed out the semantic embedding path (D29), hardened the corpus pipeline, and documented operations.
+
 ---
 
 ### Added (Phase 5)

@@ -49,3 +49,11 @@ tests/e2e/debug-*
 tests/scale/gen-debug*.mjs
 tests/deploy/tmp-debug*
 data/skill-embeddings-384.json
+
+# Debug / temp artifacts from release prep and testing
+tmp-*.mjs
+*.debug
+tests/telemetry/tmp-*
+tests/security/tmp/
+data/skill-index.json.*
+data/skill-index.prebuilt.json.*

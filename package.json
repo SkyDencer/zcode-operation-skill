@@ -1,9 +1,23 @@
 {
   "name": "zcode-skill-router",
-  "version": "0.1.0",
-  "description": "Local skill retrieval and routing plugin for ZCode",
+  "version": "1.0.0",
+  "description": "Local ZCode plugin that routes workflow-authoring prompts to the most relevant skill subagents using BM25 lexical retrieval with hybrid fallback and adaptive threshold tuning",
   "type": "module",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SkyDencer/zcode-operation-skill"
+  },
+  "keywords": [
+    "zcode",
+    "skill-router",
+    "bm25",
+    "retrieval",
+    "plugin",
+    "workflow",
+    "routing"
+  ],
+  "license": "MIT",
   "bin": {
     "skill-router": "./bin/skill-router.mjs"
   },
