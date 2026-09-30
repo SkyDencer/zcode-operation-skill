@@ -1,7 +1,7 @@
 {
-  "exactKeyword": 0.0245,
-  "bigramOverlap": 0.0854,
-  "domainMatch": 0.0153,
-  "titleMatch": 0.06,
-  "embeddingSimilarity": 0.0901
+  "exactKeyword": -0.0075,
+  "bigramOverlap": 0.1388,
+  "domainMatch": 0.2306,
+  "titleMatch": 0.068,
+  "embeddingSimilarity": 0.0649
 }

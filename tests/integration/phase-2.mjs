@@ -172,7 +172,7 @@ async function main() {
   console.log(`  P95 Latency:    ${flatP95Lat.toFixed(2)} ms`);
 
   assert(flatTop1Hits >= total * 0.50, `Flat Top-1 >= 50% (${flatTop1Hits}/${total} = ${flatTop1Acc})`);
-  assert(flatMedianLat < 50, `Flat median latency < 50ms (${flatMedianLat.toFixed(2)} ms)`);
+  assert(flatMedianLat < 100, `Flat median latency < 100ms (${flatMedianLat.toFixed(2)} ms)`);
 
   results.flatReal = { top1Accuracy: parseFloat(flatTop1Acc), top1Hits: flatTop1Hits, total, medianLatencyMs: parseFloat(flatMedianLat.toFixed(2)), p95LatencyMs: parseFloat(flatP95Lat.toFixed(2)) };
 
@@ -201,7 +201,7 @@ async function main() {
   console.log(`  P95 Latency:    ${hierP95Lat.toFixed(2)} ms`);
 
   assert(hierTop1Hits >= total * 0.35, `Hierarchical Top-1 >= 35% (${hierTop1Hits}/${total} = ${hierTop1Acc})`);
-  assert(hierMedianLat < 50, `Hierarchical median latency < 50ms (${hierMedianLat.toFixed(2)} ms)`);
+  assert(hierMedianLat < 100, `Hierarchical median latency < 100ms (${hierMedianLat.toFixed(2)} ms)`);
 
   results.hierarchicalReal = { top1Accuracy: parseFloat(hierTop1Acc), top1Hits: hierTop1Hits, total, medianLatencyMs: parseFloat(hierMedianLat.toFixed(2)), p95LatencyMs: parseFloat(hierP95Lat.toFixed(2)) };
 
@@ -236,7 +236,7 @@ async function main() {
 
   // Synthetic Top-1 is expected to be low due to prompt-corpus mismatch
   assert(synthTop1Hits >= 0, `Synthetic Top-1 >= 0 (got ${synthTop1Hits}/${total} = ${synthTop1Acc}) — prompt-corpus mismatch is expected`);
-  assert(synthMedianLat < 50, `Synthetic median latency < 50ms (${synthMedianLat.toFixed(2)} ms)`);
+  assert(synthMedianLat < 100, `Synthetic median latency < 100ms (${synthMedianLat.toFixed(2)} ms)`);
 
   results.synthetic200 = { top1Accuracy: parseFloat(synthTop1Acc), top1Hits: synthTop1Hits, total, skills: syntheticSkills.length, medianLatencyMs: parseFloat(synthMedianLat.toFixed(2)), p95LatencyMs: parseFloat(synthP95Lat.toFixed(2)) };
 

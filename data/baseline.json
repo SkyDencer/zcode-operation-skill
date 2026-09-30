@@ -1,45 +1,23 @@
 {
   "benchmark": {
-    "top1": 0.6462,
-    "recallAt3": 0.7077,
-    "setRecallAt5": 0.8538,
-    "setRecallAt5SkillOnly": 0.8879,
-    "medianLatencyMs": 32,
-    "p95LatencyMs": 39.1,
-    "noSkillRate": 0.0615,
-    "indexSize": 258,
-    "promptCount": 130,
-    "note": "Top-1 84/130 over the full 258-entry index (252 leaves + 6 router-* dispatchers), pure BM25, the figure `node tests/run-benchmark.mjs --mode bm25` produces and every guardrail check compares against. Re-measured in Sub-Phase 7.5; deterministic accuracy figures unchanged from the 7.3/7.4 records, latency re-measured."
+    "top1": 0.6462
   },
   "weights": {
     "name": 3,
     "description": 2,
     "keywords": 1
   },
+  "baselineAt": "2026-09-30T00:00:00.000Z",
   "thresholds": {
     "high": 0.85,
-    "medium": 0.6
-  },
-  "retrieval": {
-    "provider": "fnv1a",
-    "rrfWeights": {
-      "bm25": 1,
-      "semantic": 0
-    },
-    "relevanceFloor": 0.35,
-    "rerank": false
+    "medium": 0.60
   },
   "scale": {
-    "sizeLabel": "500 (Sub-Phase 7.4 scale row; the 1000 row is identical)",
-    "fullLeafCount": 252,
-    "skillsSampled": 247,
-    "promptCount": 204,
-    "seed": 42,
     "top1": 0.7843,
     "recallAt3": 0.8627,
     "setRecallAt5": 0.9265,
     "fallbackRate": 0.0392,
-    "note": "Stratified sample of the 252-leaf corpus (tests/scale-benchmark/corpus-sampler.mjs, seed 42); the sampler's stratum floors cap the draw at 247, so the 500 and 1000 size rows measure the same corpus. Figures from docs/reports/phase-7-scale-results.json (2026-09-26 run); re-verified by tests/tuning/scale-guard.test.mjs."
+    "skillsSampled": 247
   },
   "guardrails": {
     "minTop1": 0.6462,
@@ -47,24 +25,10 @@
     "minRecallAt3Scale": 0.8627,
     "minSetRecallScale": 0.9265,
     "maxFallbackRate": 0.15,
-    "accuracyTolerancePp": 1,
+    "accuracyTolerancePp": 1.0,
     "thresholdBounds": {
-      "high": [
-        0.7,
-        0.95
-      ],
-      "medium": [
-        0.4,
-        0.75
-      ]
-    },
-    "note": "Floors re-derived from this file's benchmark and scale blocks (any measured drop below a floor is a regression). maxFallbackRate is the optimizer's hard constraint (src/tuning/optimizer.mjs:136); thresholdBounds are the optimizer's grid ranges; accuracyTolerancePp is tune-guard's tolerance for weight-change predictions (src/cli/tune-guard.mjs:19). The accuracy floors are strict because the 7.5 scale decision is that BM25 has not yet broken at the corpus ceiling: 0.7843 is the ceiling figure, not a known-good value to protect by margin."
-  },
-  "measuredBy": [
-    "node tests/run-benchmark.mjs --mode bm25",
-    "node tests/scale-benchmark/runner.mjs --prompts-path tests/scale-benchmark/prompts.json",
-    "optimizeThresholds() on the 500-skill corpus (Sub-Phase 7.5, result in data/thresholds.json)"
-  ],
-  "supersedes": "The 60-entry-index baseline re-frozen in Sub-Phase 6.11 (Top-1 0.9231 / 0.9692) is replaced by this 258-entry corpus baseline, per the Sub-Phase 7.5 brief. The old figures remain on record in docs/current-state.md entry log rows 6.11 and 7.1-7.4.",
-  "baselineAt": "2026-09-26T23:45:06.453Z"
+      "high": [0.70, 0.95],
+      "medium": [0.40, 0.75]
+    }
+  }
 }
