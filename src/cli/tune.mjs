@@ -10,6 +10,7 @@
  *   tune --report    Print tuning history summary
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { computeWeights } from '../core/retriever/weights.mjs';
 import { loadBaseline, checkSafety } from './tune-guard.mjs';
 import {
@@ -105,6 +106,11 @@ async function cmdAuto(opts) {
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any tuning action.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('tune');
+    return 0;
+  }
   let subcommand = null;
   const opts = {};
 

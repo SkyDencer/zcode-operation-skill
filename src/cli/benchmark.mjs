@@ -4,8 +4,14 @@
  * Usage: node bin/skill-router.mjs benchmark [--mode <bm25|hybrid>] [--corpus <real|synthetic>] [--count <n>]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before spawning the suite.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('benchmark');
+    return 0;
+  }
   const benchmarkScript = resolve('tests', 'run-benchmark.mjs');
   const args = ['--', benchmarkScript, ...argv];
 

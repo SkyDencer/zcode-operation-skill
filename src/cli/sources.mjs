@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs sources
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolveCollisions } from '../index/dedupe.mjs';
 
@@ -31,6 +32,12 @@ function tagSkillsBySource(skills, sources) {
 }
 
 export function main() {
+  // P6-H-020: --help / -h prints usage and stops, before the report runs.
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    usageFor('sources');
+    return 0;
+  }
   const sources = [
     { path: resolve('data/skills'), source: 'project', exists: existsSync(resolve('data/skills')) },
     { path: ZCODE_SOURCE_PATH, source: 'zcode-user', exists: existsSync(ZCODE_SOURCE_PATH) },

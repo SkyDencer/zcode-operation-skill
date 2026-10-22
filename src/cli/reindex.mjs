@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs reindex [--skills-dir <dir>] [--sources project,zcode-user]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync } from 'node:fs';
 import { loadSkills } from '../loader.mjs';
 import { buildEmbeddingIndex } from '../core/embeddings/engine.mjs';
@@ -78,6 +79,11 @@ function tagSkillsBySource(skills, sources) {
 }
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before rebuilding anything.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('reindex');
+    return 0;
+  }
   let skillsDir = null;
   let sourcesFlag = null;
 

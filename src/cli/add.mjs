@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs add <path-to-SKILL.md> [--dry-run]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readFileSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
 import { validateSkill } from '../quality/validator.mjs';
 import { parseFrontmatter } from '../loader.mjs';
@@ -12,6 +13,11 @@ import { isSafeName, isWithinRoot } from '../utils/fs.mjs';
 const SKILLS_DIR = resolve('data/skills');
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing or write.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('add');
+    return 0;
+  }
   let dryRun = false;
   const positional = [];
 

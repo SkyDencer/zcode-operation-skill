@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs import <source-dir> [--skills-dir <dir>] [--force] [--json]
  */
 import { resolve, join, dirname } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readdirSync, readFileSync, mkdirSync, writeFileSync, statSync } from 'node:fs';
 import { parseFrontmatter } from '../loader.mjs';
 import { validateSkill } from '../quality/validator.mjs';
@@ -137,6 +138,11 @@ function getExistingSkillNames(skillsDir) {
 }
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing or copy.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('import');
+    return 0;
+  }
   let skillsDir = SKILLS_DIR;
   let force = false;
   let jsonOutput = false;

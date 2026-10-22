@@ -19,6 +19,7 @@
  * Exit code 0 = all checks pass, 1 = one or more failures.
  */
 import { resolve, join } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readdirSync, readFileSync, writeFileSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -487,6 +488,11 @@ function printResults(isJson, isDeep) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before running any check.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('verify');
+    return 0;
+  }
   let skillsDir = null;
   let zcodeDir = null;
   let deep = false;

@@ -7,6 +7,7 @@
  *     [--list-snapshots] [--restore <timestamp>] [--force-rollback]
  */
 import { resolve, join } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { planDeploy } from '../deploy/planner.mjs';
@@ -18,6 +19,12 @@ const SNAPSHOT_PREFIX = 'deploy-snapshot-';
 const LOGS_DEPLOYS_DIR = resolve('logs', 'deploys');
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops. It must never trigger a
+  // deploy, hook registration, or verification.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('deploy');
+    return 0;
+  }
   let dryRun = false;
   let rollbackFile = null;
   let doVerify = false;

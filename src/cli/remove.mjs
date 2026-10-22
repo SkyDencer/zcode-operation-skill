@@ -4,11 +4,17 @@
  * Usage: node bin/skill-router.mjs remove <skill-name> [--dry-run]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, rmSync, readdirSync } from 'node:fs';
 
 const SKILLS_DIR = resolve('data/skills');
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing or delete.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('remove');
+    return 0;
+  }
   let dryRun = false;
   const positional = [];
 

@@ -21,6 +21,7 @@
  *   2 = unhealthy (one or more checks fail)
  */
 import { resolve, join } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
@@ -441,6 +442,11 @@ function printResults() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before running any check.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('health');
+    return 0;
+  }
   checkRoutersInstalled();
   checkPluginDirectory();
   checkHookRegistered();

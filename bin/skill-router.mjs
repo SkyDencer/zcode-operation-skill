@@ -26,17 +26,25 @@
  *   tune       Adaptive BM25 weight tuning (analyze, apply, rollback, auto)
  *   help       Show this help message
  *
- * Note: no subcommand implements a --help flag. Unrecognised flags are ignored
- * and the command runs normally, so `deploy --help` deploys. Use `help`.
+ * Note (P6-H-020): every subcommand supports --help and -h; the flag is
+ * checked before any argument parsing, so `deploy --help` prints usage and
+ * exits without deploying. Top-level `skill-router --help` lists all
+ * subcommands.
  */
 
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { topLevelUsage } from '../src/cli/help-text.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const cliDir = resolve(__dirname, '..', 'src', 'cli');
 
 const subcommand = process.argv[2];
+
+if (subcommand === '--help' || subcommand === '-h') {
+  topLevelUsage();
+  process.exit(0);
+}
 
 if (!subcommand) {
   console.log('Usage: node bin/skill-router.mjs <subcommand> [options]');

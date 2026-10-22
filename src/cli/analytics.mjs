@@ -4,11 +4,17 @@
  * Usage: node bin/skill-router.mjs analytics [--since <YYYY-MM-DD>] [--json] [--include-sync]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { readLogs } from '../analytics/reader.mjs';
 import { analyze } from '../analytics/analyzer.mjs';
 import { report as formatReport } from '../analytics/reporter.mjs';
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('analytics');
+    return 0;
+  }
   let since = null;
   let json = false;
   let includeSync = true;

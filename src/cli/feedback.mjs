@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs feedback [--since YYYY-MM-DD] [--limit N] [--json] [--export <path>] [--outcomes]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { writeFileSync, readFileSync } from 'node:fs';
 import { readDecisions, summarize } from '../telemetry/feedback.mjs';
 import { correlateFromLogs } from '../telemetry/outcomes.mjs';
@@ -39,6 +40,11 @@ function yellow(msg) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('feedback');
+    return 0;
+  }
   let since = null;
   let limit = 300;
   let json = false;

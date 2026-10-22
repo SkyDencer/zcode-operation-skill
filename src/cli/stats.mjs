@@ -4,6 +4,7 @@
  * Usage: node bin/skill-router.mjs stats [--skills-dir <dir>]
  */
 import { resolve } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { loadSkills } from '../loader.mjs';
 import { validateSkillsDir } from '../quality/validator.mjs';
@@ -11,6 +12,11 @@ import { validateSkillsDir } from '../quality/validator.mjs';
 const SKILLS_DIR = resolve('data/skills');
 
 export function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before any parsing.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('stats');
+    return 0;
+  }
   let skillsDir = SKILLS_DIR;
 
   for (let i = 0; i < argv.length; i++) {

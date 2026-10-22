@@ -17,6 +17,7 @@ import { resolve, join } from 'node:path';
 import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { getDefaults } from '../config/defaults.mjs';
+import { usageFor } from './help-text.mjs';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,12 @@ function isWritable(dir) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export function main() {
+  // P6-H-020: --help / -h prints usage and stops, before the report runs.
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    usageFor('doctor');
+    return 0;
+  }
   console.log('');
   console.log('  skill-router — Diagnostic Report');
   console.log('  Generated: ' + new Date().toISOString());

@@ -7,6 +7,7 @@
  *     [--disable <skill-name>] [--enable <skill-name>]
  */
 import { resolve, join } from 'node:path';
+import { usageFor } from './help-text.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { planSync } from '../sync/planner.mjs';
 import { applySync } from '../sync/writer.mjs';
@@ -14,6 +15,11 @@ import { readSyncState, mergeSyncResult } from '../sync/state.mjs';
 import { readDisabledRegistry, writeDisabledRegistry } from '../sync/disabler.mjs';
 
 export async function main(argv) {
+  // P6-H-020: --help / -h prints usage and stops, before planning or writing.
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usageFor('sync');
+    return 0;
+  }
   let dryRun = false;
   let force = false;
   let quiet = false;
