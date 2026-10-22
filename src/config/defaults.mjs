@@ -163,6 +163,10 @@ export function getDefaults() {
       multiDomainThreshold: 0.50,
       hierarchicalTopDomains: 3,
       hierarchicalConfidenceThreshold: 0.08,
+      // P6-H-001: hard cap on how many skills the hook injects into context,
+      // regardless of how many clear the confidence threshold. Overridable via
+      // SKILL_ROUTER_TOPK (validated to 1..20 in src/config/env.mjs).
+      topK: 5,
     },
     confidence: {
       highThreshold: _thresholds?.high ?? 0.85,
@@ -236,6 +240,7 @@ export function mergeWithEnv(defaults) {
   override('hook.maxOutputLength', 'SKILL_ROUTER_MAX_OUTPUT_LENGTH');
   override('budget.maxChars', 'SKILL_ROUTER_BUDGET_MAX_CHARS');
   override('budget.minPerSkill', 'SKILL_ROUTER_BUDGET_MIN_PER_SKILL');
+  override('routing.topK', 'SKILL_ROUTER_TOPK');
 
   // Boolean env override for SLM enablement
   const slmEnabledRaw = process.env.SKILL_ROUTER_SLM_ENABLED;

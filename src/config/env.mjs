@@ -34,6 +34,9 @@ const SCHEMA = {
   SKILL_ROUTER_MAX_OUTPUT_LENGTH: { min: 1024, max: 102400, type: 'int' },
   SKILL_ROUTER_BUDGET_MAX_CHARS: { min: 1024, max: 102400, type: 'int' },
   SKILL_ROUTER_BUDGET_MIN_PER_SKILL: { min: 100, max: 10240, type: 'int' },
+  // P6-H-001: hard cap on injected skills. Out-of-range values are clamped to
+  // [1, 20] with a warning (see parseValue).
+  SKILL_ROUTER_TOPK: { min: 1, max: 20, type: 'int' },
   // String-typed overrides are handled separately below; listed here for
   // documentation so they appear in help text and can be discovered by grep.
   SKILL_ROUTER_EMBEDDING_PROVIDER: { type: 'string' },
@@ -126,6 +129,7 @@ function getPath(key) {
     SKILL_ROUTER_MAX_OUTPUT_LENGTH: ['hook', 'maxOutputLength'],
     SKILL_ROUTER_BUDGET_MAX_CHARS: ['budget', 'maxChars'],
     SKILL_ROUTER_BUDGET_MIN_PER_SKILL: ['budget', 'minPerSkill'],
+    SKILL_ROUTER_TOPK: ['routing', 'topK'],
   };
   return pathMap[key] ?? null;
 }

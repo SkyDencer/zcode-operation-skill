@@ -42,6 +42,10 @@ const PREBUILT_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.prebuilt.json
 const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
 const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
+// P6-H-001: hard cap on injected skills. The env layer (src/config/env.mjs)
+// already clamps SKILL_ROUTER_TOPK to [1, 20]; this second clamp is the
+// fail-safe that holds even if the config is produced by another path.
+const topK = Math.max(1, Math.min(20, config.routing?.topK ?? 5));
 
 // Resolve the embedding provider from config (a filesystem probe only —
 // it never loads a model). Falls back to FNV-1a, or null for pure BM25.
@@ -73,7 +77,9 @@ function buildContext(skillsWithContent, decision) {
     `Mode: ${isExplicit ? 'explicit' : 'implicit'}`,
     `Router: ${routerTag}`,
     `Tier: ${decision.tier}`,
-    `Selected: ${decision.skills.map((s) => s.name).join(', ')}`,
+    // Reflect the skills actually being injected (post-topK cap and budget),
+    // not the full decision list — otherwise the header over-reports.
+    `Selected: ${skillsWithContent.map((s) => s.name).join(', ')}`,
     `Confidence: ${decision.confidence}`,
     '',
   ];
@@ -224,12 +230,27 @@ async function main() {
           // race keeps a cold load from blowing through hook.timeoutMs.
           let ranked;
           try {
-            ranked = await Promise.race([
-              hybridRetrieve(query, idx, { provider, rerank: false, minBm25Score, _prebuilt: prepared }),
+            // Pass the hook's topK cap so the fused list may be wider than
+            // the retriever's own default (5); the per-skill floor below
+            // still trims everything under the relevance threshold.
+            const fused = await Promise.race([
+              hybridRetrieve(query, idx, {
+                provider,
+                rerank: false,
+                minBm25Score,
+                topK,
+                _prebuilt: prepared,
+              }),
               new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('embedding retrieval timeout')), timeoutMs)
               ),
             ]);
+            // P6-H-001: hybridRetrieve only abstains when the top fused score
+            // is below the floor; the fused list can still carry lower-ranked
+            // rows with a below-floor bm25Score (padding with unrelated skills).
+            // Apply the same per-skill floor as the pure-BM25 branch below,
+            // then let the uniform topK cap further down trim the survivors.
+            ranked = fused.filter((r) => r.bm25Score >= minBm25Score);
           } catch (err) {
             await logError({ query, error: `hybrid retrieval degraded: ${err.message}` });
             ranked = rankSkills(query, idx, { _prebuilt: prepared }).filter((r) => r.score >= minBm25Score);
@@ -287,7 +308,11 @@ async function main() {
     process.exit(0);
   }
 
-  const rankedNames = decision.skills ?? [];
+  // P6-H-001: apply the topK shortlist cap uniformly to every decision path
+  // (implicit BM25, provider hybrid, SLM, explicit). The relevance floor
+  // already removed unrelated skills; this bounds how many of the survivors
+  // are ever injected, regardless of corpus size.
+  const rankedNames = (decision.skills ?? []).slice(0, topK);
   const tier = decision.tier;
   const confidence = decision.confidence;
   const candidates = decision.candidates ?? [];
@@ -327,6 +352,7 @@ async function main() {
     embeddingProvider: providerResolution.used,
     embeddingProviderFallback: providerResolution.fellBack,
     prebuilt: prepared ? 'on' : 'off',
+    topK,
   };
 
   const modeLabel = (decision.explicit ?? false) ? 'explicit' : 'implicit';
@@ -381,6 +407,8 @@ async function main() {
     query: trimmedPrompt,
     totalSkills: skillsWithContent.length,
     selectedCount: selected.length,
+    injectedCount: selected.length,
+    topK,
     rawTotalChars: skillsWithContent.reduce((s, sk) => s + sk.content.length, 0),
     injectedChars: totalChars,
     budgetMaxChars,
