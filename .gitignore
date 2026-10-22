@@ -57,3 +57,6 @@ tests/telemetry/tmp-*
 tests/security/tmp/
 data/skill-index.json.*
 data/skill-index.prebuilt.json.*
+
+# Archived runtime telemetry kept locally out of the release tree
+logs/.archive-pre-v1/

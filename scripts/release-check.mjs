@@ -62,6 +62,10 @@ const TIMEOUTS = Object.freeze({
 function run(cmd, args, opts = {}) {
   const timeout = opts.timeout ?? 30_000;
   const cwd = opts.cwd ?? BASE;
+  // Forward extra env vars merged over process.env so the child keeps PATH etc.
+  // without losing them (execFileSync's `env` option replaces the whole
+  // environment). This is what lets the scale-bench wrapper receive PROMPTS_PATH.
+  const env = opts.env ? { ...process.env, ...opts.env } : undefined;
   let exitCode = null;
   let stdout = '';
   let stderr = '';
@@ -71,6 +75,7 @@ function run(cmd, args, opts = {}) {
       maxBuffer: 20 * 1024 * 1024,
       timeout,
       cwd,
+      env,
     });
     exitCode = 0;
   } catch (err) {
