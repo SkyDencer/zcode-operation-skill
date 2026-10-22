@@ -143,6 +143,12 @@ export function getDefaults() {
       k: 60,
     },
     reranker: {
+      // P6-H-026: the reranker is experimental and OFF by default. Its
+      // held-out R² is negative (−4.58): it is fit to itself and adds no
+      // measured value (docs/reranker.md). Enable for experimentation only,
+      // via SKILL_ROUTER_RERANKER=enabled.
+      enabled: false,
+      experimental: true,
       weights: {
         exactKeyword: 0.3,
         bigramOverlap: 0.2,
@@ -247,6 +253,25 @@ export function mergeWithEnv(defaults) {
   if (slmEnabledRaw !== undefined && slmEnabledRaw.trim() !== '') {
     const val = slmEnabledRaw.trim().toLowerCase();
     cfg.slm.enabled = val !== 'false' && val !== '0' && val !== '';
+  }
+
+  // P6-H-026: reranker enablement. The reranker is experimental (negative
+  // held-out R²) and stays off unless the operator explicitly opts in with
+  // SKILL_ROUTER_RERANKER=enabled. Unrecognised values keep it off and
+  // warn, so a typo cannot silently activate an experimental path.
+  const rerankerRaw = process.env.SKILL_ROUTER_RERANKER;
+  if (rerankerRaw !== undefined && rerankerRaw.trim() !== '') {
+    const val = rerankerRaw.trim().toLowerCase();
+    if (val === 'enabled' || val === 'true' || val === '1') {
+      cfg.reranker.enabled = true;
+    } else if (val === 'disabled' || val === 'false' || val === '0') {
+      cfg.reranker.enabled = false;
+    } else {
+      console.warn(
+        `[skill-router] SKILL_ROUTER_RERANKER: unrecognized value "${rerankerRaw}" ` +
+          '(expected "enabled" or "disabled"); the reranker stays off'
+      );
+    }
   }
 
   return cfg;

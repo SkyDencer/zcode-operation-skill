@@ -26,7 +26,7 @@ import { recordSignal } from '../src/telemetry/signals.mjs';
 import { emitRouteEvent, emitMemProfile } from '../src/telemetry/route-telemetry.mjs';
 import { getConfig } from '../src/config/env.mjs';
 import { resolveProvider } from '../src/core/embeddings/resolve.mjs';
-import { emitExperimentalMode } from '../src/core/embeddings/experimental.mjs';
+import { emitExperimentalMode, emitRerankerExperimental } from '../src/core/embeddings/experimental.mjs';
 import { routeHybrid, routeWithExplicit } from '../src/core/routing/hybrid.mjs';
 import { detectExplicitSkill } from '../src/core/routing/explicit.mjs';
 import { fitWithinBudget } from '../src/core/budget/manager.mjs';
@@ -54,6 +54,12 @@ const providerResolution = resolveProvider(config);
 // Phase 7.1 (D29): experimental 'onnx' mode emits `experimental_mode`
 // telemetry before the decision path; the guard keeps the hook at exit 0.
 await emitExperimentalMode(config).catch(() => {});
+
+// P6-H-026: the reranker is experimental (held-out R² = −4.58) and OFF by
+// default. An operator opts in with SKILL_ROUTER_RERANKER=enabled; the
+// warning below is telemetry only and never blocks the hook.
+const rerankerEnabled = config.reranker?.enabled === true;
+if (rerankerEnabled) await emitRerankerExperimental().catch(() => {});
 
 /**
  * Get the active embedding provider, or null when the caller should fall
@@ -233,10 +239,14 @@ async function main() {
             // Pass the hook's topK cap so the fused list may be wider than
             // the retriever's own default (5); the per-skill floor below
             // still trims everything under the relevance threshold.
+            // P6-H-026: the reranker only runs when explicitly enabled
+            // (SKILL_ROUTER_RERANKER=enabled → config.reranker.enabled);
+            // off by default. The tuning planner (src/core/routing/planner.mjs)
+            // is a separate, explicit tool and keeps its own rerank default.
             const fused = await Promise.race([
               hybridRetrieve(query, idx, {
                 provider,
-                rerank: false,
+                rerank: rerankerEnabled,
                 minBm25Score,
                 topK,
                 _prebuilt: prepared,
@@ -353,6 +363,7 @@ async function main() {
     embeddingProviderFallback: providerResolution.fellBack,
     prebuilt: prepared ? 'on' : 'off',
     topK,
+    rerankEnabled: rerankerEnabled,
   };
 
   const modeLabel = (decision.explicit ?? false) ? 'explicit' : 'implicit';

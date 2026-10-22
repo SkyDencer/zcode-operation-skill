@@ -131,6 +131,39 @@ export function experimentalModeEvent(config = {}, mode) {
 }
 
 /**
+ * P6-H-026: telemetry warning for the experimental reranker.
+ *
+ * The reranker's held-out R² is negative (−4.58, see docs/reranker.md), so
+ * it is off by default and only runs when an operator opts in via
+ * SKILL_ROUTER_RERANKER=enabled. This emits the same `experimental_mode`
+ * event shape as the embedding-provider case, with mode 'reranker', plus a
+ * stderr warning.
+ *
+ * Fail-open contract: never throws. The hook must exit 0 with no output
+ * when it cannot compute a decision; a dropped telemetry event is dropped,
+ * never surfaced as a routing failure.
+ *
+ * @param {object} [options]
+ * @param {Function} [options.onWarn] — stderr sink (default: console.error)
+ * @returns {Promise<{event:string, mode:string, risk:string}>} the emitted event
+ */
+export async function emitRerankerExperimental(options = {}) {
+  const onWarn = options.onWarn ?? ((msg) => console.error(msg));
+  try {
+    onWarn(
+      '[skill-router] experimental_mode: reranker is ENABLED but EXPERIMENTAL and ' +
+        'not recommended. Its held-out R² is −4.58 (fit to itself); enable it only ' +
+        'for controlled experimentation. See docs/reranker.md.'
+    );
+    await logRecord({ event: 'experimental_mode', mode: 'reranker', risk: 'negative_heldout_r2' });
+    return { event: 'experimental_mode', mode: 'reranker', risk: 'negative_heldout_r2' };
+  } catch {
+    // The hook must stay fail-open; a telemetry failure is dropped.
+    return null;
+  }
+}
+
+/**
  * Human-readable warning printed to stderr for an experimental mode.
  *
  * @param {{mode:string, risk:string}} event
