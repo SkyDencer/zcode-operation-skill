@@ -27,6 +27,7 @@
  * Run: node tests/hooks/perf.test.mjs
  */
 import { spawn, execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -193,6 +194,12 @@ async function main() {
   const { prompts, targets } = buildPrompts(fixture);
   assert(new Set(prompts).size === 100, '100 prompts are distinct');
 
+  // The logger never persists the raw prompt: on-disk route events carry a
+  // `queryHash` (SHA-256 of the prompt) instead of `query`. Match telemetry
+  // records to the prompts we spawned by hashing each prompt the same way.
+  const sha = (s) => createHash('sha256').update(s ?? '').digest('hex');
+  const promptHashes = new Set(prompts.map(sha));
+
   mkdirSync(WORK, { recursive: true });
 
   // Swap the fixture (index + parsed-index cache) into the hook's fixed
@@ -291,7 +298,7 @@ async function main() {
     const readEventsWithRetry = (offset, target) => {
       for (let attempt = 0; attempt < 10; attempt++) {
         const evts = readNewEvents(logPath, offset).filter(
-          (e) => e.event === 'route' && prompts.includes(e.query)
+          (e) => e.event === 'route' && promptHashes.has(e.queryHash)
         );
         if (evts.length >= target) return evts;
         if (attempt < 9) {
@@ -301,7 +308,7 @@ async function main() {
         }
       }
       return readNewEvents(logPath, offset).filter(
-        (e) => e.event === 'route' && prompts.includes(e.query)
+        (e) => e.event === 'route' && promptHashes.has(e.queryHash)
       );
     };
     const events = readEventsWithRetry(logOffsetBefore, 100);

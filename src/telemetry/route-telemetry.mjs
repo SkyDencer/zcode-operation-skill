@@ -29,7 +29,9 @@ import { logRecord } from '../core/telemetry/logger.mjs';
  * record shape is identical on every exit path of the hook.
  *
  * @param {object} record
- * @param {string|null} [record.query] — the prompt (or null before one exists)
+ * @param {string|null} [record.query] — the raw prompt (or null before one
+ *   exists). The logger never persists it: `logRecord()` replaces `query` with
+ *   a `queryHash` (SHA-256), so the on-disk route event carries no raw prompt.
  * @param {string} [record.tier] — 'bm25' | 'none' | 'slm' | 'hybrid' | 'fail-open'
  * @param {string} [record.reason] — fail-open reason; sets failOpen: true
  * @param {number} [record.indexLoadMs]

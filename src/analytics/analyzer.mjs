@@ -144,14 +144,17 @@ export function analyze(entries, options = {}) {
   }
 
   // ── Common prompt hashes (top-10 most frequent) ───────────────────────────
+  // Privacy-preserving logs carry `queryHash` (a SHA-256 digest written by the
+  // logger), never the raw prompt. Group by that digest directly; only fall
+  // back to hashing a legacy raw `query` for older logs that still have it.
   const queryCounts = {};
   for (const entry of retrieves) {
-    const q = entry.query || '';
-    queryCounts[q] = (queryCounts[q] || 0) + 1;
+    const key = entry.queryHash ?? hashPrompt(entry.query ?? '');
+    queryCounts[key] = (queryCounts[key] || 0) + 1;
   }
   const sortedQueries = Object.entries(queryCounts).sort((a, b) => b[1] - a[1]);
-  const commonPromptHashes = sortedQueries.slice(0, 10).map(([query, count]) => ({
-    hash: hashPrompt(query),
+  const commonPromptHashes = sortedQueries.slice(0, 10).map(([hash, count]) => ({
+    hash,
     count,
   }));
 
@@ -161,7 +164,12 @@ export function analyze(entries, options = {}) {
   if (docs.length > 0) {
     const skillCounts = {};
     for (const entry of retrieves) {
-      const query = entry.query || '';
+      // Re-running BM25 needs the raw prompt. Privacy-preserving logs store
+      // only `queryHash` (no raw `query`), so such entries are skipped here;
+      // this metric is populated only from legacy/in-memory entries that carry
+      // a raw `query`. Aggregating from logged skill names is follow-up work.
+      const query = entry.query;
+      if (typeof query !== 'string' || query === '') continue;
       const topSkills = resolveTopSkills(query, index);
       for (const name of topSkills) {
         skillCounts[name] = (skillCounts[name] || 0) + 1;
@@ -238,10 +246,14 @@ function computeSourceBreakdown(index, retrieves) {
     bySource[source] = (bySource[source] || 0) + 1;
   }
 
-  // Count how many times skills from each source appear in top-10 recommendations
+  // Count how many times skills from each source appear in top-10
+  // recommendations. As with top10Skills, this only re-runs BM25 for entries
+  // that still carry a raw `query` (legacy/in-memory); privacy-clean logs are
+  // skipped, so `recommendationShare` is empty for them.
   const recBySource = {};
   for (const entry of retrieves) {
-    const query = entry.query || '';
+    const query = entry.query;
+    if (typeof query !== 'string' || query === '') continue;
     const topSkills = resolveTopSkills(query, index);
     for (const name of topSkills) {
       const doc = docs.find((d) => d.name === name);

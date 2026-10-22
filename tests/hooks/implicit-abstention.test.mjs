@@ -21,6 +21,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
@@ -72,6 +73,11 @@ function runHook(prompt, env = {}) {
 
 const UNRELATED = 'zzzz qqqq unrelated gibberish xyzzy';
 const RELEVANT = 'how do I write a laravel database migration';
+// The logger never persists the raw prompt: on-disk route events carry a
+// `queryHash` (SHA-256 of the prompt). Match telemetry records by hash.
+const sha = (s) => createHash('sha256').update(s ?? '').digest('hex');
+const UNRELATED_HASH = sha(UNRELATED);
+const RELEVANT_HASH = sha(RELEVANT);
 
 console.log('\n=== Hook: implicit abstention ===\n');
 
@@ -114,10 +120,10 @@ const readLog = (file) => {
     : [];
 };
 const routeEvents = readLog(`${DAY}.jsonl`).filter((r) => r.event === 'route');
-const mine = routeEvents.filter((r) => r.query === UNRELATED || r.query === RELEVANT);
+const mine = routeEvents.filter((r) => r.queryHash === UNRELATED_HASH || r.queryHash === RELEVANT_HASH);
 assert(mine.length >= 2, `the hook logged both prompts (got ${mine.length} route records)`);
-const abstained = mine.filter((r) => r.query === UNRELATED).pop();
-const routed = mine.filter((r) => r.query === RELEVANT).pop();
+const abstained = mine.filter((r) => r.queryHash === UNRELATED_HASH).pop();
+const routed = mine.filter((r) => r.queryHash === RELEVANT_HASH).pop();
 assert(abstained?.tier === 'none', 'the unrelated prompt is logged with tier none, not bm25');
 assert(abstained?.candidates.length === 0, 'and no candidates');
 assert(routed?.tier === 'bm25', 'the related prompt is logged with tier bm25');
