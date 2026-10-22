@@ -1,553 +1,268 @@
 [
   {
-    "id": 62,
-    "prompt": "Configure cdn-configuration using DevOps best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 24,
-    "prompt": "versioning workflow and the api-versioning skill",
+    "id": 74,
+    "prompt": "file storage best practices and the file-storage skill",
     "form": "nounphrase"
   },
   {
-    "id": 350,
-    "prompt": "How do I implement data table following design best practices?",
+    "id": 170,
+    "prompt": "How do I apply the seeding-strategy skill for my project workflow?",
     "form": "question"
   },
   {
-    "id": 264,
-    "prompt": "parallel test testing with the parallel-testing skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 343,
-    "prompt": "Configure ssl-certificates using DevOps best practices.",
+    "id": 29,
+    "prompt": "Apply biometric-auth best practices to my mobile project.",
     "form": "imperative"
   },
   {
-    "id": 158,
-    "prompt": "Apply the form-design skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 187,
-    "prompt": "Which skill covers incident tasks like incident-response-2?",
+    "id": 31,
+    "prompt": "How do I implement button following design best practices?",
     "form": "question"
-  },
-  {
-    "id": 127,
-    "prompt": "Which skill covers design tokens patterns like design-tokens?",
-    "form": "question"
-  },
-  {
-    "id": 397,
-    "prompt": "Can you explain the websocket-client approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 191,
-    "prompt": "How do I implement sanitization security measures?",
-    "form": "question"
-  },
-  {
-    "id": 26,
-    "prompt": "Which skill covers badge tasks like app-icon-badge?",
-    "form": "question"
-  },
-  {
-    "id": 357,
-    "prompt": "Which skill should I follow for test-coverage testing?",
-    "form": "question"
-  },
-  {
-    "id": 186,
-    "prompt": "Which skill covers incident tasks like incident-response?",
-    "form": "question"
-  },
-  {
-    "id": 310,
-    "prompt": "How do I implement react native in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 215,
-    "prompt": "MFA security patterns and the mfa-implementation skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 46,
-    "prompt": "Which skill should I follow for behavioral-testing testing?",
-    "form": "question"
-  },
-  {
-    "id": 259,
-    "prompt": "Apply OTA-updates best practices to my mobile project.",
-    "form": "imperative"
   },
   {
     "id": 11,
-    "prompt": "How do I implement documentation following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 47,
-    "prompt": "Which skill covers biometric tasks like biometric-auth?",
-    "form": "question"
-  },
-  {
-    "id": 71,
-    "prompt": "How do I implement color system following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 284,
-    "prompt": "onboarding workflow and the project-onboarding skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 162,
-    "prompt": "Use the geolocation skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 367,
-    "prompt": "Which skill should I follow for test-reporting-2 testing?",
-    "form": "question"
-  },
-  {
-    "id": 142,
-    "prompt": "Use the encryption-at-rest-2 skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 252,
-    "prompt": "Configure network-security using DevOps best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 317,
-    "prompt": "Can you explain the responsive-layouts approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 50,
-    "prompt": "How do I implement biometric in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 145,
-    "prompt": "error handling best practices and the error-handling skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 326,
-    "prompt": "Which skill should I follow for secure-coding-2 in my app?",
-    "form": "question"
-  },
-  {
-    "id": 149,
-    "prompt": "Apply the file-storage skill to my file storage project.",
-    "form": "imperative"
-  },
-  {
-    "id": 141,
-    "prompt": "How do I implement encrypt security measures?",
-    "form": "question"
-  },
-  {
-    "id": 75,
-    "prompt": "connection pool best practices and the connection-pooling skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 83,
-    "prompt": "Use the contract-testing-2 skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 60,
-    "prompt": "How do I implement card pattern following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 353,
-    "prompt": "Use tech debt patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 385,
-    "prompt": "typography guidelines for UI design",
-    "form": "nounphrase"
-  },
-  {
-    "id": 153,
-    "prompt": "Use the flaky-test-detection-2 skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 400,
-    "prompt": "How do I implement zero trust security measures?",
-    "form": "question"
-  },
-  {
-    "id": 19,
-    "prompt": "Configure api-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 214,
-    "prompt": "messaging best practices and the message-broker-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 389,
-    "prompt": "Configure unit-testing-2 according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 23,
-    "prompt": "Use versioning patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 116,
-    "prompt": "Which skill should I follow for dependency-audit in my app?",
-    "form": "question"
-  },
-  {
-    "id": 335,
-    "prompt": "SEO for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 231,
-    "prompt": "How do I implement modal following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 124,
-    "prompt": "design system for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 20,
     "prompt": "How do I set up API test in my test suite?",
     "form": "question"
   },
   {
-    "id": 22,
-    "prompt": "Use the api-testing-2 skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 388,
-    "prompt": "Configure unit-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 131,
-    "prompt": "How do I apply the documentation skill for my project workflow?",
-    "form": "question"
-  },
-  {
-    "id": 362,
-    "prompt": "Use the test-doubles skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 122,
-    "prompt": "Use design pattern patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 246,
-    "prompt": "Which skill covers nav patterns like navigation-patterns?",
-    "form": "question"
-  },
-  {
-    "id": 106,
-    "prompt": "Which skill should I use for indexing tasks involving database-indexing?",
-    "form": "question"
-  },
-  {
-    "id": 221,
-    "prompt": "How do I implement mobile navigation in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 309,
-    "prompt": "Apply react-native-setup best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 177,
-    "prompt": "Which skill covers iconography patterns like iconography?",
-    "form": "question"
-  },
-  {
-    "id": 25,
-    "prompt": "badge patterns for mobile apps",
+    "id": 124,
+    "prompt": "monorepo workflow and the monorepo-structure skill",
     "form": "nounphrase"
   },
   {
-    "id": 306,
-    "prompt": "Which skill should I use for rate limiting tasks involving rate-limiting-2?",
+    "id": 60,
+    "prompt": "How do I implement database following best practices?",
     "form": "question"
   },
   {
-    "id": 94,
-    "prompt": "fixtures testing with the data-fixtures-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 54,
-    "prompt": "caching best practices and the caching-strategies skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 375,
-    "prompt": "tooltip guidelines for UI design",
-    "form": "nounphrase"
-  },
-  {
-    "id": 87,
-    "prompt": "Can you explain the css-architecture approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 53,
-    "prompt": "Implement caching using the caching-strategies skill.",
+    "id": 109,
+    "prompt": "Follow the linting-config skill for project management.",
     "form": "imperative"
   },
   {
-    "id": 56,
-    "prompt": "Which skill covers camera tasks like camera-integration?",
+    "id": 17,
+    "prompt": "Which skill applies to arch tasks like architecture-decision?",
     "form": "question"
   },
   {
-    "id": 291,
-    "prompt": "How do I implement push notification in my mobile app?",
+    "id": 16,
+    "prompt": "Which skill covers app store tasks like app-store-deploy?",
     "form": "question"
   },
   {
-    "id": 30,
-    "prompt": "How do I implement app store in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 340,
-    "prompt": "How do I set up snapshot in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 147,
-    "prompt": "Which skill should I use for error handling tasks involving error-handling-2?",
-    "form": "question"
-  },
-  {
-    "id": 255,
-    "prompt": "observability CI/CD pipeline with the observability skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 40,
-    "prompt": "How do I implement background task in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 143,
-    "prompt": "Use environment patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 85,
-    "prompt": "CORS security patterns and the CORS-policy skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 126,
-    "prompt": "Can you explain the design-system-2 approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 396,
-    "prompt": "Can you explain the webpack-config approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 28,
-    "prompt": "Apply app-icon-badge-2 best practices to my mobile project.",
+    "id": 189,
+    "prompt": "Apply the tooltip-patterns skill to my design system.",
     "form": "imperative"
   },
   {
     "id": 188,
-    "prompt": "Apply the incident-response-2 skill to my infrastructure.",
+    "prompt": "Follow testing-components guidelines when building the UI.",
     "form": "imperative"
   },
   {
-    "id": 72,
-    "prompt": "Design the color-system-2 system using the color system skill.",
+    "id": 155,
+    "prompt": "PWA for React component architecture",
+    "form": "nounphrase"
+  },
+  {
+    "id": 24,
+    "prompt": "scaling CI/CD pipeline with the auto-scaling skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 77,
+    "prompt": "Which skill covers flutter tasks like flutter-widgets?",
+    "form": "question"
+  },
+  {
+    "id": 194,
+    "prompt": "typescript for React component architecture",
+    "form": "nounphrase"
+  },
+  {
+    "id": 65,
+    "prompt": "docs workflow and the documentation skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 118,
+    "prompt": "Apply mobile-perf best practices to my mobile project.",
     "form": "imperative"
   },
   {
-    "id": 58,
-    "prompt": "Apply camera-integration-2 best practices to my mobile project.",
-    "form": "imperative"
+    "id": 164,
+    "prompt": "secrets CI/CD pipeline with the secrets-management skill",
+    "form": "nounphrase"
   },
   {
-    "id": 133,
-    "prompt": "Use documentation patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 169,
-    "prompt": "Apply haptic-feedback best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 366,
-    "prompt": "Which skill should I follow for test-reporting testing?",
+    "id": 56,
+    "prompt": "Which skill covers data visualization patterns like data-visualization?",
     "form": "question"
   },
   {
     "id": 197,
-    "prompt": "Which skill should I follow for JWT-security in my app?",
+    "prompt": "Can you explain the websocket-client approach for frontend implementation?",
     "form": "question"
   },
   {
-    "id": 298,
-    "prompt": "Apply the queue-workers skill to my queue project.",
+    "id": 129,
+    "prompt": "Apply the navigation-patterns skill to my design system.",
     "form": "imperative"
   },
   {
-    "id": 237,
-    "prompt": "Which skill applies to monorepo tasks like monorepo-structure?",
-    "form": "question"
-  },
-  {
-    "id": 270,
-    "prompt": "How do I implement payment following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 323,
-    "prompt": "Use the secure-coding skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 76,
-    "prompt": "Which skill should I use for connection pool tasks involving connection-pooling?",
-    "form": "question"
-  },
-  {
-    "id": 108,
-    "prompt": "Apply the database-indexing-2 skill to my indexing project.",
-    "form": "imperative"
-  },
-  {
-    "id": 96,
-    "prompt": "Which skill should I follow for data-privacy in my app?",
-    "form": "question"
-  },
-  {
-    "id": 120,
-    "prompt": "How do I implement deploy in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 289,
-    "prompt": "Apply push-notifications best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 279,
-    "prompt": "Apply the performance-tuning skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 61,
-    "prompt": "How do I implement CDN in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 130,
-    "prompt": "How do I implement Docker in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 216,
-    "prompt": "Which skill should I follow for mfa-implementation in my app?",
-    "form": "question"
-  },
-  {
-    "id": 244,
-    "prompt": "native patterns for mobile apps",
+    "id": 114,
+    "prompt": "mobile auth patterns for mobile apps",
     "form": "nounphrase"
   },
   {
-    "id": 342,
-    "prompt": "Design the spacing-system system using the spacing skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 287,
-    "prompt": "Which skill should I follow for property-testing testing?",
+    "id": 167,
+    "prompt": "Which skill should I follow for security-testing testing?",
     "form": "question"
   },
   {
-    "id": 39,
-    "prompt": "Apply background-task best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 151,
-    "prompt": "How do I set up flaky in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 36,
-    "prompt": "Which skill should I use for authentication tasks involving auth-middleware?",
-    "form": "question"
-  },
-  {
-    "id": 272,
+    "id": 143,
     "prompt": "Use the penetration-testing skill for application security.",
     "form": "imperative"
   },
   {
-    "id": 134,
-    "prompt": "documentation workflow and the documentation-2 skill",
+    "id": 152,
+    "prompt": "Use the property-testing skill for testing patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 82,
+    "prompt": "Use Git workflow patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 174,
+    "prompt": "session management security patterns and the session-management skill",
     "form": "nounphrase"
   },
   {
-    "id": 321,
-    "prompt": "How do I implement secrets in my deployment pipeline?",
+    "id": 179,
+    "prompt": "Follow state-management guidelines when building the UI.",
+    "form": "imperative"
+  },
+  {
+    "id": 6,
+    "prompt": "Which skill should I use for api tasks involving api-design?",
     "form": "question"
   },
   {
-    "id": 349,
-    "prompt": "Apply the table-design skill to my design system.",
-    "form": "imperative"
+    "id": 14,
+    "prompt": "badge patterns for mobile apps",
+    "form": "nounphrase"
+  },
+  {
+    "id": 45,
+    "prompt": "contract test testing with the contract-testing skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 76,
+    "prompt": "Which skill should I follow for flaky-test-detection testing?",
+    "form": "question"
+  },
+  {
+    "id": 165,
+    "prompt": "secure security patterns and the secure-coding skill",
+    "form": "nounphrase"
   },
   {
     "id": 101,
-    "prompt": "How do I implement data visualization following design best practices?",
+    "prompt": "How do I set up integration test in my test suite?",
     "form": "question"
   },
   {
-    "id": 205,
-    "prompt": "ESLint workflow and the linting-config skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 109,
-    "prompt": "Apply the database-migrations skill to my database project.",
+    "id": 159,
+    "prompt": "Apply the rate-limiting skill to my throttle project.",
     "form": "imperative"
   },
   {
-    "id": 154,
-    "prompt": "flaky test testing with the flaky-test-detection-2 skill",
+    "id": 15,
+    "prompt": "app store patterns for mobile apps",
     "form": "nounphrase"
+  },
+  {
+    "id": 105,
+    "prompt": "Kubernetes CI/CD pipeline with the kubernetes-deploy skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 79,
+    "prompt": "Apply the form-design skill to my design system.",
+    "form": "imperative"
+  },
+  {
+    "id": 55,
+    "prompt": "data visualization guidelines for UI design",
+    "form": "nounphrase"
+  },
+  {
+    "id": 3,
+    "prompt": "Use useSWR patterns in my frontend.",
+    "form": "imperative"
+  },
+  {
+    "id": 108,
+    "prompt": "Apply the layout-grid skill to my design system.",
+    "form": "imperative"
+  },
+  {
+    "id": 9,
+    "prompt": "Apply the api-gateway skill to my API gateway project.",
+    "form": "imperative"
+  },
+  {
+    "id": 133,
+    "prompt": "Use the offline-storage skill for mobile development.",
+    "form": "imperative"
+  },
+  {
+    "id": 151,
+    "prompt": "How do I set up property testing in my test suite?",
+    "form": "question"
+  },
+  {
+    "id": 91,
+    "prompt": "How do I implement iconography following design best practices?",
+    "form": "question"
+  },
+  {
+    "id": 148,
+    "prompt": "Apply the performance-tuning skill to my infrastructure.",
+    "form": "imperative"
+  },
+  {
+    "id": 36,
+    "prompt": "Which skill covers card pattern patterns like card-patterns?",
+    "form": "question"
+  },
+  {
+    "id": 26,
+    "prompt": "Which skill covers background task tasks like background-task?",
+    "form": "question"
+  },
+  {
+    "id": 162,
+    "prompt": "Use refactoring patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 160,
+    "prompt": "How do I implement throttle following best practices?",
+    "form": "question"
+  },
+  {
+    "id": 21,
+    "prompt": "How do I implement authentication following best practices?",
+    "form": "question"
+  },
+  {
+    "id": 33,
+    "prompt": "Use the camera-integration skill for mobile development.",
+    "form": "imperative"
   },
   {
     "id": 2,
@@ -555,249 +270,124 @@
     "form": "imperative"
   },
   {
-    "id": 48,
-    "prompt": "Apply biometric-auth best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 247,
-    "prompt": "Which skill should I follow for network-firewall in my app?",
+    "id": 177,
+    "prompt": "Which skill covers spacing patterns like spacing-system?",
     "form": "question"
   },
   {
-    "id": 379,
-    "prompt": "Apply the transaction-management-2 skill to my transaction project.",
+    "id": 138,
+    "prompt": "Configure parallel-testing according to best practices.",
     "form": "imperative"
   },
   {
-    "id": 392,
-    "prompt": "Use the vault-secrets skill for application security.",
+    "id": 128,
+    "prompt": "Apply native-module best practices to my mobile project.",
     "form": "imperative"
   },
   {
     "id": 7,
-    "prompt": "Can you explain the api-client-hooks-2 approach for frontend implementation?",
+    "prompt": "Which skill should I use for documentation tasks involving api-documentation?",
     "form": "question"
   },
   {
-    "id": 260,
-    "prompt": "How do I implement OTA update in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 331,
-    "prompt": "How do I apply the seeding-strategy skill for my project workflow?",
-    "form": "question"
-  },
-  {
-    "id": 16,
-    "prompt": "Which skill should I use for API gateway tasks involving api-gateway?",
-    "form": "question"
-  },
-  {
-    "id": 316,
-    "prompt": "Which skill applies to release management tasks like release-management?",
-    "form": "question"
-  },
-  {
-    "id": 225,
-    "prompt": "mobile performance patterns for mobile apps",
-    "form": "nounphrase"
-  },
-  {
-    "id": 346,
-    "prompt": "Can you explain the state-management approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 132,
-    "prompt": "Use docs patterns in my project.",
+    "id": 59,
+    "prompt": "Apply the database-migrations skill to my database project.",
     "form": "imperative"
   },
   {
-    "id": 105,
-    "prompt": "indexing best practices and the database-indexing skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 263,
-    "prompt": "Use the parallel-testing skill for testing patterns in my project.",
+    "id": 112,
+    "prompt": "Implement message broker using the message-broker skill.",
     "form": "imperative"
   },
   {
-    "id": 384,
-    "prompt": "typescript for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 3,
-    "prompt": "Use animation patterns in my frontend.",
+    "id": 199,
+    "prompt": "Apply zero-trust guidelines to secure my project.",
     "form": "imperative"
   },
   {
-    "id": 198,
-    "prompt": "Apply JWT-security guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 8,
-    "prompt": "Follow api-client-hooks-2 guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 219,
-    "prompt": "Apply mobile-auth-2 best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 32,
-    "prompt": "Use arch patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 201,
-    "prompt": "How do I implement grid following design best practices?",
+    "id": 37,
+    "prompt": "Which skill applies to changelog tasks like changelog-management?",
     "form": "question"
   },
   {
-    "id": 81,
-    "prompt": "How do I set up contract test in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 42,
-    "prompt": "Configure backup-restore using DevOps best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 307,
-    "prompt": "Can you explain the react-components approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 74,
-    "prompt": "components guidelines for UI design",
-    "form": "nounphrase"
-  },
-  {
-    "id": 301,
-    "prompt": "How do I implement ransomware security measures?",
-    "form": "question"
-  },
-  {
-    "id": 322,
-    "prompt": "Configure secrets-management-2 using DevOps best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 320,
-    "prompt": "How do I implement secrets in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 67,
-    "prompt": "Which skill applies to code review tasks like code-review?",
-    "form": "question"
-  },
-  {
-    "id": 240,
-    "prompt": "How do I implement motion design following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 95,
-    "prompt": "privacy security patterns and the data-privacy skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 351,
+    "id": 181,
     "prompt": "How do I apply the tech-debt-tracking skill for my project workflow?",
     "form": "question"
   },
   {
-    "id": 38,
-    "prompt": "Apply the auto-scaling skill to my infrastructure.",
+    "id": 98,
+    "prompt": "Apply the infrastructure-as-code skill to my infrastructure.",
     "form": "imperative"
   },
   {
-    "id": 86,
-    "prompt": "Which skill should I follow for CORS-policy in my app?",
+    "id": 166,
+    "prompt": "Which skill should I follow for secure-coding in my app?",
     "form": "question"
   },
   {
-    "id": 283,
-    "prompt": "Use onboarding patterns in my project.",
+    "id": 46,
+    "prompt": "Which skill should I follow for contract-testing testing?",
+    "form": "question"
+  },
+  {
+    "id": 198,
+    "prompt": "Follow websocket-client guidelines when building the UI.",
     "form": "imperative"
   },
   {
-    "id": 217,
-    "prompt": "Which skill covers mobile auth tasks like mobile-auth?",
-    "form": "question"
-  },
-  {
-    "id": 5,
-    "prompt": "useSWR for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 4,
-    "prompt": "animation for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 12,
-    "prompt": "Implement documentation using the api-documentation skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 33,
-    "prompt": "Use arch patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 27,
-    "prompt": "Which skill covers badge tasks like app-icon-badge-2?",
-    "form": "question"
-  },
-  {
-    "id": 111,
-    "prompt": "How do I apply the debugging-techniques skill for my project workflow?",
-    "form": "question"
-  },
-  {
-    "id": 92,
+    "id": 52,
     "prompt": "Use the data-fixtures skill for testing patterns in my project.",
     "form": "imperative"
   },
   {
-    "id": 78,
-    "prompt": "Apply the container-registry skill to my infrastructure.",
+    "id": 38,
+    "prompt": "Follow the changelog-management skill for project management.",
     "form": "imperative"
   },
   {
-    "id": 66,
-    "prompt": "Which skill covers CI/CD tasks like ci-pipeline?",
+    "id": 80,
+    "prompt": "How do I implement form design following design best practices?",
     "form": "question"
   },
   {
-    "id": 286,
-    "prompt": "Which skill applies to structure tasks like project-structure?",
-    "form": "question"
-  },
-  {
-    "id": 64,
-    "prompt": "changelog workflow and the changelog-management skill",
+    "id": 144,
+    "prompt": "penetration test security patterns and the penetration-testing skill",
     "form": "nounphrase"
   },
   {
-    "id": 31,
-    "prompt": "How do I apply the architecture-decision skill for my project workflow?",
+    "id": 116,
+    "prompt": "Which skill covers mobile navigation tasks like mobile-navigation?",
     "form": "question"
   },
   {
-    "id": 55,
-    "prompt": "camera patterns for mobile apps",
+    "id": 68,
+    "prompt": "Follow drag-drop guidelines when building the UI.",
+    "form": "imperative"
+  },
+  {
+    "id": 158,
+    "prompt": "Apply ransomware-defense guidelines to secure my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 63,
+    "prompt": "Configure docker-containers using DevOps best practices.",
+    "form": "imperative"
+  },
+  {
+    "id": 25,
+    "prompt": "background task patterns for mobile apps",
     "form": "nounphrase"
+  },
+  {
+    "id": 8,
+    "prompt": "Apply the api-documentation skill to my documentation project.",
+    "form": "imperative"
+  },
+  {
+    "id": 47,
+    "prompt": "Which skill should I follow for CORS-policy in my app?",
+    "form": "question"
   },
   {
     "id": 1,
@@ -805,1198 +395,608 @@
     "form": "question"
   },
   {
-    "id": 398,
-    "prompt": "Follow websocket-client guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 333,
-    "prompt": "Use seeding patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 324,
-    "prompt": "secure security patterns and the secure-coding skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 168,
-    "prompt": "Apply the grpc-services skill to my gRPC project.",
-    "form": "imperative"
-  },
-  {
-    "id": 339,
-    "prompt": "Configure snapshot-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 354,
-    "prompt": "tech debt workflow and the tech-debt-tracking-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 359,
-    "prompt": "Configure test-coverage-2 according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 90,
-    "prompt": "How do I implement dark mode following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 229,
-    "prompt": "Apply mobile-testing-2 best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 226,
-    "prompt": "Which skill covers mobile performance tasks like mobile-perf?",
-    "form": "question"
-  },
-  {
-    "id": 79,
-    "prompt": "Apply the container-registry-2 skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 80,
-    "prompt": "How do I implement container registry in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 376,
-    "prompt": "Which skill covers tooltip patterns like tooltip-patterns-2?",
-    "form": "question"
-  },
-  {
-    "id": 365,
-    "prompt": "report testing with the test-reporting skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 292,
-    "prompt": "Use the push-notifications-2 skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 358,
-    "prompt": "Configure test-coverage according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 394,
-    "prompt": "webhook best practices and the webhooks skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 302,
-    "prompt": "Use the ransomware-defense-2 skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 202,
-    "prompt": "Design the layout-grid system using the grid skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 242,
-    "prompt": "Use the mutation-testing skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 159,
-    "prompt": "Follow form-validation guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 150,
-    "prompt": "How do I implement file storage following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 135,
-    "prompt": "drag and drop for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 6,
-    "prompt": "Can you explain the api-client-hooks approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 250,
-    "prompt": "How do I implement firewall security measures?",
-    "form": "question"
-  },
-  {
-    "id": 312,
-    "prompt": "Use refactoring patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 382,
-    "prompt": "Use typescript patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 206,
-    "prompt": "Which skill applies to ESLint tasks like linting-config?",
-    "form": "question"
-  },
-  {
-    "id": 172,
-    "prompt": "Use the haptic-feedback-2 skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 390,
-    "prompt": "How do I set up unit testing in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 373,
-    "prompt": "Design the tooltip-patterns system using the tooltip skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 175,
-    "prompt": "hash security patterns and the hash-algorithms-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 98,
-    "prompt": "Apply data-privacy-2 guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 170,
-    "prompt": "How do I implement haptic in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 295,
-    "prompt": "PWA for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 227,
-    "prompt": "Which skill covers mobile testing tasks like mobile-testing?",
-    "form": "question"
-  },
-  {
-    "id": 254,
-    "prompt": "nextjs for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 70,
-    "prompt": "How do I implement color system following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 296,
-    "prompt": "Can you explain the pwa-offline-2 approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 112,
-    "prompt": "Use debugging patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 192,
-    "prompt": "Use the input-sanitization skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 364,
-    "prompt": "tests testing with the test-organization skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 148,
-    "prompt": "Apply the error-handling-2 skill to my error handling project.",
-    "form": "imperative"
-  },
-  {
-    "id": 218,
-    "prompt": "Apply mobile-auth best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 93,
-    "prompt": "Use the data-fixtures-2 skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 355,
-    "prompt": "test cleanup testing with the test-cleanup skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 65,
-    "prompt": "CI/CD CI/CD pipeline with the ci-pipeline skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 330,
-    "prompt": "How do I set up security testing in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 360,
-    "prompt": "How do I set up test coverage in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 336,
-    "prompt": "Can you explain the seo-optimization approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 139,
-    "prompt": "Apply encryption-at-rest guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 203,
-    "prompt": "Design the layout-grid-2 system using the grid skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 155,
-    "prompt": "flutter patterns for mobile apps",
-    "form": "nounphrase"
-  },
-  {
-    "id": 43,
-    "prompt": "Configure backup-restore-2 using DevOps best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 228,
+    "id": 119,
     "prompt": "Apply mobile-testing best practices to my mobile project.",
     "form": "imperative"
   },
   {
-    "id": 113,
-    "prompt": "Use the deep-linking skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 140,
-    "prompt": "How do I implement encryption at rest security measures?",
+    "id": 66,
+    "prompt": "Which skill applies to docs tasks like documentation?",
     "form": "question"
   },
   {
-    "id": 278,
-    "prompt": "Configure performance-testing according to best practices.",
+    "id": 153,
+    "prompt": "Use the push-notifications skill for mobile development.",
     "form": "imperative"
   },
   {
-    "id": 391,
-    "prompt": "How do I implement Vault security measures?",
+    "id": 71,
+    "prompt": "How do I implement error handling following best practices?",
     "form": "question"
   },
   {
-    "id": 282,
-    "prompt": "Configure performance-tuning-2 using DevOps best practices.",
+    "id": 28,
+    "prompt": "Apply the backup-restore skill to my infrastructure.",
     "form": "imperative"
   },
   {
-    "id": 327,
-    "prompt": "Which skill should I follow for security-testing testing?",
-    "form": "question"
-  },
-  {
-    "id": 171,
-    "prompt": "How do I implement haptic in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 174,
-    "prompt": "hash security patterns and the hash-algorithms skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 381,
-    "prompt": "How do I use the typescript-config skill for my React frontend project?",
-    "form": "question"
-  },
-  {
-    "id": 325,
-    "prompt": "secure coding security patterns and the secure-coding-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 304,
-    "prompt": "throttle best practices and the rate-limiting skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 269,
-    "prompt": "Apply the payment-integration-2 skill to my payment project.",
+    "id": 149,
+    "prompt": "Follow the project-structure skill for project management.",
     "form": "imperative"
   },
   {
-    "id": 369,
-    "prompt": "Follow testing-components guidelines when building the UI.",
+    "id": 169,
+    "prompt": "Follow the seeding-strategy skill for project management.",
     "form": "imperative"
   },
   {
-    "id": 195,
-    "prompt": "integration test testing with the integration-testing-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 41,
-    "prompt": "How do I implement backup in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 34,
-    "prompt": "arch workflow and the architecture-patterns-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 262,
-    "prompt": "Use the OWASP-top10 skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 49,
-    "prompt": "Apply biometric-auth-2 best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 14,
-    "prompt": "OpenAPI best practices and the api-documentation-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 386,
-    "prompt": "Which skill covers typography patterns like typography-scale?",
-    "form": "question"
-  },
-  {
-    "id": 178,
-    "prompt": "Apply the iconography skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 176,
-    "prompt": "Which skill should I follow for hash-algorithms-2 in my app?",
-    "form": "question"
-  },
-  {
-    "id": 88,
-    "prompt": "Follow css-architecture guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 182,
-    "prompt": "Use the in-app-purchase skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 21,
-    "prompt": "How do I set up API test in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 293,
-    "prompt": "Use PWA patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 281,
-    "prompt": "How do I implement performance tuning in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 35,
-    "prompt": "authentication best practices and the auth-middleware skill",
+    "id": 4,
+    "prompt": "useSWR for React component architecture",
     "form": "nounphrase"
   },
   {
     "id": 161,
-    "prompt": "How do I implement geolocation in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 91,
-    "prompt": "How do I set up fixtures in my test suite?",
-    "form": "question"
-  },
-  {
-    "id": 294,
-    "prompt": "PWA for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 328,
-    "prompt": "Configure security-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 265,
-    "prompt": "password hash security patterns and the password-hashing skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 118,
-    "prompt": "Follow the dependency-management skill for project management.",
-    "form": "imperative"
-  },
-  {
-    "id": 311,
     "prompt": "How do I apply the refactoring skill for my project workflow?",
     "form": "question"
   },
   {
-    "id": 370,
-    "prompt": "How do I use the testing-components skill for my React frontend project?",
-    "form": "question"
-  },
-  {
-    "id": 274,
-    "prompt": "pentest security patterns and the penetration-testing-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 100,
-    "prompt": "How do I implement data visualization following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 352,
-    "prompt": "Use tech debt patterns in my project.",
+    "id": 168,
+    "prompt": "Configure security-testing according to best practices.",
     "form": "imperative"
   },
   {
-    "id": 337,
-    "prompt": "Which skill should I follow for session-management in my app?",
-    "form": "question"
-  },
-  {
-    "id": 249,
-    "prompt": "Apply network-firewall-2 guidelines to secure my project.",
+    "id": 103,
+    "prompt": "Use the JWT-security skill for application security.",
     "form": "imperative"
-  },
-  {
-    "id": 18,
-    "prompt": "Apply API-security guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 222,
-    "prompt": "Use the mobile-navigation skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 341,
-    "prompt": "How do I implement spacing following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 68,
-    "prompt": "Follow the code-review skill for project management.",
-    "form": "imperative"
-  },
-  {
-    "id": 128,
-    "prompt": "Apply the design-tokens skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 305,
-    "prompt": "rate limiting best practices and the rate-limiting-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 115,
-    "prompt": "dependency audit security patterns and the dependency-audit skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 99,
-    "prompt": "Apply the data-visualization skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 121,
-    "prompt": "How do I apply the design-patterns skill for my project workflow?",
-    "form": "question"
-  },
-  {
-    "id": 157,
-    "prompt": "Which skill covers form design patterns like form-design?",
-    "form": "question"
-  },
-  {
-    "id": 356,
-    "prompt": "Which skill should I follow for test-cleanup testing?",
-    "form": "question"
-  },
-  {
-    "id": 84,
-    "prompt": "contract test testing with the contract-testing-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 303,
-    "prompt": "Implement throttle using the rate-limiting skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 51,
-    "prompt": "How do I implement button following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 334,
-    "prompt": "seeding workflow and the seeding-strategy-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 129,
-    "prompt": "Apply the docker-containers skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 338,
-    "prompt": "Apply session-management guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 144,
-    "prompt": "environment workflow and the env-config skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 10,
-    "prompt": "How do I implement api following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 194,
-    "prompt": "integration test testing with the integration-testing skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 97,
-    "prompt": "Which skill should I follow for data-privacy-2 in my app?",
-    "form": "question"
-  },
-  {
-    "id": 276,
-    "prompt": "Can you explain the performance-optimization approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 110,
-    "prompt": "How do I implement database following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 9,
-    "prompt": "Apply the api-design skill to my api project.",
-    "form": "imperative"
-  },
-  {
-    "id": 329,
-    "prompt": "Configure security-testing-2 according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 243,
-    "prompt": "Use the native-module skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 314,
-    "prompt": "refactor workflow and the refactoring-2 skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 235,
-    "prompt": "monitoring CI/CD pipeline with the monitoring-alerting skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 185,
-    "prompt": "incident CI/CD pipeline with the incident-response skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 89,
-    "prompt": "Apply the dark-mode skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 313,
-    "prompt": "Use refactor patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 208,
-    "prompt": "Apply the load-balancing skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 102,
-    "prompt": "Design the data-visualization-2 system using the data visualization skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 277,
-    "prompt": "Which skill should I follow for performance-testing testing?",
-    "form": "question"
-  },
-  {
-    "id": 248,
-    "prompt": "Apply network-firewall guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 57,
-    "prompt": "Which skill covers camera tasks like camera-integration-2?",
-    "form": "question"
-  },
-  {
-    "id": 200,
-    "prompt": "How do I implement Kubernetes in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 199,
-    "prompt": "Apply the kubernetes-deploy skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 233,
-    "prompt": "Design the modal-patterns-2 system using the modal skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 236,
-    "prompt": "Which skill covers monitoring tasks like monitoring-alerting?",
-    "form": "question"
-  },
-  {
-    "id": 119,
-    "prompt": "Apply the deploy-strategy skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 271,
-    "prompt": "How do I implement penetration test security measures?",
-    "form": "question"
-  },
-  {
-    "id": 399,
-    "prompt": "Apply zero-trust guidelines to secure my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 383,
-    "prompt": "Use typescript patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 347,
-    "prompt": "Can you explain the state-management-2 approach for frontend implementation?",
-    "form": "question"
-  },
-  {
-    "id": 179,
-    "prompt": "Apply the illustration-style skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 190,
-    "prompt": "How do I implement Terraform in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 184,
-    "prompt": "IAP patterns for mobile apps",
-    "form": "nounphrase"
-  },
-  {
-    "id": 207,
-    "prompt": "Which skill covers load balancer tasks like load-balancing?",
-    "form": "question"
-  },
-  {
-    "id": 239,
-    "prompt": "Apply the motion-design skill to my design system.",
-    "form": "imperative"
-  },
-  {
-    "id": 152,
-    "prompt": "Use the flaky-test-detection skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 13,
-    "prompt": "Implement OpenAPI using the api-documentation-2 skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 232,
-    "prompt": "Design the modal-patterns system using the modal skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 165,
-    "prompt": "graphql best practices and the graphql-schema skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 146,
-    "prompt": "Which skill should I use for error handling tasks involving error-handling?",
-    "form": "question"
-  },
-  {
-    "id": 117,
-    "prompt": "Which skill applies to dependency tasks like dependency-management?",
-    "form": "question"
-  },
-  {
-    "id": 44,
-    "prompt": "backup CI/CD pipeline with the backup-restore-2 skill",
-    "form": "nounphrase"
   },
   {
     "id": 136,
-    "prompt": "Can you explain the drag-drop approach for frontend implementation?",
+    "prompt": "Which skill should I follow for OWASP-top10 in my app?",
     "form": "question"
   },
   {
-    "id": 319,
-    "prompt": "Apply the secrets-management skill to my infrastructure.",
+    "id": 139,
+    "prompt": "Apply password-hashing guidelines to secure my project.",
     "form": "imperative"
   },
   {
-    "id": 193,
-    "prompt": "Use the integration-testing skill for testing patterns in my project.",
+    "id": 97,
+    "prompt": "Which skill covers Terraform tasks like infrastructure-as-code?",
+    "form": "question"
+  },
+  {
+    "id": 83,
+    "prompt": "Implement graphql using the graphql-schema skill.",
     "form": "imperative"
   },
   {
-    "id": 268,
-    "prompt": "Apply the payment-integration skill to my payment project.",
-    "form": "imperative"
-  },
-  {
-    "id": 318,
-    "prompt": "Follow responsive-layouts guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 285,
-    "prompt": "structure workflow and the project-structure skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 180,
-    "prompt": "How do I implement illustration following design best practices?",
-    "form": "question"
-  },
-  {
-    "id": 372,
-    "prompt": "Use testing patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 393,
-    "prompt": "Implement webhook using the webhooks skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 368,
-    "prompt": "Configure test-reporting-2 according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 387,
-    "prompt": "Which skill should I follow for unit-testing testing?",
-    "form": "question"
-  },
-  {
-    "id": 257,
-    "prompt": "Which skill covers offline tasks like offline-storage?",
-    "form": "question"
-  },
-  {
-    "id": 107,
-    "prompt": "Which skill should I use for indexing tasks involving database-indexing-2?",
-    "form": "question"
-  },
-  {
-    "id": 344,
-    "prompt": "SSL CI/CD pipeline with the ssl-certificates skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 166,
-    "prompt": "Which skill should I use for graphql tasks involving graphql-schema?",
-    "form": "question"
-  },
-  {
-    "id": 380,
-    "prompt": "How do I implement transaction following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 212,
-    "prompt": "Implement message broker using the message-broker skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 45,
-    "prompt": "BDD testing with the behavioral-testing skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 209,
-    "prompt": "Apply the log-aggregation skill to my infrastructure.",
-    "form": "imperative"
-  },
-  {
-    "id": 211,
-    "prompt": "How do I implement message broker following best practices?",
-    "form": "question"
-  },
-  {
-    "id": 280,
-    "prompt": "How do I implement performance tuning in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 297,
-    "prompt": "Which skill should I use for queue tasks involving queue-workers?",
-    "form": "question"
-  },
-  {
-    "id": 374,
-    "prompt": "tooltip guidelines for UI design",
-    "form": "nounphrase"
-  },
-  {
-    "id": 290,
-    "prompt": "How do I implement push notification in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 253,
-    "prompt": "Use nextjs patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 104,
-    "prompt": "DB backup CI/CD pipeline with the database-backup skill",
-    "form": "nounphrase"
-  },
-  {
-    "id": 345,
-    "prompt": "Redux for React component architecture",
-    "form": "nounphrase"
-  },
-  {
-    "id": 256,
-    "prompt": "Which skill covers observability tasks like observability?",
-    "form": "question"
-  },
-  {
-    "id": 377,
-    "prompt": "Which skill should I use for transactions tasks involving transaction-management?",
-    "form": "question"
-  },
-  {
-    "id": 123,
-    "prompt": "Use design system patterns in my frontend.",
-    "form": "imperative"
-  },
-  {
-    "id": 63,
-    "prompt": "Use changelog patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 29,
-    "prompt": "Apply app-store-deploy best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 160,
-    "prompt": "How do I use the form-validation skill for my React frontend project?",
-    "form": "question"
-  },
-  {
-    "id": 224,
+    "id": 115,
     "prompt": "mobile navigation patterns for mobile apps",
     "form": "nounphrase"
   },
   {
-    "id": 73,
-    "prompt": "Design the component-library system using the components skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 213,
-    "prompt": "Implement messaging using the message-broker-2 skill.",
-    "form": "imperative"
-  },
-  {
-    "id": 267,
-    "prompt": "Which skill should I use for payment tasks involving payment-integration?",
-    "form": "question"
-  },
-  {
-    "id": 167,
-    "prompt": "Which skill should I use for gRPC tasks involving grpc-services?",
-    "form": "question"
-  },
-  {
-    "id": 196,
-    "prompt": "Which skill should I follow for integration-testing-2 testing?",
-    "form": "question"
-  },
-  {
-    "id": 82,
-    "prompt": "Use the contract-testing skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 138,
-    "prompt": "Configure e2e-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 210,
-    "prompt": "How do I implement logging in my deployment pipeline?",
-    "form": "question"
-  },
-  {
-    "id": 137,
-    "prompt": "Which skill should I follow for e2e-testing testing?",
-    "form": "question"
-  },
-  {
-    "id": 37,
-    "prompt": "Which skill covers scaling tasks like auto-scaling?",
-    "form": "question"
-  },
-  {
-    "id": 163,
-    "prompt": "Use Git workflow patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 261,
-    "prompt": "How do I implement OWASP security measures?",
-    "form": "question"
-  },
-  {
-    "id": 348,
-    "prompt": "Follow state-management-2 guidelines when building the UI.",
-    "form": "imperative"
-  },
-  {
-    "id": 332,
-    "prompt": "Use seeding patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 230,
-    "prompt": "How do I implement mobile test in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 363,
-    "prompt": "Use the test-organization skill for testing patterns in my project.",
-    "form": "imperative"
-  },
-  {
-    "id": 223,
-    "prompt": "Use the mobile-navigation-2 skill for mobile development.",
-    "form": "imperative"
-  },
-  {
-    "id": 371,
-    "prompt": "How do I use the testing-components-2 skill for my React frontend project?",
-    "form": "question"
-  },
-  {
-    "id": 181,
-    "prompt": "How do I implement IAP in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 173,
-    "prompt": "Use the hash-algorithms skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 258,
-    "prompt": "Apply offline-storage best practices to my mobile project.",
-    "form": "imperative"
-  },
-  {
-    "id": 315,
-    "prompt": "release management workflow and the release-management skill",
+    "id": 175,
+    "prompt": "snapshot testing with the snapshot-testing skill",
     "form": "nounphrase"
   },
   {
-    "id": 189,
-    "prompt": "Apply the infrastructure-as-code skill to my infrastructure.",
+    "id": 67,
+    "prompt": "Can you explain the drag-drop approach for frontend implementation?",
+    "form": "question"
+  },
+  {
+    "id": 48,
+    "prompt": "Apply CORS-policy guidelines to secure my project.",
     "form": "imperative"
   },
   {
-    "id": 395,
-    "prompt": "Webpack for React component architecture",
+    "id": 43,
+    "prompt": "Configure container-registry using DevOps best practices.",
+    "form": "imperative"
+  },
+  {
+    "id": 178,
+    "prompt": "Apply the spacing-system skill to my design system.",
+    "form": "imperative"
+  },
+  {
+    "id": 5,
+    "prompt": "api best practices and the api-design skill",
     "form": "nounphrase"
   },
   {
-    "id": 300,
-    "prompt": "How do I implement ransom security measures?",
+    "id": 141,
+    "prompt": "How do I implement payment following best practices?",
     "form": "question"
   },
   {
-    "id": 308,
-    "prompt": "Follow react-components guidelines when building the UI.",
+    "id": 172,
+    "prompt": "Use SEO patterns in my frontend.",
     "form": "imperative"
   },
   {
-    "id": 204,
-    "prompt": "grid guidelines for UI design",
+    "id": 10,
+    "prompt": "How do I implement API gateway following best practices?",
+    "form": "question"
+  },
+  {
+    "id": 134,
+    "prompt": "offline patterns for mobile apps",
     "form": "nounphrase"
   },
   {
-    "id": 17,
-    "prompt": "Which skill should I follow for API-security in my app?",
+    "id": 90,
+    "prompt": "How do I implement hash security measures?",
     "form": "question"
   },
   {
-    "id": 361,
-    "prompt": "How do I set up test double in my test suite?",
-    "form": "question"
+    "id": 104,
+    "prompt": "JWT security patterns and the JWT-security skill",
+    "form": "nounphrase"
   },
   {
-    "id": 299,
-    "prompt": "Apply ransomware-defense guidelines to secure my project.",
+    "id": 88,
+    "prompt": "Apply haptic-feedback best practices to my mobile project.",
     "form": "imperative"
+  },
+  {
+    "id": 195,
+    "prompt": "unit testing testing with the unit-testing skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 113,
+    "prompt": "Use the mobile-auth skill for mobile development.",
+    "form": "imperative"
+  },
+  {
+    "id": 27,
+    "prompt": "Which skill covers backup tasks like backup-restore?",
+    "form": "question"
   },
   {
     "id": 183,
-    "prompt": "Use the in-app-purchase-2 skill for mobile development.",
+    "prompt": "Use the test-coverage skill for testing patterns in my project.",
     "form": "imperative"
   },
   {
-    "id": 114,
-    "prompt": "deep linking patterns for mobile apps",
-    "form": "nounphrase"
+    "id": 190,
+    "prompt": "How do I implement tooltip following design best practices?",
+    "form": "question"
   },
   {
-    "id": 103,
-    "prompt": "Configure database-backup using DevOps best practices.",
+    "id": 18,
+    "prompt": "Follow the architecture-decision skill for project management.",
     "form": "imperative"
   },
   {
-    "id": 52,
+    "id": 126,
+    "prompt": "Which skill covers motion design patterns like motion-design?",
+    "form": "question"
+  },
+  {
+    "id": 147,
+    "prompt": "Which skill covers performance tuning tasks like performance-tuning?",
+    "form": "question"
+  },
+  {
+    "id": 32,
     "prompt": "Design the button-system system using the button skill.",
     "form": "imperative"
   },
   {
-    "id": 15,
-    "prompt": "API gateway best practices and the api-gateway skill",
+    "id": 54,
+    "prompt": "privacy security patterns and the data-privacy skill",
     "form": "nounphrase"
   },
   {
-    "id": 245,
-    "prompt": "nav guidelines for UI design",
-    "form": "nounphrase"
+    "id": 176,
+    "prompt": "Which skill should I follow for snapshot-testing testing?",
+    "form": "question"
   },
   {
-    "id": 164,
-    "prompt": "Git workflow workflow and the git-workflow-2 skill",
-    "form": "nounphrase"
+    "id": 137,
+    "prompt": "Which skill should I follow for parallel-testing testing?",
+    "form": "question"
   },
   {
-    "id": 59,
-    "prompt": "Apply the card-patterns skill to my design system.",
+    "id": 142,
+    "prompt": "Implement payment using the payment-integration skill.",
     "form": "imperative"
   },
   {
-    "id": 77,
-    "prompt": "Which skill covers registry tasks like container-registry?",
+    "id": 57,
+    "prompt": "Which skill should I use for indexing tasks involving database-indexing?",
     "form": "question"
+  },
+  {
+    "id": 81,
+    "prompt": "How do I apply the git-workflow-2 skill for my project workflow?",
+    "form": "question"
+  },
+  {
+    "id": 61,
+    "prompt": "How do I use the design-system skill for my React frontend project?",
+    "form": "question"
+  },
+  {
+    "id": 85,
+    "prompt": "gRPC best practices and the grpc-services skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 106,
+    "prompt": "Which skill covers Kubernetes tasks like kubernetes-deploy?",
+    "form": "question"
+  },
+  {
+    "id": 99,
+    "prompt": "Apply input-sanitization guidelines to secure my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 44,
+    "prompt": "registry CI/CD pipeline with the container-registry skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 30,
+    "prompt": "How do I implement biometric in my mobile app?",
+    "form": "question"
+  },
+  {
+    "id": 64,
+    "prompt": "Docker CI/CD pipeline with the docker-containers skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 140,
+    "prompt": "How do I implement password hash security measures?",
+    "form": "question"
+  },
+  {
+    "id": 154,
+    "prompt": "push notification patterns for mobile apps",
+    "form": "nounphrase"
   },
   {
     "id": 69,
-    "prompt": "Apply the color-system skill to my design system.",
+    "prompt": "Apply encryption-at-rest guidelines to secure my project.",
     "form": "imperative"
   },
   {
-    "id": 273,
-    "prompt": "Use the penetration-testing-2 skill for application security.",
-    "form": "imperative"
-  },
-  {
-    "id": 251,
-    "prompt": "How do I implement network security in my deployment pipeline?",
+    "id": 110,
+    "prompt": "How do I apply the linting-config skill for my project workflow?",
     "form": "question"
   },
   {
-    "id": 266,
-    "prompt": "Which skill should I follow for password-hashing in my app?",
+    "id": 40,
+    "prompt": "How do I apply the code-review skill for my project workflow?",
     "form": "question"
   },
   {
-    "id": 288,
-    "prompt": "Configure property-testing according to best practices.",
-    "form": "imperative"
-  },
-  {
-    "id": 241,
-    "prompt": "How do I set up mutation testing in my test suite?",
+    "id": 146,
+    "prompt": "Which skill should I follow for performance-testing testing?",
     "form": "question"
   },
   {
-    "id": 220,
-    "prompt": "How do I implement mobile auth in my mobile app?",
-    "form": "question"
-  },
-  {
-    "id": 378,
-    "prompt": "Apply the transaction-management skill to my transactions project.",
-    "form": "imperative"
-  },
-  {
-    "id": 275,
-    "prompt": "performance for React component architecture",
+    "id": 145,
+    "prompt": "performance test testing with the performance-testing skill",
     "form": "nounphrase"
   },
   {
-    "id": 156,
-    "prompt": "Which skill covers flutter tasks like flutter-widgets?",
-    "form": "question"
-  },
-  {
-    "id": 238,
-    "prompt": "Follow the monorepo-structure skill for project management.",
+    "id": 193,
+    "prompt": "Use typescript patterns in my frontend.",
     "form": "imperative"
-  },
-  {
-    "id": 234,
-    "prompt": "modal guidelines for UI design",
-    "form": "nounphrase"
   },
   {
     "id": 125,
-    "prompt": "design system for React component architecture",
+    "prompt": "motion design guidelines for UI design",
     "form": "nounphrase"
+  },
+  {
+    "id": 35,
+    "prompt": "card pattern guidelines for UI design",
+    "form": "nounphrase"
+  },
+  {
+    "id": 72,
+    "prompt": "Implement error handling using the error-handling skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 20,
+    "prompt": "How do I apply the architecture-patterns-2 skill for my project workflow?",
+    "form": "question"
+  },
+  {
+    "id": 123,
+    "prompt": "Use monorepo patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 200,
+    "prompt": "How do I implement zero trust security measures?",
+    "form": "question"
+  },
+  {
+    "id": 135,
+    "prompt": "OWASP security patterns and the OWASP-top10 skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 50,
+    "prompt": "How do I use the css-architecture skill for my React frontend project?",
+    "form": "question"
+  },
+  {
+    "id": 19,
+    "prompt": "Follow the architecture-patterns-2 skill for project management.",
+    "form": "imperative"
+  },
+  {
+    "id": 95,
+    "prompt": "incident CI/CD pipeline with the incident-response skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 92,
+    "prompt": "Design the iconography system using the iconography skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 75,
+    "prompt": "flaky testing with the flaky-test-detection skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 100,
+    "prompt": "How do I implement sanitization security measures?",
+    "form": "question"
+  },
+  {
+    "id": 23,
+    "prompt": "Configure auto-scaling using DevOps best practices.",
+    "form": "imperative"
+  },
+  {
+    "id": 185,
+    "prompt": "report testing with the test-reporting skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 130,
+    "prompt": "How do I implement nav following design best practices?",
+    "form": "question"
+  },
+  {
+    "id": 34,
+    "prompt": "camera patterns for mobile apps",
+    "form": "nounphrase"
+  },
+  {
+    "id": 41,
+    "prompt": "How do I implement color system following design best practices?",
+    "form": "question"
+  },
+  {
+    "id": 156,
+    "prompt": "Can you explain the pwa-offline approach for frontend implementation?",
+    "form": "question"
+  },
+  {
+    "id": 84,
+    "prompt": "graphql best practices and the graphql-schema skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 70,
+    "prompt": "How do I implement encryption at rest security measures?",
+    "form": "question"
+  },
+  {
+    "id": 157,
+    "prompt": "Which skill should I follow for ransomware-defense in my app?",
+    "form": "question"
+  },
+  {
+    "id": 53,
+    "prompt": "Use the data-privacy skill for application security.",
+    "form": "imperative"
+  },
+  {
+    "id": 86,
+    "prompt": "Which skill should I use for gRPC tasks involving grpc-services?",
+    "form": "question"
+  },
+  {
+    "id": 94,
+    "prompt": "IAP patterns for mobile apps",
+    "form": "nounphrase"
+  },
+  {
+    "id": 192,
+    "prompt": "Implement transactions using the transaction-management skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 22,
+    "prompt": "Implement authentication using the auth-middleware skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 184,
+    "prompt": "test coverage testing with the test-coverage skill",
+    "form": "nounphrase"
+  },
+  {
+    "id": 49,
+    "prompt": "Follow css-architecture guidelines when building the UI.",
+    "form": "imperative"
+  },
+  {
+    "id": 13,
+    "prompt": "Use the app-icon-badge skill for mobile development.",
+    "form": "imperative"
+  },
+  {
+    "id": 89,
+    "prompt": "Apply hash-algorithms guidelines to secure my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 196,
+    "prompt": "Which skill should I follow for unit-testing testing?",
+    "form": "question"
+  },
+  {
+    "id": 131,
+    "prompt": "How do I implement firewall security measures?",
+    "form": "question"
+  },
+  {
+    "id": 122,
+    "prompt": "Design the modal-patterns system using the modal skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 182,
+    "prompt": "Use tech debt patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 102,
+    "prompt": "Use the integration-testing skill for testing patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 107,
+    "prompt": "Which skill covers grid patterns like layout-grid?",
+    "form": "question"
+  },
+  {
+    "id": 117,
+    "prompt": "Which skill covers mobile performance tasks like mobile-perf?",
+    "form": "question"
+  },
+  {
+    "id": 12,
+    "prompt": "Use the api-testing skill for testing patterns in my project.",
+    "form": "imperative"
+  },
+  {
+    "id": 180,
+    "prompt": "How do I use the state-management skill for my React frontend project?",
+    "form": "question"
+  },
+  {
+    "id": 163,
+    "prompt": "Configure secrets-management using DevOps best practices.",
+    "form": "imperative"
+  },
+  {
+    "id": 39,
+    "prompt": "Follow the code-review skill for project management.",
+    "form": "imperative"
+  },
+  {
+    "id": 42,
+    "prompt": "Design the color-system system using the color system skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 58,
+    "prompt": "Apply the database-indexing skill to my indexing project.",
+    "form": "imperative"
+  },
+  {
+    "id": 191,
+    "prompt": "How do I implement transactions following best practices?",
+    "form": "question"
+  },
+  {
+    "id": 171,
+    "prompt": "How do I use the seo-optimization skill for my React frontend project?",
+    "form": "question"
+  },
+  {
+    "id": 132,
+    "prompt": "Use the network-firewall skill for application security.",
+    "form": "imperative"
+  },
+  {
+    "id": 96,
+    "prompt": "Which skill covers incident tasks like incident-response?",
+    "form": "question"
+  },
+  {
+    "id": 187,
+    "prompt": "Can you explain the testing-components approach for frontend implementation?",
+    "form": "question"
+  },
+  {
+    "id": 111,
+    "prompt": "How do I implement message broker following best practices?",
+    "form": "question"
+  },
+  {
+    "id": 150,
+    "prompt": "How do I apply the project-structure skill for my project workflow?",
+    "form": "question"
+  },
+  {
+    "id": 78,
+    "prompt": "Apply flutter-widgets best practices to my mobile project.",
+    "form": "imperative"
+  },
+  {
+    "id": 121,
+    "prompt": "How do I implement modal following design best practices?",
+    "form": "question"
+  },
+  {
+    "id": 186,
+    "prompt": "Which skill should I follow for test-reporting testing?",
+    "form": "question"
+  },
+  {
+    "id": 87,
+    "prompt": "Which skill covers haptic tasks like haptic-feedback?",
+    "form": "question"
+  },
+  {
+    "id": 51,
+    "prompt": "How do I set up fixtures in my test suite?",
+    "form": "question"
+  },
+  {
+    "id": 120,
+    "prompt": "How do I implement mobile testing in my mobile app?",
+    "form": "question"
+  },
+  {
+    "id": 93,
+    "prompt": "Use the in-app-purchase skill for mobile development.",
+    "form": "imperative"
+  },
+  {
+    "id": 73,
+    "prompt": "Implement file storage using the file-storage skill.",
+    "form": "imperative"
+  },
+  {
+    "id": 173,
+    "prompt": "Use the session-management skill for application security.",
+    "form": "imperative"
+  },
+  {
+    "id": 62,
+    "prompt": "Use design system patterns in my frontend.",
+    "form": "imperative"
+  },
+  {
+    "id": 127,
+    "prompt": "Which skill covers native tasks like native-module?",
+    "form": "question"
   }
 ]

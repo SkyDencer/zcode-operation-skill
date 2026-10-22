@@ -3,22 +3,22 @@
     "top1Accuracy": 0.6154,
     "top1Hits": 80,
     "total": 130,
-    "medianLatencyMs": 30.05,
-    "p95LatencyMs": 40.1
+    "medianLatencyMs": 50.61,
+    "p95LatencyMs": 90.59
   },
   "hierarchicalReal": {
     "top1Accuracy": 0.6077,
     "top1Hits": 79,
     "total": 130,
-    "medianLatencyMs": 31.56,
-    "p95LatencyMs": 33.36
+    "medianLatencyMs": 46.65,
+    "p95LatencyMs": 82.37
   },
   "synthetic200": {
     "top1Accuracy": 0.0231,
     "top1Hits": 3,
     "total": 130,
     "skills": 697,
-    "medianLatencyMs": 24.22,
-    "p95LatencyMs": 29.6
+    "medianLatencyMs": 35.61,
+    "p95LatencyMs": 50.22
   }
 }
