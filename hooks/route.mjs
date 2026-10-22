@@ -86,6 +86,33 @@ function buildContext(skillsWithContent, decision) {
   return lines.join('\n');
 }
 
+/**
+ * Sanitize the hook-supplied `cwd` used as the base for `.zcode/output.json`.
+ *
+ * The hook's stdin payload is untrusted input. A `cwd` containing a `..`
+ * segment could otherwise escape the workspace and write the output file
+ * anywhere on disk (path traversal). Clean relative or absolute paths are
+ * accepted and resolved to an absolute path. Anything with a `..` segment, or
+ * a non-string / empty value, is rejected and falls back to the hook's own
+ * process.cwd() — the workspace root, where it is legitimate for the hook to
+ * write `.zcode/`.
+ *
+ * @param {unknown} rawCwd — the `cwd` field from the hook payload
+ * @returns {string} an absolute path that is safe to write into
+ */
+function sanitizeCwd(rawCwd) {
+  if (typeof rawCwd !== 'string' || rawCwd.trim() === '') {
+    return process.cwd();
+  }
+  // Reject path traversal before resolving — resolve() alone cannot help,
+  // because resolve('../../x') still lands somewhere relative to the workspace.
+  const segments = rawCwd.split(/[\\/]+/);
+  if (segments.includes('..')) {
+    return process.cwd();
+  }
+  return resolve(rawCwd);
+}
+
 async function main() {
   let input = '';
   const chunks = [];
@@ -111,7 +138,7 @@ async function main() {
 
   const { prompt, cwd } = payload;
   const safePrompt = typeof prompt === 'string' ? prompt : '';
-  const safeCwd = typeof cwd === 'string' ? cwd : process.cwd();
+  const safeCwd = sanitizeCwd(cwd);
 
   const trimmedPrompt =
     safePrompt.length > maxPromptLength
