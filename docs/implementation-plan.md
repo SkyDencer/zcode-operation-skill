@@ -77,12 +77,11 @@ See `AGENTS.md` for the universal four-criteria DoD. Each phase additionally req
 | 4 | Complete | Hook registration fix, health CLI, feedback CLI, structured decision logging, E2E hook tests, troubleshooting guide |
 | 5 | Complete | Implicit feedback signal collection, outcome correlation, BM25 field attribution, adaptive weight adjustment with guardrails, tune CLI (6 subcommands), docs/tuning.md |
 | 6 | Complete | Provider abstraction plus the ONNX MiniLM-L6-v2 backend (384-dim); decision D28 to keep FNV-1a as the default and the semantic channel at weight 0.0, because ONNX gains only +5.18 pp Set Recall@5 and costs 1212-1445 ms median against a 100 ms budget. Plus three audits, two path-traversal security fixes, 30 new test files, and the Phase 6 final report |
-| 7 | Planned | Hardening and Corpus Truth: the 27 open findings, one benchmark corpus, re-measured coverage, documentation polish |
+| 7 | Done | Hardening and Corpus Truth: the 27 open findings, one benchmark corpus, re-measured coverage, documentation polish. Completed in sub-phases 7.1-7.12; v1.0.0 tagged and pushed 2026-10-22 |
 
 ## Phase 7 Roadmap
 
 Phase 7 is restorative. No new retrieval capability. In priority order:
-
 1. **Close the three silent destructive failures** -- `P6-H-014` (deploy rollback
    trusts an empty snapshot), `P6-H-015` (an unreadable project tree plans a mass
    removal), `P6-H-016` (any non-`ENOENT` read error turns the whole outcome
@@ -111,15 +110,72 @@ Explicitly not on the list: raising `MAX_DELTA` so tuning applies. The refusal
 recorded in Sub-Phase 6.11 (description delta 0.715 against a 0.5 cap) is the
 guardrail working; adapting before real corrective signals exist would fit noise.
 
+### How the roadmap was actually delivered
+
+Phase 7 (sub-phases 7.1-7.12, `4746b7e`-`4e517bf`, 2026-09-30) delivered the
+corpus and validation work: 7.1 closed the semantic decision (D29, ONNX
+kept and forced off), 7.2-7.3 built the 252-leaf corpus from 11 MIT sources
+(258-entry index), 7.4 measured BM25 across sizes (247-skill ceiling, Top-1
+0.7843), 7.5 tuned thresholds (values unchanged: 0.85/0.60), 7.6 added the
+prebuilt parsed-index cache and p95 evidence at 1000 skills, 7.7 prepared
+the human E2E test (run still pending), 7.8 wrote the operational docs,
+7.9 removed the dead modules (`P6-H-018`/`P6-H-019` resolved), 7.10
+prepared the release, 7.11 ran the final audits, and 7.12 prepared the tag.
+
+The three silent destructive failures (roadmap item 1) and the shortlist
+policy (item 2) were characterised in Phase 7 but fixed in the post-v1.0.0
+stabilization pass, as were the `--help` gap (item 3) and the 7.11 audit
+security findings. `P6-H-004` (benchmark default mode) remains open. Items
+4, 5, and 6 remain partially open (`P6-H-005`, `P6-H-007`, `P6-H-010`,
+`P6-H-011`, `P6-H-017`, `P6-H-021`, `P6-H-022`), item 8's oversized
+documents remain over the 400-line cap, and item 9 stays deferred on the
+D29 revisit conditions.
+
+## Post-v1.0.0
+
+v1.0.0 was tagged at `386eb22` and pushed to origin on 2026-10-22, after the
+pre-tag blockers were cleared. A stabilization pass (2026-10-22/23) then
+closed the remaining High P6-H findings in the scope of that pass:
+
+| Finding | Status | Commit |
+|---------|--------|--------|
+| P6-H-001 (topK shortlist) | Fixed | `2391b94` — `routing.topK` default 5, `SKILL_ROUTER_TOPK` clamped 1-20, hybrid per-skill relevance floor |
+| P6-H-002 (hard budget) | Fixed | `b6d887e` — over-budget skills dropped whole; rejection path when nothing fits |
+| P6-H-003 (raw prompts persisted) | Fixed | `40d368a` — prompts hashed at the logger gate; `query` never written |
+| P6-H-014 (rollback trusts empty snapshot) | Fixed | `f76c6d0` — `rollbackMirror()` validates the snapshot before deleting |
+| P6-H-015 (unreadable tree plans mass removal) | Fixed | `b03de20` — ENOENT/EACCES-EPERM classification, >50% halt |
+| P6-H-016 (any read error poisons outcomes) | Fixed | `386eb22` + `11ef6b8` — explicit named failures in all remaining silent `catch { return }` readdir sites |
+| P6-H-018 / P6-H-019 (dead legacy modules) | Resolved in 7.9 | `05c1e94` — deleted `src/retriever.mjs`, `src/logger.mjs` |
+| P6-H-020 (`deploy --help` deploys) | Fixed | `fed254e` — `--help`/`-h` on all 19 subcommands, checked before any side effect |
+| P6-H-026 (reranker does not generalise) | Fixed | `cb3da77` — reranker off by default, opt-in via `SKILL_ROUTER_RERANKER`, documented in `docs/reranker.md` |
+| P6-H-027 (personal path in tracked files) | Fixed | `6d6f4a8` — redacted, plus a `release-check` leak guard so it cannot recur |
+
+Two 7.11 audit security findings were also fixed in the same window:
+`3fd96cb` (path traversal via unvalidated hook `cwd`) and `51a2ac1`
+(release-check env forwarding for the scale-bench wrapper).
+
+Still open and tracked in `docs/problems.md` (out of scope for v1.0.1):
+P6-H-004 through P6-H-025 minus the fixed rows above — including
+`P6-H-005` (Windows snapshot paths), `P6-H-007`/`P6-H-011`/`P6-H-017`
+(config source consolidation), `P6-H-010` (symlink containment),
+`P6-H-021`/`P6-H-022` (CLI flag gaps), and the documented-as-open medium
+items. The single open release gate for v1.0.1 is the human E2E run
+(`docs/zcode-e2e-test.md`), whose results feed `docs/reports/phase-7.7-e2e-results.md`.
+
 ## Current Focus
 
-Phase 6 is complete. The project is ready for human review of the Phase 6
-changes, followed by Phase 7 planning. Phase 6 commits are local and not pushed.
+Phase 7 is complete. v1.0.0 was tagged at `386eb22` and pushed on
+2026-10-22; the stabilization pass (post-v1.0.0) is in progress and closes
+the remaining in-scope P6-H findings. Next: the human E2E run, then v1.0.1.
+
+The frozen BM25 baseline on the 258-entry index (130-prompt set) is
+**Top-1 0.6462 (84/130)**, Recall@3 0.7077, Set Recall@5 0.8538 — down from
+0.9231 on the 54-leaf corpus, an expected distractor effect of the Phase 7.3
+corpus expansion (D37). `release-check` accepts the 0.62-0.70 band.
 
 Phase 6 added the embedding provider abstraction with an opt-in ONNX backend,
-rebuilt hybrid retrieval on weighted RRF with a relevance floor, and ran three
-audits (static code, documentation, test coverage). The default embedding
-provider is unchanged -- FNV-1a -- because the benchmark showed the pre-trained
-model scoring below pure BM25 on this corpus. The BM25 baseline remains at
-92.31% Top-1 (120/130), and the test chain is 73 steps, all passing.
+rebuilt hybrid retrieval on weighted RRF with a relevance floor, and ran
+three audits (static code, documentation, test coverage). The default
+embedding provider is unchanged -- FNV-1a -- because the benchmark showed
+the pre-trained model scoring below pure BM25 on this corpus.
 
