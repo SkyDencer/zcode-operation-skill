@@ -87,57 +87,75 @@ export async function logDecision(record) {
 /**
  * Read routing decisions from logs with optional filters.
  *
+ * P6-H-016: only ENOENT on the (optional) log directory or a single file is
+ * treated as "no data". Any other read error (EACCES, EPERM, EIO, ...) is
+ * surfaced as a named error, because a permission failure must never be
+ * mistaken for "no decisions logged".
+ *
  * @param {object} [opts]
  * @param {string} [opts.since] — YYYY-MM-DD
  * @param {number} [opts.limit] — max results
  * @param {string} [opts.tier] — filter by tier
  * @param {string} [opts.logDir] — override default log directory (for testing)
+ * @param {{readdir?:Function, readFile?:Function}} [opts.reader] — injectable fs (test seam)
  * @returns {Decision[]}
  */
 export async function readDecisions(opts = {}) {
-  const { since, limit, tier, logDir } = opts;
+  const { since, limit, tier, logDir, reader = {} } = opts;
+  const fsReaddir = reader.readdir ?? readdir;
+  const fsReadFile = reader.readFile ?? readFile;
   const logDirResolved = logDir ?? FEEDBACK_LOG_DIR;
   const results = [];
 
+  let files;
   try {
-    const files = await readdir(logDirResolved);
-    const routingFiles = files
-      .filter((f) => f.startsWith(FEEDBACK_PREFIX + '-') && f.endsWith('.jsonl'))
-      .sort();
+    files = await fsReaddir(logDirResolved);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return []; // Directory doesn't exist — empty
+    const named = new Error(`failed to read log directory ${logDirResolved}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
+  }
 
-    for (const file of routingFiles) {
-      const filePath = join(logDirResolved, file);
-      try {
-        const content = await readFile(filePath, 'utf-8');
-        const lines = content.split('\n');
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          let entry;
-          try {
-            entry = JSON.parse(trimmed);
-          } catch {
-            // Skip malformed lines
-            continue;
-          }
+  const routingFiles = files
+    .filter((f) => f.startsWith(FEEDBACK_PREFIX + '-') && f.endsWith('.jsonl'))
+    .sort();
 
-          // Filter by since date
-          if (since) {
-            const entryDate = entry.ts?.slice(0, 10);
-            if (entryDate && entryDate < since) continue;
-          }
-
-          // Filter by tier
-          if (tier && entry.tier !== tier) continue;
-
-          results.push(entry);
-        }
-      } catch {
-        // Skip unreadable files
-      }
+  for (const file of routingFiles) {
+    const filePath = join(logDirResolved, file);
+    let content;
+    try {
+      content = await fsReadFile(filePath, 'utf-8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      const named = new Error(`failed to read ${filePath}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      throw named;
     }
-  } catch {
-    // Directory doesn't exist — return empty array
+
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let entry;
+      try {
+        entry = JSON.parse(trimmed);
+      } catch {
+        // Skip malformed lines
+        continue;
+      }
+
+      // Filter by since date
+      if (since) {
+        const entryDate = entry.ts?.slice(0, 10);
+        if (entryDate && entryDate < since) continue;
+      }
+
+      // Filter by tier
+      if (tier && entry.tier !== tier) continue;
+
+      results.push(entry);
+    }
   }
 
   if (limit && results.length > limit) {

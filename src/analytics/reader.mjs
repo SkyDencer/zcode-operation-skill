@@ -32,33 +32,48 @@ function parseLine(line) {
 /**
  * Read all .jsonl log files from the logs directory.
  *
+ * P6-H-016: only ENOENT on the (optional) directory or a single file is
+ * treated as "no data". Any other error (EACCES, EPERM, EIO, ...) is
+ * surfaced as a named error rather than silently returning an empty list.
+ *
  * @param {string} [logDir] - Path to logs directory (default: ./logs)
+ * @param {{readdirSync?:Function, readFileSync?:Function}} [reader] - injectable fs (test seam)
  * @returns {LogEntry[]} Array of parsed log entries, sorted by timestamp
  */
-export function readLogs(logDir = LOG_DIR) {
+export function readLogs(logDir = LOG_DIR, reader = {}) {
+  const fsReaddirSync = reader.readdirSync ?? readdirSync;
+  const fsReadFileSync = reader.readFileSync ?? readFileSync;
   const entries = [];
   const resolvedDir = resolve(logDir);
 
-  // Handle missing directory gracefully
+  let files;
   try {
-    const files = readdirSync(resolvedDir).filter((f) => f.endsWith('.jsonl'));
-    for (const file of files.sort()) {
-      const filePath = resolve(resolvedDir, file);
-      try {
-        const content = readFileSync(filePath, 'utf-8');
-        const lines = content.split('\n');
-        for (const line of lines) {
-          const entry = parseLine(line);
-          if (entry) {
-            entries.push(entry);
-          }
-        }
-      } catch {
-        // Skip unreadable files
+    files = fsReaddirSync(resolvedDir).filter((f) => f.endsWith('.jsonl'));
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return []; // Directory doesn't exist — empty
+    const named = new Error(`failed to read log directory ${resolvedDir}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
+  }
+
+  for (const file of files.sort()) {
+    const filePath = resolve(resolvedDir, file);
+    let content;
+    try {
+      content = fsReadFileSync(filePath, 'utf-8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      const named = new Error(`failed to read ${filePath}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      throw named;
+    }
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const entry = parseLine(line);
+      if (entry) {
+        entries.push(entry);
       }
     }
-  } catch {
-    // Directory doesn't exist — return empty array
   }
 
   // Sort by timestamp

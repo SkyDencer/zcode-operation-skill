@@ -99,50 +99,68 @@ export async function recordSignal(signal) {
 /**
  * Read signals from logs with optional filters.
  *
+ * P6-H-016: only ENOENT on the (optional) log directory or a single file is
+ * treated as "no data". Any other read error (EACCES, EPERM, EIO, ...) is
+ * surfaced as a named error, because a permission failure must never be
+ * mistaken for "no signals".
+ *
  * @param {object} [opts]
  * @param {string} [opts.since] — YYYY-MM-DD to filter by ts prefix
  * @param {number} [opts.limit] — max results to return
  * @param {string} [opts.type] — filter by signal type
  * @param {string} [opts.logDir] — override default log directory (for testing)
+ * @param {{readdir?:Function, readFile?:Function}} [opts.reader] — injectable fs (test seam)
  * @returns {Signal[]}
  */
 export async function readSignals(opts = {}) {
-  const { since, limit, type, logDir } = opts;
+  const { since, limit, type, logDir, reader = {} } = opts;
+  const fsReaddir = reader.readdir ?? readdir;
+  const fsReadFile = reader.readFile ?? readFile;
   const logDirResolved = logDir ?? SIGNALS_LOG_DIR;
   const results = [];
 
+  let files;
   try {
-    const files = await readdir(logDirResolved);
-    const signalFiles = files
-      .filter((f) => f.startsWith(SIGNALS_PREFIX + '-') && f.endsWith('.jsonl'))
-      .sort();
+    files = await fsReaddir(logDirResolved);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return []; // Directory doesn't exist — empty
+    const named = new Error(`failed to read log directory ${logDirResolved}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
+  }
 
-    for (const file of signalFiles) {
-      const filePath = join(logDirResolved, file);
-      try {
-        const content = await readFile(filePath, 'utf-8');
-        const lines = content.split('\n');
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          let entry;
-          try {
-            entry = JSON.parse(trimmed);
-          } catch {
-            continue;
-          }
+  const signalFiles = files
+    .filter((f) => f.startsWith(SIGNALS_PREFIX + '-') && f.endsWith('.jsonl'))
+    .sort();
 
-          if (since && entry.ts && entry.ts.slice(0, 10) < since) continue;
-          if (type && entry.type !== type) continue;
-
-          results.push(entry);
-        }
-      } catch {
-        // Skip unreadable files
-      }
+  for (const file of signalFiles) {
+    const filePath = join(logDirResolved, file);
+    let content;
+    try {
+      content = await fsReadFile(filePath, 'utf-8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      const named = new Error(`failed to read ${filePath}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      throw named;
     }
-  } catch {
-    // Directory doesn't exist — return empty array
+
+    const lines = content.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      let entry;
+      try {
+        entry = JSON.parse(trimmed);
+      } catch {
+        continue;
+      }
+
+      if (since && entry.ts && entry.ts.slice(0, 10) < since) continue;
+      if (type && entry.type !== type) continue;
+
+      results.push(entry);
+    }
   }
 
   if (limit && results.length > limit) {

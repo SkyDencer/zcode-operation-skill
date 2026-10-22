@@ -126,32 +126,55 @@ export function correlate(decisions, signals, opts = {}) {
 /**
  * Read signals from the signals log directory.
  *
+ * P6-H-016: only ENOENT on the (optional) directory or a single file is
+ * treated as "no data". Any other error (EACCES, EPERM, EIO, ...) means we
+ * could not actually read the signals, so it is surfaced as a named error
+ * instead of being silently turned into an empty list.
+ *
  * @param {string} logDir
+ * @param {{readdir?:Function, readFile?:Function}} [reader] — injectable fs (test seam)
  * @returns {Promise<Signal[]>}
  */
-async function readSignalFiles(logDir) {
+async function readSignalFiles(logDir, reader = {}) {
+  const fsReaddir = reader.readdir ?? readdir;
+  const fsReadFile = reader.readFile ?? readFile;
   const results = [];
-  try {
-    const files = await readdir(logDir);
-    const signalFiles = files
-      .filter((f) => f.startsWith(SIGNALS_PREFIX + '-') && f.endsWith('.jsonl'))
-      .sort();
 
-    for (const file of signalFiles) {
-      const content = await readFile(join(logDir, file), 'utf-8');
-      for (const line of content.split('\n')) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          results.push(JSON.parse(trimmed));
-        } catch {
-          // Skip malformed
-        }
+  let files;
+  try {
+    files = await fsReaddir(logDir);
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return []; // the signals dir is optional
+    const named = new Error(`failed to read signals directory ${logDir}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
+  }
+
+  const signalFiles = files
+    .filter((f) => f.startsWith(SIGNALS_PREFIX + '-') && f.endsWith('.jsonl'))
+    .sort();
+
+  for (const file of signalFiles) {
+    let content;
+    try {
+      content = await fsReadFile(join(logDir, file), 'utf-8');
+    } catch (err) {
+      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      const named = new Error(`failed to read signal file ${join(logDir, file)}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      throw named;
+    }
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        results.push(JSON.parse(trimmed));
+      } catch {
+        // Skip malformed
       }
     }
-  } catch {
-    // Directory doesn't exist
   }
+
   return results;
 }
 
@@ -160,6 +183,7 @@ async function readSignalFiles(logDir) {
  *
  * @param {import('../telemetry/feedback.mjs').Decision[]} decisions
  * @param {object} [opts]
+ * @param {{readdir?:Function, readFile?:Function}} [opts.reader] — injectable fs (test seam)
  * @returns {Promise<Outcome[]>}
  */
 export async function correlateFromLogs(decisions, opts = {}) {
@@ -169,7 +193,7 @@ export async function correlateFromLogs(decisions, opts = {}) {
   // `correlate()` uses — so the CLI reads logs/signals-*.jsonl without an
   // explicit logDir. See src/cli/feedback.mjs printOutcomes().
   const logDir = opts.logDir ?? SIGNALS_LOG_DIR;
-  const signals = await readSignalFiles(logDir);
+  const signals = await readSignalFiles(logDir, opts.reader);
   return correlate(decisions, signals, opts);
 }
 

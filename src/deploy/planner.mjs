@@ -11,6 +11,9 @@ import { join, resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { readDisabledRegistry } from '../sync/disabler.mjs';
 
+// Default sync filesystem reader (injectable test seam).
+const defaultReader = { readdirSync, readFileSync, statSync, existsSync };
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -50,14 +53,31 @@ function hashContent(content) {
 
 /**
  * Read the meta file for a mirror router directory, if present.
+ *
+ * P6-H-016: ENOENT (no meta) and a malformed body are benign and return
+ * null. A permission error reading the meta file is surfaced, because it
+ * must not be silently treated as "user-managed".
+ *
+ * @param {string} mirrorRouterDir
+ * @param {{existsSync?:Function, readFileSync?:Function}} [reader]
+ * @returns {object|null}
  */
-function readMeta(mirrorRouterDir) {
+function readMeta(mirrorRouterDir, reader = defaultReader) {
   const metaPath = join(mirrorRouterDir, META_FILENAME);
+  if (!reader.existsSync(metaPath)) return null;
+  let raw;
   try {
-    if (!existsSync(metaPath)) return null;
-    return JSON.parse(readFileSync(metaPath, 'utf-8'));
+    raw = reader.readFileSync(metaPath, 'utf-8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return null;
+    const named = new Error(`failed to read ${metaPath}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
+  }
+  try {
+    return JSON.parse(raw);
   } catch {
-    return null;
+    return null; // malformed meta — treat as user-managed (pre-existing behaviour)
   }
 }
 
@@ -76,45 +96,69 @@ function isWithinRoot(checkPath, root) {
  * Used to resolve the correct mirror path when disabling a leaf skill
  * by name (e.g. "backend-eloquent" → "backend/laravel/eloquent").
  *
+ * P6-H-016: a skills root that cannot be listed (for a reason other than
+ * ENOENT) or a SKILL.md that cannot be read (EACCES, EPERM, ...) throws a
+ * named error instead of leaving the map silently incomplete.
+ *
  * @param {string} projectRoot — absolute path to the project root
+ * @param {{readdirSync?:Function, readFileSync?:Function, existsSync?:Function}} [reader]
  * @returns {Map<string, string>} name → relative path
  */
-function buildSkillPathMap(projectRoot) {
+function buildSkillPathMap(projectRoot, reader = defaultReader) {
   const skillsDir = resolve(projectRoot, 'data', 'skills');
   const nameToPath = new Map();
 
   function walk(dir, relPrefix) {
+    let entries;
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const child of entries) {
-        const fullPath = join(dir, child.name);
-        const relPath = relPrefix ? `${relPrefix}/${child.name}` : child.name;
-        if (child.isDirectory()) {
-          // Check if this dir has a SKILL.md directly (leaf skill)
-          const skillMd = join(fullPath, 'SKILL.md');
-          if (existsSync(skillMd)) {
-            try {
-              const content = readFileSync(skillMd, 'utf-8');
-              const fmMatch = content.match(/^---\s*\n([\s\S]+?)\n---\s*\n?/);
-              if (fmMatch) {
-                const nameMatch = fmMatch[1].match(/^name:\s*(.+)$/m);
-                if (nameMatch) {
-                  nameToPath.set(nameMatch[1].trim(), relPath);
-                }
-              }
-            } catch { /* skip unreadable files */ }
+      entries = reader.readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      if (err && err.code === 'ENOENT') return; // sub-dir vanished
+      const named = new Error(`cannot read directory ${dir}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      throw named;
+    }
+    for (const child of entries) {
+      const fullPath = join(dir, child.name);
+      const relPath = relPrefix ? `${relPrefix}/${child.name}` : child.name;
+      if (child.isDirectory()) {
+        // Check if this dir has a SKILL.md directly (leaf skill)
+        const skillMd = join(fullPath, 'SKILL.md');
+        if (reader.existsSync(skillMd)) {
+          let content;
+          try {
+            content = reader.readFileSync(skillMd, 'utf-8');
+          } catch (err) {
+            if (err && err.code === 'ENOENT') { /* file vanished */ }
+            else {
+              const named = new Error(`cannot read ${skillMd}: ${err.code ?? err.message}`);
+              named.code = err.code;
+              throw named;
+            }
           }
-          walk(fullPath, relPath);
+          if (content) {
+            const fmMatch = content.match(/^---\s*\n([\s\S]+?)\n---\s*\n?/);
+            if (fmMatch) {
+              const nameMatch = fmMatch[1].match(/^name:\s*(.+)$/m);
+              if (nameMatch) {
+                nameToPath.set(nameMatch[1].trim(), relPath);
+              }
+            }
+          }
         }
+        walk(fullPath, relPath);
       }
-    } catch { /* skip unreadable dirs */ }
+    }
   }
 
   try {
-    if (existsSync(skillsDir)) {
+    if (reader.existsSync(skillsDir)) {
       walk(skillsDir, '');
     }
-  } catch { /* skills dir missing — map stays empty */ }
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return nameToPath; // skills dir missing — map stays empty
+    throw err; // permission error — fail explicitly
+  }
 
   return nameToPath;
 }
@@ -128,10 +172,12 @@ function buildSkillPathMap(projectRoot) {
  * @param {string} [zcodeDir]           — absolute path to the ZCode skills mirror
  * @param {Object} [options]
  * @param {string} [options.routerSkillsDir] — absolute path to router-skills/ (default: router-skills/)
+ * @param {{readdirSync?:Function, readFileSync?:Function, statSync?:Function, existsSync?:Function}} [options.reader]
+ *   — injectable sync fs reader (test seam); defaults to node:fs
  * @returns {DeployPlan}
  */
 export function planDeploy(projectDir, zcodeDir, options = {}) {
-  const { routerSkillsDir } = options;
+  const { routerSkillsDir, reader = defaultReader } = options;
   const projectRoot = resolve(projectDir ?? process.cwd());
   const sourceDir = resolve(routerSkillsDir ?? join(projectRoot, 'router-skills'));
   const mirrorRoot = resolve(zcodeDir ?? process.env.SKILL_ROUTER_ZCODE_DIR ?? DEFAULT_ZCODE_DIR);
@@ -170,7 +216,7 @@ export function planDeploy(projectDir, zcodeDir, options = {}) {
     for (const entry of mirrorEntries) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
       const routerDir = join(mirrorRoot, entry.name);
-      const meta = readMeta(routerDir);
+      const meta = readMeta(routerDir, reader);
       if (meta) {
         const skillPath = join(routerDir, SKILL_FILE_NAME);
         let hash = null;
@@ -228,7 +274,7 @@ export function planDeploy(projectDir, zcodeDir, options = {}) {
   }
 
   // Build name→relative-path map from project skills to resolve correct mirror paths
-  const skillPathMap = buildSkillPathMap(projectRoot);
+  const skillPathMap = buildSkillPathMap(projectRoot, reader);
 
   const disable = [];
   const alreadyDisabled = [];
@@ -244,7 +290,7 @@ export function planDeploy(projectDir, zcodeDir, options = {}) {
     const relPath = skillPathMap.get(name) ?? name;
     // Check if already disabled in mirror (directory absent or shadowed)
     const mirrorSkillDir = join(mirrorRoot, relPath);
-    const meta = readMeta(mirrorSkillDir);
+    const meta = readMeta(mirrorSkillDir, reader);
     if (meta && meta.disabled === true) {
       alreadyDisabled.push({ name });
     } else {

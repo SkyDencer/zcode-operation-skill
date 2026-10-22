@@ -29,6 +29,8 @@ import { parseFrontmatter } from '../loader.mjs';
  * @typedef {Object} ScanOptions
  * @property {number} [maxDepth] — max recursion depth (default: 10)
  * @property {boolean} [followSymlinks] — whether to follow symlinks (default: false)
+ * @property {Function} [readdir] — injectable fs.readdir (test seam)
+ * @property {Function} [stat] — injectable fs.stat (test seam)
  */
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -69,22 +71,30 @@ function hasPathTraversal(component) {
 /**
  * Recursively scan a directory for SKILL.md files.
  *
+ * P6-H-016: a directory that cannot be listed for a reason other than ENOENT
+ * (EACCES, EPERM, ...) means the import source is only partially readable,
+ * so the walk throws a named error instead of silently skipping it.
+ *
  * @param {string} dir — absolute path to scan
  * @param {string} sourceRoot — the original source root (for security checks)
  * @param {number} depth — current recursion depth
- * @param {ScanOptions} options
+ * @param {ScanOptions & {readdir?:Function, stat?:Function}} options
  * @yields {SkillCandidate}
  */
 async function* walkSkillFiles(dir, sourceRoot, depth, options) {
   const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
+  const fsReaddir = options.readdir ?? readdir;
+  const fsStat = options.stat ?? stat;
   if (depth > maxDepth) return;
 
   let entries;
   try {
-    entries = await readdir(dir, { withFileTypes: true });
+    entries = await fsReaddir(dir, { withFileTypes: true });
   } catch (err) {
-    // Permission denied or other I/O error — skip
-    return;
+    if (err && err.code === 'ENOENT') return; // dir vanished mid-walk
+    const named = new Error(`cannot read directory ${dir}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    throw named;
   }
 
   for (const entry of entries) {
@@ -103,11 +113,14 @@ async function* walkSkillFiles(dir, sourceRoot, depth, options) {
       // Resolve symlink and verify it stays within source root
       let realPath;
       try {
-        realPath = await stat(fullPath).then((s) => s.isSymbolicLink()
+        realPath = await fsStat(fullPath).then((s) => s.isSymbolicLink()
           ? import('node:fs').then(({ realpath }) => realpath(fullPath))
           : Promise.resolve(fullPath));
-      } catch {
-        continue;
+      } catch (err) {
+        if (err && err.code === 'ENOENT') continue; // broken symlink
+        const named = new Error(`cannot resolve symlink ${fullPath}: ${err.code ?? err.message}`);
+        named.code = err.code;
+        throw named;
       }
       if (!isWithinSourceRoot(realPath, sourceRoot)) {
         console.warn(`[scanner] skipping symlink pointing outside source root: ${fullPath} → ${realPath}`);
@@ -132,11 +145,12 @@ async function* walkSkillFiles(dir, sourceRoot, depth, options) {
  */
 export async function scanSource(path, options = {}) {
   const sourceRoot = resolve(path);
+  const fsStat = options.stat ?? stat;
   const candidates = [];
 
   // Validate source root exists
   try {
-    const s = await stat(sourceRoot);
+    const s = await fsStat(sourceRoot);
     if (!s.isDirectory()) {
       throw new Error(`${sourceRoot} is not a directory`);
     }
