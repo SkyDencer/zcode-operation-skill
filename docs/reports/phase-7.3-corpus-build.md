@@ -131,7 +131,7 @@ The breakdown is in `data/corpus-sources.json` under each source's
 import and after the rebuild; both exits were 0.
 
 ```
-Directory: C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skills
+Directory: <repo-root>\data\skills
 Total:     252
 Valid:     252
 Invalid:   0

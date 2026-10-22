@@ -277,15 +277,15 @@ The following checks were run to verify the system is ready for E2E testing:
 ```bash
 $ node hooks/build-index.mjs
 Building index from 2 source(s):
-  [project] C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skills
-  [project] C:\Users\PC-1\Desktop\projects\zcode-operation-skill\router-skills
+  [project] <repo-root>\data\skills
+  [project] <repo-root>\router-skills
   Provider: fnv1a
 
-  Parsed index: C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skill-index.prebuilt.json
-  Embeddings (256d): C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skill-embeddings.json
+  Parsed index: <repo-root>\data\skill-index.prebuilt.json
+  Embeddings (256d): <repo-root>\data\skill-embeddings.json
 Indexed 258 skills in 423 ms.
   project:  258
-  BM25 index:    C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skill-index.json
+  BM25 index:    <repo-root>\data\skill-index.json
   Domains:       data/domains/ (auto-populated)
 ```
 

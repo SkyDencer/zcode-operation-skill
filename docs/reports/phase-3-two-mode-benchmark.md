@@ -96,5 +96,5 @@ For each prompt:
 - Ambiguous prompts are handled gracefully: either routing path yields an acceptable skill.
 - Both explicit and implicit paths complete in under 1 ms median, well within the hook timeout budget.
 
-Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\two-mode-benchmark-20260930T121629.json`
-This report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-3-two-mode-benchmark.md`
+Full JSON report: `<repo-root>\logs\two-mode-benchmark-20260930T121629.json`
+This report: `<repo-root>\docs\reports\phase-3-two-mode-benchmark.md`

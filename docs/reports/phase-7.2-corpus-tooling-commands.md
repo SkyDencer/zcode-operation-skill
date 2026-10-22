@@ -13,7 +13,7 @@ what it is. This file is only the evidence.
 ```
 $ node bin/skill-router.mjs corpus stats data/skills
 ----------------------------------------------------------------------
-Directory:                C:\Users\PC-1\Desktop\projects\zcode-operation-skill\data\skills
+Directory:                <repo-root>\data\skills
 Total skills:             54
 Valid skills:             54
 Invalid skills:           0
@@ -46,7 +46,7 @@ is the calibration the rules were written against.
 ```
 $ node bin/skill-router.mjs corpus validate tests/corpus/fixtures
 ----------------------------------------------------------------------
-Directory: C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tests\corpus\fixtures
+Directory: <repo-root>\tests\corpus\fixtures
 Total:     8
 Valid:     5
 Invalid:   3
@@ -75,7 +75,7 @@ Exit 1 because three skills are invalid, matching `validate`'s convention.
 ```
 $ node bin/skill-router.mjs corpus import tests/corpus/fixtures --target tmp/corpus-tooling-smoke
 ----------------------------------------------------------------------
-Target:  C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tmp\corpus-tooling-smoke
+Target:  <repo-root>\tmp\corpus-tooling-smoke
 Force:   false
 Total:   8
 Imported:        5
@@ -114,7 +114,7 @@ committed skill at `backend/caching-headers/SKILL.md`.
 ```
 $ node bin/skill-router.mjs corpus import tmp/gitrepo --git --target tmp/corpus-git-smoke
 ----------------------------------------------------------------------
-Target:  C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tmp\corpus-git-smoke
+Target:  <repo-root>\tmp\corpus-git-smoke
 Force:   false
 Total:   1
 Imported:        1
@@ -122,7 +122,7 @@ Overwritten:     0
 Skipped (exists):0
 Rejected:        0
 ----------------------------------------------------------------------
-  IMPORTED   backend-caching-headers  <-  C:/Users/PC-1/AppData/Local/Temp/skill-router-corpus-zXuNxs/repo/backend/caching-headers/SKILL.md
+  IMPORTED   backend-caching-headers  <-  <user-home>/AppData/Local/Temp/skill-router-corpus-zXuNxs/repo/backend/caching-headers/SKILL.md
 ----------------------------------------------------------------------
 Report: logs/corpus-import-2026-09-26.json
   WARN target directory did not exist and was created: ...\tmp\corpus-git-smoke
@@ -154,7 +154,7 @@ Source:  tmp/gitrepo
 Found:   1 SKILL.md file(s)
 ----------------------------------------------------------------------
   backend-caching-headers  <-  tmp/gitrepo::backend/caching-headers/SKILL.md
-Manifest written: C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tmp\fetch-smoke\corpus-fetch.json (1 skill(s))
+Manifest written: <repo-root>\tmp\fetch-smoke\corpus-fetch.json (1 skill(s))
 
 EXIT=0
 ```
@@ -167,7 +167,7 @@ has a live path field: false
 
 $ node bin/skill-router.mjs corpus import --from-manifest tmp/fetch-smoke/corpus-fetch.json --target tmp/manifest-smoke
 ----------------------------------------------------------------------
-Target:  C:\Users\PC-1\Desktop\projects\zcode-operation-skill\tmp\manifest-smoke
+Target:  <repo-root>\tmp\manifest-smoke
 Force:   false
 Total:   1
 Imported:        1

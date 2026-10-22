@@ -28,7 +28,7 @@
         "description over 400 chars": 11,
         "other": 2
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-wshobson-agents/corpus-fetch.json",
+      "manifest": "tmp/src-wshobson-agents/corpus-fetch.json",
       "note": "136 of 162 valid skill(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -48,7 +48,7 @@
         "other": 20,
         "description over 400 chars": 9
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-rshankras-claude-code-apple-skills/corpus-fetch.json",
+      "manifest": "tmp/src-rshankras-claude-code-apple-skills/corpus-fetch.json",
       "note": "129 of 154 valid skill(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -70,7 +70,7 @@
         "other": 25,
         "description under 40 chars": 13
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-alirezarezvani-claude-skills/corpus-fetch.json",
+      "manifest": "tmp/src-alirezarezvani-claude-skills/corpus-fetch.json",
       "note": "120 of 145 valid skill(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -90,7 +90,7 @@
         "description under 40 chars": 87,
         "description over 400 chars": 4
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-daymade-claude-code-skills/corpus-fetch.json",
+      "manifest": "tmp/src-daymade-claude-code-skills/corpus-fetch.json",
       "note": "106 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -109,7 +109,7 @@
       "skills_dropped_by": {
         "description over 400 chars": 44
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-Jeffallan-claude-skills/corpus-fetch.json",
+      "manifest": "tmp/src-Jeffallan-claude-skills/corpus-fetch.json",
       "note": "66 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -128,7 +128,7 @@
       "skills_dropped_by": {
         "description over 400 chars": 31
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-jezweb-claude-skills/corpus-fetch.json",
+      "manifest": "tmp/src-jezweb-claude-skills/corpus-fetch.json",
       "note": "7 of 32 valid skill(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -149,7 +149,7 @@
         "other": 11,
         "description under 40 chars": 2
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-mattpocock-skills/corpus-fetch.json",
+      "manifest": "tmp/src-mattpocock-skills/corpus-fetch.json",
       "note": "38 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -170,7 +170,7 @@
         "other": 1,
         "description over 400 chars": 3
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-Security-Phoenix-demo-security-skills-claude-code/corpus-fetch.json",
+      "manifest": "tmp/src-Security-Phoenix-demo-security-skills-claude-code/corpus-fetch.json",
       "note": "24 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -190,7 +190,7 @@
         "description over 400 chars": 12,
         "other": 7
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-zLanqing-codex-claude-academic-skills/corpus-fetch.json",
+      "manifest": "tmp/src-zLanqing-codex-claude-academic-skills/corpus-fetch.json",
       "note": "23 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -209,7 +209,7 @@
       "skills_dropped_by": {
         "other": 1
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-obra-superpowers/corpus-fetch.json",
+      "manifest": "tmp/src-obra-superpowers/corpus-fetch.json",
       "note": "14 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -226,7 +226,7 @@
       "skills_renamed": 0,
       "skills_dropped": 0,
       "skills_dropped_by": {},
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-ab604-claude-code-r-skills/corpus-fetch.json",
+      "manifest": "tmp/src-ab604-claude-code-r-skills/corpus-fetch.json",
       "note": "8 further record(s) in this source were not staged — the --limit of 200 was reached"
     },
     {
@@ -245,7 +245,7 @@
       "skills_dropped_by": {
         "description over 400 chars": 3
       },
-      "manifest": "C:/Users/PC-1/Desktop/projects/zcode-operation-skill/tmp/src-EpicGames-unreal-engine-skills-for-claude-code-plugin/corpus-fetch.json",
+      "manifest": "tmp/src-EpicGames-unreal-engine-skills-for-claude-code-plugin/corpus-fetch.json",
       "note": "manifest not found — nothing fetched for this source"
     },
     {

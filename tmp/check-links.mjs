@@ -1,5 +1,5 @@
 import fs from 'fs';
-const p = 'C:/Users/PC-1/Desktop/projects/zcode-operation-skill';
+const p = process.cwd();
 
 // Build set of existing files
 const existing = new Set();

@@ -182,5 +182,5 @@ Grading against `tests/slm-benchmark/expected.json`:
 SLM-Only **does NOT beat** BM25-Only on Set Recall (0.3000 vs 0.7000).
 Hybrid **matches** BM25-Only on Set Recall (0.7000).
 
-Full JSON report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\logs\slm-benchmark-20260930T121200.json`
-This report: `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-2-slm-benchmark.md`
+Full JSON report: `<repo-root>\logs\slm-benchmark-20260930T121200.json`
+This report: `<repo-root>\docs\reports\phase-2-slm-benchmark.md`

@@ -9,6 +9,9 @@
  *   2. Health check     — `node bin/skill-router.mjs health`
  *   3. Real benchmark   — `node tests/run-benchmark.mjs --corpus real --router flat`
  *   4. Scale benchmark  — `node tests/scale-benchmark/runner.mjs`
+ *   5. Leak guard       — no personal home paths in tracked files (P6-H-027)
+ *
+ * Fast path: `node scripts/release-check.mjs --leak-guard` runs only check 5.
  *
  * Pre-existing failures handling:
  *   When `logs/pre-existing-failures.json` exists, its keys are treated as
@@ -35,7 +38,7 @@
  * backslash-escape issues when embedding paths inside JS string literals.
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -282,7 +285,81 @@ function checkScaleBenchmark() {
   };
 }
 
-// ── Report ─────────────────────────────────────────────────────────────────────
+// ── Leak guard (check 5) ──────────────────────────────────────────────────────
+
+/**
+ * Check 5 — P6-H-027: personal-path leak guard.
+ *
+ * A public repo must not carry host-specific home paths. Every tracked file
+ * (`git ls-files`, with a directory-walk fallback) is scanned for a Windows
+ * home prefix in either slash form; any hit fails the release. The leak is
+ * usually a benchmark runner rewriting a tracked report with absolute paths,
+ * so the guard catches the re-leak at release time.
+ */
+function checkPersonalPathLeaks() {
+  // A home path that names an actual username (for example a drive-rooted
+  // Desktop path under C:\Users\ on this host) is a leak. The documented
+  // placeholders are not: `you` (docs/cli-reference.md), `...`, and
+  // angle-bracket tokens such as `<user-home>`.
+  const RE = /[cC]:[\\\/]Users[\\\/]([^\s"`:]+)/g;
+  const files = (() => {
+    const { ok, stdout } = run('git', ['ls-files'], { timeout: 30_000 });
+    return ok
+      ? stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+      : walkForLeakScan();
+  })();
+
+  const hits = [];
+  for (const rel of files) {
+    const abs = resolve(BASE, rel);
+    if (!existsSync(abs)) continue;
+    let text;
+    try {
+      text = readFileSync(abs, 'utf8');
+    } catch {
+      continue; // unreadable/binary — not a leak source
+    }
+    const users = new Set();
+    for (const m of text.matchAll(RE)) {
+      const u = m[1];
+      const isPlaceholder =
+        u === 'you' || u.startsWith('you/') || u.startsWith('you\\') ||
+        u.startsWith('...') || u.startsWith('<');
+      if (!isPlaceholder) users.add(u);
+    }
+    if (users.size > 0) hits.push(`${rel} (user: ${[...users].join(', ')})`);
+  }
+
+  return {
+    ok: hits.length === 0,
+    label: 'leak-guard',
+    summary: hits.length === 0
+      ? `no personal home paths in ${files.length} tracked files`
+      : `${hits.length} file(s) contain personal home paths`,
+    details: hits.map((f) => ({ file: f, known: false, blocker: true })),
+    timeout: 30_000,
+  };
+}
+
+/** Fallback file list when `git ls-files` is unavailable. */
+function walkForLeakScan() {
+  const out = ['README.md', 'AGENTS.md', 'HANDOFF.md', 'CHANGELOG.md', 'package.json', 'package-lock.json'];
+  for (const dir of ['docs', 'data', 'src', 'bin', 'scripts', 'hooks', 'tests', '.zcode-plugin']) {
+    const root = resolve(BASE, dir);
+    if (!existsSync(root)) continue;
+    (function walk(d, prefix) {
+      for (const entry of readdirSync(d)) {
+        if (entry === 'node_modules' || entry === '.git') continue;
+        const full = resolve(d, entry);
+        const rel = prefix ? `${prefix}/${entry}` : entry;
+        if (statSync(full).isDirectory()) walk(full, rel);
+        else out.push(rel);
+      }
+    })(root, dir);
+  }
+  return out;
+}
+
 function printReport(checks) {
   console.log('');
   console.log('Release Readiness Report');
@@ -314,10 +391,15 @@ function printReport(checks) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log('Starting release checks...');
+  // Fast path: run only the leak guard (P6-H-027), which is cheap and
+  // independent of the long test-suite/benchmark steps.
+  const onlyLeaks = process.argv.includes('--leak-guard');
+  console.log(onlyLeaks ? 'Running leak guard only (--leak-guard)...' : 'Starting release checks...');
   console.log('');
 
-  const checks = [checkTests(), checkHealth(), checkRealBenchmark(), checkScaleBenchmark()];
+  const checks = onlyLeaks
+    ? [checkPersonalPathLeaks()]
+    : [checkTests(), checkHealth(), checkRealBenchmark(), checkScaleBenchmark(), checkPersonalPathLeaks()];
   printReport(checks);
 
   const anyBlocker = checks.some((c) => !c.ok);

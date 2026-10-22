@@ -25,4 +25,4 @@ For each corpus size:
 
 ## Per-prompt detail
 
-Full per-prompt results are in the JSON report at `C:\Users\PC-1\Desktop\projects\zcode-operation-skill\docs\reports\phase-7-scale-results.json`.
+Full per-prompt results are in the JSON report at `<repo-root>\docs\reports\phase-7-scale-results.json`.
