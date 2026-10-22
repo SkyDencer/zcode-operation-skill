@@ -1,8 +1,12 @@
 # Current State
 
-> Last updated: 2026-09-27
+> Last updated: 2026-10-23
 
 ## Entry Log
+
+| 2026-10-23 | **Post-v1.0.0 stabilization pass (in progress).** Closes the in-scope P6-H findings: `P6-H-001` topK selection policy in `2391b94` (SKILL_ROUTER_TOPK, clamped 1-20, hybrid relevance floor), `P6-H-002` hard context budget in `b6d887e` (drop-whole-skill, rejection path), `P6-H-014` snapshot-validated rollback in `f76c6d0`, `P6-H-015` sync permission classification in `b03de20`, `P6-H-016` explicit readdir failures completed in `11ef6b8` (sync planner, corpus scan/manifest, deploy writer, quality/import helpers; ENOENT tolerated where optional, named errors otherwise). Security fixes from the 7.11 audit: raw-prompt persistence `40d368a`, hook `cwd` path traversal `3fd96cb`, release-check env forwarding `51a2ac1`. This pass: `P6-H-020` `--help` on all 19 subcommands in `fed254e` (no side effects, checked before any parsing), `P6-H-026` reranker opt-in in `cb3da77` (default off, `SKILL_ROUTER_RERANKER`, experimental warning + telemetry), `P6-H-027` personal-path redaction in `6d6f4a8` plus a release-check leak guard so it cannot recur. Docs B.1: `docs/implementation-plan.md` synced (Phase 7 Done, Post-v1.0.0 P6-H status table). Frozen BM25 baseline unchanged at Top-1 0.6462 (84/130). Remaining work: docs B.2-B.6, artifact cleanup C.1, tolerated-failure fixes D.1-D.3, human E2E handoff E.1, final check F.1, push F.2, final report G. | stabilization-pass |
+
+| 2026-09-30 | **Phase 7 complete (sub-phases 7.1-7.12, `4746b7e`-`4e517bf`).** 7.1 closed the semantic decision (D29: ONNX kept, forced off, experimental; default `bm25-only`, semantic weight 0.0). 7.2 built the corpus tooling (`src/corpus/`, `corpus` subcommand; entry log rows for 7.1/7.2/7.3/7.4/7.5/7.6 are recorded above). 7.3 assembled the 252-leaf corpus from 11 MIT sources (258-entry index). 7.4-7.5 measured the scale ceiling (247 skills, Top-1 0.7843) and re-froze the baseline (Top-1 0.6462, D37). 7.6 added the parsed-index cache and the 1000-skill p95 evidence (D39). 7.7-7.8 prepared the human E2E test and the operational docs (reports at `docs/reports/phase-7.7-e2e-validation.md` and `docs/reports/phase-7.8-documentation.md`; the human run remains the open release gate). 7.9 removed the dead modules (`P6-H-018`/`P6-H-019` resolved). 7.10 prepared the release (package.json 1.0.0, MIT licence, CHANGELOG). 7.11 ran the final audits (`docs/reports/phase-7.11-final-audit.md`), fixing the baseline-guard, median-gate and perf-race findings and recording the path-traversal, raw-prompt and leak findings that the post-v1.0.0 pass fixed. 7.12 prepared the tag (`docs/reports/phase-7.12-release.md`); the pre-tag blockers were cleared and `v1.0.0` was tagged at `386eb22` and pushed 2026-10-22. | phase-7-completion |
 
 | 2026-09-27 | **Sub-Phase 7.9 — dead-code cleanup.** Removed two legacy modules already flagged in P6-H-018 / P6-H-019 (`src/retriever.mjs` — byte-level BM25 duplicate imported only by `src/analytics/analyzer.mjs`; `src/logger.mjs` — fully orphaned, zero importers), updated the health-check required-files list to reference the canonical `src/core/retriever/bm25.mjs` and `src/core/telemetry/logger.mjs`, deduplicated the STOPWORDS constant (moved from `src/utils/text.mjs` to be re-exported from `src/scorer.mjs`), and stripped six dead CLI self-exec blocks from `src/import/{importer,scanner}.mjs`, `src/sync/{state,writer,disabler}.mjs` and `src/deploy/writer.mjs` (each checked `import.meta.url.endsWith(process.argv[1])` which is never true when the module is imported). Zero regressions: frozen BM25 baseline Top-1 **0.6462 (84/130)** unchanged; 35 targeted individual tests all pass; the eight pre-existing failing files listed in `logs/pre-existing-failures.json` are untouched. Estimated net lines saved: ~155 (162 gross, minus small import-path adjustment). Report at `docs/reports/phase-7.9-cleanup.md`. | impl-7-9 |
 
@@ -151,10 +155,13 @@
 
 ## Active Phase
 
-- **Phase:** 6 -- The Semantic Embedding Upgrade
-- **Status:** Complete (final report written 2026-09-26 at docs/reports/phase-6-final-report.md)
-- **Next:** Phase 7 -- Hardening and Corpus Truth. Roadmap in
-  `docs/implementation-plan.md`; priorities in the final report's Recommendation section.
+- **Phase:** 7 -- Hardening and Corpus Truth (complete, sub-phases 7.1-7.12)
+- **Status:** `v1.0.0` tagged at `386eb22` and pushed 2026-10-22; the
+  post-v1.0.0 stabilization pass is in progress (P6-H-001/002/014/015/016/020/
+  026/027 fixed, docs sync underway, artifact cleanup and tolerated-failure
+  fixes pending).
+- **Next:** human E2E run per `docs/zcode-e2e-test.md`, results recorded in
+  `docs/reports/phase-7.7-e2e-results.md`, then the `v1.0.1` tag.
 
 ## Known Constraints
 
@@ -168,14 +175,15 @@
 
 ## Next Actions
 
-1. **Human review of Phase 6 changes** -- Read docs/reports/phase-6-final-report.md, then
-   the three audit reports it links.
-2. **Push to GitHub** -- Phase 6 is already pushed; `HEAD` and `origin/main` are both
-   `10c910b`. Push again only after new commits land.
-3. **Deploy to ZCode** -- `node bin/skill-router.mjs deploy` then restart ZCode.
-4. **Use for 2–4 weeks** -- Accumulate real routing decisions and feedback signals. This
-   is the only way the adaptation loop gets exercised against real data.
-5. **Run `tune --auto --dry-run`** -- Review proposed changes before applying. Do not raise
-   MAX_DELTA to make a proposal apply; the 6.11 refusal was correct.
-6. **Phase 7 planning** -- Start with the three silent destructive failures
-   (`P6-H-014`, `P6-H-015`, `P6-H-016`) and `--help` (`P6-H-020`).
+1. **Finish the stabilization pass** -- docs sync (B.2-B.6), artifact cleanup
+   (C.1), fix the tolerated test failures (D.1-D.3) so
+   `node scripts/run-all-tests.mjs` exits 0.
+2. **Prepare the human E2E handoff** -- `node scripts/verify-e2e-ready.mjs`,
+   `HANDOFF.md` and the results template at
+   `docs/reports/phase-7.7-e2e-results.md`.
+3. **Run the six E2E prompts** through ZCode per `docs/zcode-e2e-test.md`
+   and record the outcomes in `docs/reports/phase-7.7-e2e-results.md`.
+4. **Deploy to ZCode** -- `node bin/skill-router.mjs deploy` then restart
+   ZCode before the E2E run.
+5. **Tag v1.0.1** only after the E2E results are recorded and the full suite
+   is green.
