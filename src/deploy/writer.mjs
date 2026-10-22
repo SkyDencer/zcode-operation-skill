@@ -12,6 +12,7 @@ import { join, resolve, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { disableSkill } from '../sync/disabler.mjs';
+import { validateForRollback } from './rollback.mjs';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -143,36 +144,76 @@ function snapshotMirror(mirrorRoot, snapshotDir) {
   return snapshotPath;
 }
 
-function rollbackMirror(mirrorRoot, snapshotPath) {
-  if (!snapshotPath || !existsSync(snapshotPath)) return false;
+/**
+ * Roll back a mirror to a deploy snapshot, after a P6-H-014 pre-flight
+ * validation gate.
+ *
+ * A rollback is refused (no deletion happens) when validateForRollback
+ * reports the snapshot missing, corrupt, empty-against-a-live-mirror, or
+ * drifted — each refusal returns the reasons so the caller can surface them.
+ * Pass { force: true } to bypass the gate with an explicit operator decision.
+ *
+ * @param {string} mirrorRoot
+ * @param {string} snapshotPath
+ * @param {{force?: boolean}} [options]
+ * @returns {{ok: boolean, reason: string|null, deleted: number, restored: number, forced: boolean}}
+ */
+export function rollbackMirror(mirrorRoot, snapshotPath, options = {}) {
+  const { force = false } = options;
+  if (!snapshotPath || !existsSync(snapshotPath)) {
+    return { ok: false, reason: 'snapshot not found', deleted: 0, restored: 0, forced: force };
+  }
+
+  // P6-H-014: never let a corrupt/empty/stale snapshot drive a mass delete.
+  const validation = force
+    ? { ok: true, reasons: [] }
+    : validateForRollback(snapshotPath, mirrorRoot);
+  if (!validation.ok) {
+    return {
+      ok: false,
+      reason: validation.reasons.join('; '),
+      deleted: 0,
+      restored: 0,
+      forced: false,
+    };
+  }
+
   try {
     const snapshot = JSON.parse(readFileSync(snapshotPath, 'utf-8'));
-    if (!existsSync(mirrorRoot)) return true;
+    if (!existsSync(mirrorRoot)) return { ok: true, reason: null, deleted: 0, restored: 0, forced };
 
+    let deleted = 0;
     // Remove dirs not in snapshot
     for (const entry of readdirSync(mirrorRoot, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-      const inSnapshot = snapshot.files.some((f) => f.path.startsWith(entry.name + '/'));
+      const inSnapshot = snapshot.files.some((f) => f.path && f.path.startsWith(entry.name + '/'));
       if (!inSnapshot) {
         rmSync(join(mirrorRoot, entry.name), { recursive: true, force: true });
+        deleted += 1;
       }
     }
 
     // Restore each tracked file
+    let restored = 0;
     for (const file of snapshot.files) {
       const fullPath = join(mirrorRoot, file.path);
       if (!file.hash) {
         // File should not exist
-        try { rmSync(fullPath, { recursive: true, force: true }); } catch {}
+        try {
+          if (existsSync(fullPath)) { rmSync(fullPath, { recursive: true, force: true }); restored += 1; }
+        } catch {}
         continue;
       }
       const dir = dirname(fullPath);
       mkdirSync(dir, { recursive: true });
       // Recreate file with original hash content — we store hashes, not content.
       // For full rollback we need the content; fall back to re-deploy if content missing.
+      restored += 1;
     }
-    return true;
-  } catch { return false; }
+    return { ok: true, reason: null, deleted, restored, forced: force };
+  } catch (err) {
+    return { ok: false, reason: err.message, deleted: 0, restored: 0, forced: force };
+  }
 }
 
 /**
@@ -315,11 +356,17 @@ export function pruneSnapshots(snapshotDir) {
  * Note: This restores metadata only (hashes). Full file-content rollback
  * requires the original source files to be available.
  *
+ * P6-H-014: the destructive parts of a restore are gated on
+ * validateForRollback(snapshotPath, targetRoot). Pass { force: true } to
+ * bypass the gate with an explicit operator decision (used by
+ * `deploy --restore <ts> --force-rollback`).
+ *
  * @param {string} snapshotPath
  * @param {string} [mirrorRoot]
+ * @param {{force?: boolean}} [options]
  * @returns {{success: boolean, restored: number, errors: string[]}}
  */
-export function restoreFromSnapshot(snapshotPath, mirrorRoot) {
+export function restoreFromSnapshot(snapshotPath, mirrorRoot, options = {}) {
   if (!existsSync(snapshotPath)) {
     return { success: false, restored: 0, errors: [`snapshot not found: ${snapshotPath}`] };
   }
@@ -337,6 +384,16 @@ export function restoreFromSnapshot(snapshotPath, mirrorRoot) {
   }
 
   const targetRoot = resolve(mirrorRoot ?? snapshot.mirrorRoot);
+
+  // P6-H-014 gate: refuse a restore built on a mass-delete-prone or
+  // drifted snapshot unless the operator forced it.
+  if (!options.force) {
+    const validation = validateForRollback(snapshotPath, targetRoot);
+    if (!validation.ok) {
+      return { success: false, restored: 0, errors: validation.reasons };
+    }
+  }
+
   const errors = [];
   let restored = 0;
 
@@ -392,7 +449,7 @@ export function restoreFromSnapshot(snapshotPath, mirrorRoot) {
  * @returns {DeployResult}
  */
 export function applyDeploy(plan, projectDir, zcodeDir, options = {}) {
-  const { dryRun = false, quiet = false, disableMechanism = 'shadow', snapshotDir = DEFAULT_SNAPSHOT_DIR } = options;
+  const { dryRun = false, quiet = false, disableMechanism = 'shadow', snapshotDir = DEFAULT_SNAPSHOT_DIR, forceRollback = false } = options;
   const projectRoot = resolve(projectDir ?? process.cwd());
   const mirrorRoot = resolve(zcodeDir ?? process.env.SKILL_ROUTER_ZCODE_DIR ?? join(homedir(), '.zcode', 'skills'));
   const sourceDir = resolve(join(projectRoot, 'router-skills'));
@@ -478,8 +535,9 @@ export function applyDeploy(plan, projectDir, zcodeDir, options = {}) {
 
   // ── Error handling: attempt rollback ───────────────────────────────────────
   if (!dryRun && errors.length > 0 && snapshotPath) {
-    const ok = rollbackMirror(mirrorRoot, snapshotPath);
-    if (!quiet) console.log(ok ? '  Rollback successful.' : '  Rollback failed — manual intervention may be required.');
+    const rb = rollbackMirror(mirrorRoot, snapshotPath, { force: forceRollback });
+    if (forceRollback && !quiet) console.log('  [WARN] Rollback forced past snapshot validation (--force-rollback).');
+    if (!quiet) console.log(rb.ok ? '  Rollback successful.' : `  Rollback refused (${rb.reason}) — manual intervention may be required.`);
   }
 
   if (!quiet && plan.warnings.length > 0) {

@@ -4,7 +4,7 @@
  * Usage:
  *   node bin/skill-router.mjs deploy [--dry-run] [--rollback <file>] [--verify]
  *     [--zcode-dir <dir>] [--project-dir <dir>] [--with-hook] [--no-hook]
- *     [--list-snapshots] [--restore <timestamp>]
+ *     [--list-snapshots] [--restore <timestamp>] [--force-rollback]
  */
 import { resolve, join } from 'node:path';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
@@ -27,6 +27,7 @@ export async function main(argv) {
   let withHook = true;
   let listSnapshotsFlag = false;
   let restoreTimestamp = null;
+  let forceRollback = false;
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--dry-run') {
@@ -45,6 +46,8 @@ export async function main(argv) {
       listSnapshotsFlag = true;
     } else if (argv[i] === '--restore' && argv[i + 1]) {
       restoreTimestamp = argv[++i];
+    } else if (argv[i] === '--force-rollback') {
+      forceRollback = true;
     } else if (argv[i] === '--zcode-dir' && argv[i + 1]) {
       zcodeDir = resolve(argv[++i]);
     } else if (argv[i] === '--project-dir' && argv[i + 1]) {
@@ -83,7 +86,10 @@ export async function main(argv) {
       process.exit(1);
     }
     console.log(`Restoring from: ${snap.path}`);
-    const result = restoreFromSnapshot(snap.path, zcodeDir);
+    if (forceRollback) {
+      console.log('  [WARN] --force-rollback bypasses snapshot validation; refusing is disabled.');
+    }
+    const result = restoreFromSnapshot(snap.path, zcodeDir, { force: forceRollback });
     if (result.success) {
       console.log(`  Restored ${result.restored} router(s).`);
     } else {
@@ -156,7 +162,7 @@ export async function main(argv) {
     if (!quiet) console.log('\n[Dry-run complete — no changes applied]');
   } else {
     try {
-      result = applyDeploy(plan, projectDir, zcodeDir, { quiet });
+      result = applyDeploy(plan, projectDir, zcodeDir, { quiet, forceRollback });
     } catch (err) {
       console.error(`Deploy failed: ${err.message}`);
       process.exit(1);
