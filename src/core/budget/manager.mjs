@@ -2,43 +2,44 @@
  * Context budget manager for the route hook.
  *
  * Given a list of ranked skills with their markdown content, selects
- * and truncates entries so the total injected context fits within a
- * character budget. Falls back to equal-size truncation with a
- * minimum-per-skill floor when the budget is tight.
+ * entries so the total injected context fits within a hard character
+ * budget. P6-H-002: when the budget is tight, skills are DROPPED whole,
+ * never truncated — the highest-scoring skills are kept first, and the
+ * total of the selected content is guaranteed ≤ maxChars (the old
+ * truncate-to-quota path could exceed the budget because the per-skill
+ * floor multiplied by the skill count was never checked against the
+ * total).
  */
-import { truncateAtParagraph } from './truncator.mjs';
-
 const DEFAULT_MAX_CHARS = 24000;
-const DEFAULT_MIN_PER_SKILL = 500;
 
 /**
- * Select and size skill content to fit within the context budget.
+ * Select skill content to fit within the context budget.
  *
  * Algorithm:
- * 1. If total raw content is already under budget, return all entries
- *    unmodified.
- * 2. Otherwise, order by confidence (descending) and distribute the
- *    budget equally across all skills, respecting minPerSkill.
- *    Each skill gets min(chosenQuota, its own content length).
- *    Then apply paragraph-safe truncation per skill.
+ * 1. If total raw content is already under the budget, return all entries
+ *    unmodified (original order).
+ * 2. Otherwise, order by score (descending; items without a score sort
+ *    last, stable) and greedily include whole skills while the running
+ *    total fits under maxChars. The first skill that does not fit — and
+ *    everything after it — is dropped. Nothing is ever truncated.
  *
- * @param {Array<{name:string, content:string}>} skills
- *   Each element: { name: string, content: string }
+ * `rejected` is true when even the highest-scoring skill alone exceeds
+ * the budget: in that case nothing is selected and the caller (the hook)
+ * stays fail-open with an empty context.
+ *
+ * @param {Array<{name:string, content:string, score?:number}>} skills
+ *   Each element: { name: string, content: string, score?: number }
  * @param {object} [options]
- * @param {number} [options.maxChars] — total budget (default 24000)
- * @param {number} [options.minPerSkill] — per-skill floor (default 500)
- * @returns {{ selected: Array<{name:string, content:string}>, totalChars: number }}
+ * @param {number} [options.maxChars] — hard total budget (default 24000)
+ * @returns {{ selected: Array<{name:string, content:string}>, totalChars: number, droppedCount: number, rejected: boolean }}
  */
 export function fitWithinBudget(skills, options = {}) {
   const maxChars = typeof options.maxChars === 'number' && options.maxChars > 0
     ? Math.floor(options.maxChars)
     : DEFAULT_MAX_CHARS;
-  const minPerSkill = typeof options.minPerSkill === 'number' && options.minPerSkill >= 0
-    ? Math.floor(options.minPerSkill)
-    : DEFAULT_MIN_PER_SKILL;
 
   if (!Array.isArray(skills) || skills.length === 0) {
-    return { selected: [], totalChars: 0 };
+    return { selected: [], totalChars: 0, droppedCount: 0, rejected: false };
   }
 
   // Compute raw total
@@ -49,26 +50,31 @@ export function fitWithinBudget(skills, options = {}) {
     return {
       selected: skills.map((s) => ({ name: s.name, content: s.content })),
       totalChars: rawTotal,
+      droppedCount: 0,
+      rejected: false,
     };
   }
 
-  // Over budget — truncate each skill to an equal share, floor at minPerSkill
-  const n = skills.length;
-  const quotaPerSkill = Math.floor(maxChars / n);
-  const perSkill = Math.max(quotaPerSkill, minPerSkill);
+  // P6-H-002: over budget — greedy drop, highest score first. Sort is
+  // stable, so tied scores keep the caller's (ranking) order.
+  const ranked = [...skills].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const selected = [];
+  let totalChars = 0;
+  for (const s of ranked) {
+    if (totalChars + s.content.length > maxChars) break;
+    selected.push({ name: s.name, content: s.content });
+    totalChars += s.content.length;
+  }
 
-  const selected = skills.map((s) => {
-    const truncated = truncateAtParagraph(s.content, perSkill);
-    return { name: s.name, content: truncated };
-  });
-
-  const totalChars = selected.reduce((sum, s) => sum + s.content.length, 0);
-
-  return { selected, totalChars };
+  return {
+    selected,
+    totalChars,
+    droppedCount: skills.length - selected.length,
+    rejected: selected.length === 0,
+  };
 }
 
 /**
  * Default exports for convenience.
  */
 export const defaultMaxChars = DEFAULT_MAX_CHARS;
-export const defaultMinPerSkill = DEFAULT_MIN_PER_SKILL;

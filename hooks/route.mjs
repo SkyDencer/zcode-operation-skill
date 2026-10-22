@@ -41,7 +41,7 @@ const PREBUILT_PATH = resolve(HOOK_DIR, '..', 'data', 'skill-index.prebuilt.json
 
 const config = getConfig();
 const { timeoutMs, maxPromptLength } = config.hook;
-const { maxChars: budgetMaxChars, minPerSkill: budgetMinPerSkill } = config.budget;
+const { maxChars: budgetMaxChars } = config.budget;
 // P6-H-001: hard cap on injected skills. The env layer (src/config/env.mjs)
 // already clamps SKILL_ROUTER_TOPK to [1, 20]; this second clamp is the
 // fail-safe that holds even if the config is produced by another path.
@@ -397,9 +397,18 @@ async function main() {
 
   const skillsWithContent = await readSkillContent(ranked);
 
-  const { selected, totalChars } = fitWithinBudget(skillsWithContent, {
+  // P6-H-002: the budget manager drops whole skills (never truncates),
+  // ordered by score. readSkillContent skips unreadable files, so join
+  // the scores back by name instead of relying on positional alignment.
+  const scoreByName = new Map(ranked.map((r) => [r.skill.name, r.score]));
+  const scoredItems = skillsWithContent.map((s) => ({
+    name: s.name,
+    content: s.content,
+    score: scoreByName.get(s.name) ?? 0,
+  }));
+
+  const { selected, totalChars, droppedCount, rejected } = fitWithinBudget(scoredItems, {
     maxChars: budgetMaxChars,
-    minPerSkill: budgetMinPerSkill,
   });
 
   await logRecord({
@@ -412,6 +421,13 @@ async function main() {
     rawTotalChars: skillsWithContent.reduce((s, sk) => s + sk.content.length, 0),
     injectedChars: totalChars,
     budgetMaxChars,
+    // P6-H-002: hard-limit accounting — what actually went in, the cap, how
+    // many whole skills were dropped, and whether even the top skill was
+    // rejected (empty context, fail-open).
+    budgetChars: totalChars,
+    budgetMax: budgetMaxChars,
+    budgetDropped: droppedCount,
+    ...(rejected ? { budgetRejected: true } : {}),
   });
 
   const additionalContext = buildContext(selected, decision);

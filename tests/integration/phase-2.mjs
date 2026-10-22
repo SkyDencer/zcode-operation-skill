@@ -307,7 +307,6 @@ async function runTests() {
     'tests/import/importer.test.mjs',
     'tests/quality/validator.test.mjs',
     'tests/tuning/optimizer.test.mjs',
-    'tests/budget/truncator.test.mjs',
     'tests/budget/manager.test.mjs',
     'tests/routing-hierarchical.test.mjs',
     'tests/scale/scale-benchmark.test.mjs',
