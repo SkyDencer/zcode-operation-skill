@@ -69,13 +69,21 @@ export function loadCurrentWeights() {
  * Get the latest snapshot path from logs/weights/.
  */
 export function latestSnapshot() {
+  if (!existsSync(SNAPSHOT_DIR)) return null;
+  let files;
   try {
-    if (!existsSync(SNAPSHOT_DIR)) return null;
-    const files = readdirSync(SNAPSHOT_DIR)
+    files = readdirSync(SNAPSHOT_DIR)
       .filter((f) => f.startsWith('weights-') && f.endsWith('.json'))
       .sort();
-    return files.length > 0 ? resolve(SNAPSHOT_DIR, files[files.length - 1]) : null;
-  } catch { return null; }
+  } catch (err) {
+    // P6-H-016: the directory exists (guarded above); a permission or I/O
+    // error must not be reported as "no snapshots".
+    const named = new Error(`cannot read directory ${SNAPSHOT_DIR}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    named.cause = err;
+    throw named;
+  }
+  return files.length > 0 ? resolve(SNAPSHOT_DIR, files[files.length - 1]) : null;
 }
 
 /**

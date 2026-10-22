@@ -12,9 +12,14 @@
  *   { name, description, keywords, domains, version, path, dir, relPath,
  *     contentHash, source, sourceRef }
  *
- * The walk is deliberately forgiving about *content* and strict about *shape*:
- * an unreadable subtree is a warning and the walk continues, but a missing
- * root throws, because a typo'd path must not look like an empty corpus.
+ * The walk is deliberately forgiving about *content* and strict about *shape*
+ * and *access*: a missing root throws (a typo'd path must not look like an
+ * empty corpus), and P6-H-016 makes an unreadable directory (EACCES, EPERM,
+ * EIO, ...) fatal with a named error, because silently returning a partial
+ * corpus would hide skills. ENOENT is the only readdir error tolerated: at
+ * the root it cannot happen (scanLocal's existsSync check rejects it first),
+ * and deeper it means a subtree vanished mid-walk, which is recorded as a
+ * warning.
  */
 
 import { readdir, readFile } from 'node:fs/promises';
@@ -32,8 +37,10 @@ const DEFAULT_MAX_DEPTH = 10;
 /**
  * Recursively collect SKILL.md paths under a directory.
  *
- * Unreadable subdirectories are recorded in `warnings` rather than aborting the
- * walk: one broken subtree should not hide the rest of a 200-skill corpus.
+ * P6-H-016: a directory that cannot be read for a reason other than ENOENT
+ * (EACCES, EPERM, EIO, ...) throws a named error — a partial scan must not
+ * masquerade as a complete one. ENOENT deeper in the walk (a subtree that
+ * vanished mid-walk) is recorded in `warnings`.
  *
  * @param {string} root — absolute directory to walk
  * @param {number} maxDepth
@@ -52,6 +59,12 @@ export async function collectSkillFiles(root, maxDepth, warnings, depth = 0) {
   try {
     entries = await readdir(root, { withFileTypes: true });
   } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      const named = new Error(`cannot read directory ${root}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      named.cause = err;
+      throw named;
+    }
     warnings.push(`cannot read directory ${root}: ${err.message}`);
     return found;
   }

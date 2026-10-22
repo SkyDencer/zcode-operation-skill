@@ -107,10 +107,17 @@ export function main(argv) {
 function getRegisteredDomains() {
   const domainsDir = resolve('data/domains');
   if (!existsSync(domainsDir)) return [];
+  let entries;
   try {
-    const entries = readdirSync(domainsDir, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
+    entries = readdirSync(domainsDir, { withFileTypes: true });
+  } catch (err) {
+    // P6-H-016: the directory exists (guarded above), so this is not ENOENT.
+    // A permission or I/O error must not masquerade as "no registered
+    // domains" — the add command would register into an untracked domain.
+    const named = new Error(`cannot read directory ${domainsDir}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    named.cause = err;
+    throw named;
   }
+  return entries.filter((e) => e.isDirectory()).map((e) => e.name);
 }

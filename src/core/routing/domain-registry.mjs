@@ -45,20 +45,18 @@ export function readDomainMeta(domainName) {
  */
 export function readAllDomainMeta() {
   if (!existsSync(DOMAINS_DIR)) return [];
-  const results = [];
-  try {
-    const entries = readFileSync(DOMAINS_DIR, 'utf-8')
-      ? []
-      : [];
-    // readdirSync is used below instead
-  } catch {}
-
   let dirs;
   try {
     dirs = readdirSync(DOMAINS_DIR, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (err) {
+    // P6-H-016: the directory exists (guarded above); a permission or I/O
+    // error must not be reported as "no domains".
+    const named = new Error(`cannot read directory ${DOMAINS_DIR}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    named.cause = err;
+    throw named;
   }
+  const results = [];
 
   for (const entry of dirs) {
     if (!entry.isDirectory()) continue;

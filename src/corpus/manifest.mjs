@@ -68,6 +68,11 @@ async function readTextOrNull(filePath) {
 /**
  * Walk one skill directory and collect every regular file as UTF-8 text.
  *
+ * P6-H-016: an unreadable directory (EACCES, EPERM, EIO, ...) throws a named
+ * error — files silently missing from the manifest would later be dropped by
+ * `import --from-manifest`. ENOENT (a file or directory that vanished
+ * mid-walk) stays a warning.
+ *
  * @param {string} dir — the directory holding the SKILL.md
  * @param {string[]} warnings — collected in place
  * @param {string} [base]
@@ -80,6 +85,12 @@ async function collectSkillFiles(dir, warnings, base = dir) {
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      const named = new Error(`cannot read skill directory ${dir}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      named.cause = err;
+      throw named;
+    }
     warnings.push(`cannot read skill directory ${dir}: ${err.message}`);
     return files;
   }

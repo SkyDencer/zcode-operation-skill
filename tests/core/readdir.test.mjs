@@ -16,8 +16,12 @@
  * Required-dir ENOENT still throws (scanner root), optional-dir ENOENT
  * yields [] / a plan, and permission-denied always throws a named error
  * with the original err.code preserved.
+ *
+ * Sections 7+ cover the P6-H-016 completion in the sync planner: a skills
+ * root (or subtree) that cannot be read must refuse the whole plan, because
+ * an empty result would turn unseen mirror skills into `remove` candidates.
  */
-import { readdir as fspReaddir, readFile as fspReadFile } from 'node:fs/promises';
+import { readdir as fspReaddir, readFile as fspReadFile, stat as fspStat, realpath as fspRealpath } from 'node:fs/promises';
 import * as nodeFs from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +32,7 @@ import { correlateFromLogs } from '../../src/telemetry/outcomes.mjs';
 import { readLogs } from '../../src/analytics/reader.mjs';
 import { scanSource } from '../../src/import/scanner.mjs';
 import { planDeploy } from '../../src/deploy/planner.mjs';
+import { planSync } from '../../src/sync/planner.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TMP = resolve(__dirname, 'tmp');
@@ -244,6 +249,97 @@ assertNamedThrows(
   'EACCES', 'cannot read directory',
   'readdirSync EACCES on data/skills surfaces a named error',
 );
+
+// ── 7. planSync root scan (P6-H-016 completion) ───────────────────────────────
+// An unreadable skills root or subtree must refuse the whole plan, because an
+// empty result would turn unseen mirror skills into `remove` candidates.
+
+console.log('\n=== 7. planSync refuses to plan on an unreadable skills dir ===');
+
+/** Reader seam: readdir of the listed directories rejects with `code`. */
+function readdirFails(overrides) {
+  const map = new Map(overrides);
+  return {
+    readFile: fspReadFile,
+    stat: fspStat,
+    realpath: fspRealpath,
+    readdir: async (p, ...rest) => {
+      const code = map.get(resolve(p));
+      if (code) {
+        const e = new Error(`${code}, simulated: ${p}`);
+        e.code = code;
+        throw e;
+      }
+      return fspReaddir(p, ...rest);
+    },
+  };
+}
+
+// 7.1 Both roots absent (ENOENT) → an empty plan, no error.
+cleanTmp();
+const e1Project = join(TMP, 'no-project');
+const e1Mirror = join(TMP, 'no-mirror');
+const emptyPlan = await planSync(e1Project, e1Mirror, { projectRoot: TMP });
+assertEqual(
+  [emptyPlan.add.length, emptyPlan.update.length, emptyPlan.remove.length],
+  [0, 0, 0],
+  'ENOENT on both roots plans an empty sync (pre-existing behaviour)',
+);
+
+// 7.2 Project root unreadable (EACCES) → the plan is refused.
+const e2Mirror = join(TMP, 'mirror-2');
+nodeFs.mkdirSync(e2Mirror, { recursive: true });
+let threw2 = false;
+let msg2 = '';
+try {
+  await planSync(e1Project, e2Mirror, {
+    projectRoot: TMP,
+    reader: readdirFails([[e1Project, 'EACCES']]),
+  });
+} catch (err) {
+  threw2 = true;
+  msg2 = err.message;
+}
+assert(threw2 && /sync plan rejected/i.test(msg2),
+  'an unreadable project root (EACCES) refuses the plan');
+
+// 7.3 Mirror root unreadable (EACCES) → named error surfaces.
+const e3Project = join(TMP, 'project-3');
+nodeFs.mkdirSync(e3Project, { recursive: true });
+const e3Mirror = join(TMP, 'mirror-3');
+let threw3 = false;
+let msg3 = '';
+try {
+  await planSync(e3Project, e3Mirror, {
+    projectRoot: TMP,
+    reader: readdirFails([[e3Mirror, 'EACCES']]),
+  });
+} catch (err) {
+  threw3 = true;
+  msg3 = err.message;
+}
+assert(threw3 && /cannot read skill directory/.test(msg3),
+  'an unreadable mirror root (EACCES) surfaces a named error');
+
+// 7.4 Project subtree unreadable (EACCES) → the plan is refused.
+const e4Project = join(TMP, 'project-4');
+nodeFs.mkdirSync(join(e4Project, 'domain-x', 'skill-x'), { recursive: true });
+nodeFs.writeFileSync(join(e4Project, 'domain-x', 'skill-x', 'SKILL.md'), '---\nname: x\n---\nbody\n', 'utf-8');
+const e4Mirror = join(TMP, 'mirror-4');
+nodeFs.mkdirSync(e4Mirror, { recursive: true });
+let threw4 = false;
+let msg4 = '';
+try {
+  await planSync(e4Project, e4Mirror, {
+    projectRoot: TMP,
+    reader: readdirFails([[join(e4Project, 'domain-x'), 'EACCES']]),
+  });
+} catch (err) {
+  threw4 = true;
+  msg4 = err.message;
+}
+assert(threw4 && /sync plan rejected/i.test(msg4),
+  'an unreadable project subtree (EACCES) refuses the plan');
 
 // ── Cleanup + summary ──────────────────────────────────────────────────────────
 

@@ -119,14 +119,20 @@ function countTokens(text) {
  */
 function getRegisteredDomains() {
   if (!existsSync(DOMAINS_DIR)) return [];
+  let entries;
   try {
-    const entries = readdirSync(DOMAINS_DIR, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch {
-    return [];
+    entries = readdirSync(DOMAINS_DIR, { withFileTypes: true });
+  } catch (err) {
+    // P6-H-016: the directory exists (guarded above); a permission or I/O
+    // error must not masquerade as "no registered domains".
+    const named = new Error(`cannot read directory ${DOMAINS_DIR}: ${err.code ?? err.message}`);
+    named.code = err.code;
+    named.cause = err;
+    throw named;
   }
+  return entries
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
 }
 
 // ── Core validation ────────────────────────────────────────────────────────────

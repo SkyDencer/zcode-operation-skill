@@ -137,7 +137,19 @@ function snapshotMirror(mirrorRoot, snapshotDir) {
         });
       }
     }
-  } catch {}
+  } catch (err) {
+    // P6-H-016: the existsSync check above rules out ENOENT (no mirror yet
+    // → an empty snapshot is legitimate). An unreadable mirror (EACCES,
+    // EPERM) or any I/O error must not produce a silently-empty snapshot —
+    // the apply loop will fail loudly instead, and the rollback gate
+    // (P6-H-014) will refuse to act on an incomplete one.
+    if (err && err.code !== 'ENOENT') {
+      const named = new Error(`cannot read directory ${mirrorRoot}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      named.cause = err;
+      throw named;
+    }
+  }
 
   mkdirSync(snapshotDir, { recursive: true });
   writeFileSync(snapshotPath, JSON.stringify(snapshot, null, 2) + '\n', 'utf-8');

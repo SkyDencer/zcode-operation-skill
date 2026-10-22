@@ -109,19 +109,27 @@ function getExistingSkillNames(skillsDir) {
 
   function walk(dir, depth) {
     if (depth > MAX_DEPTH) return;
+    let entries;
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full, depth + 1);
-        } else if (entry.isFile() && entry.name === 'SKILL.md') {
-          const parentName = dirname(full).split(/[\\/]/).pop();
-          if (parentName) names.push(parentName);
-        }
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch (err) {
+      // P6-H-016: a vanished subtree (ENOENT) is skipped; a permission or
+      // I/O error must not silently drop existing skill names — that would
+      // defeat the import collision check.
+      if (err && err.code === 'ENOENT') return;
+      const named = new Error(`cannot read directory ${dir}: ${err.code ?? err.message}`);
+      named.code = err.code;
+      named.cause = err;
+      throw named;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full, depth + 1);
+      } else if (entry.isFile() && entry.name === 'SKILL.md') {
+        const parentName = dirname(full).split(/[\\/]/).pop();
+        if (parentName) names.push(parentName);
       }
-    } catch {
-      // skip
     }
   }
   walk(skillsDir, 0);
