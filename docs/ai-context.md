@@ -18,7 +18,7 @@ calls, and no persistent state beyond the JSON skill index.
 │                     ZCode Editor                              │
 │                    (workflow authoring)                       │
 └──────────────────────┬────────────────────────────────────────┘
-                       │ onWorkflowAuthoring hook
+                       │ UserPromptSubmit hook
                        ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      HOOK LAYER                                 │
@@ -217,8 +217,14 @@ calls, and no persistent state beyond the JSON skill index.
   `options.fallbackToFnv1a === false`.
 - Providers whose `buildIndex()` is asynchronous (ONNX) make `hybridRetrieve()`
   return a Promise; callers must await it. The hook does.
-- Optional feature-based reranking stage. `options.rerank` defaults to `true`;
-  the hook passes `rerank: false`.
+- Optional feature-based reranking stage. The API default of `options.rerank`
+  is `true`, but the hook passes `rerank: rerankerEnabled`, where
+  `rerankerEnabled = config.reranker.enabled` — **off by default** since
+  P6-H-026 (the fitted weights have a held-out R² of −4.58; see
+  `docs/reranker.md`). Opt-in via `SKILL_ROUTER_RERANKER=enabled`, which
+  logs an `experimental_mode` warning and telemetry event. The tuning planner
+  (`src/core/routing/planner.mjs`) is a separate explicit tool and keeps its
+  own rerank default; only the hook path is config-gated.
 
 ### Provider Resolution (`src/core/embeddings/resolve.mjs`)
 
@@ -732,8 +738,21 @@ List parameters accept comma-separated values (e.g., `SKILL_ROUTER_BM25_NAME_WEI
 
 ## Out of Scope (for this project)
 
-- Semantic / vector-based search with pre-trained models (planned for a future phase).
-- Multi-tenant or cloud-synced skill registries.
-- Learning user preferences over time via a feedback loop (planned for a future phase).
+- Multi-tenant or cloud-synced skill registries -- the router is a single-user, local plugin.
 - GUI components -- the hook communicates through ZCode's existing UI channel.
 - Real-time index updates during authoring (index is rebuilt on demand via `build-index`).
+- A relevance gate based on absolute score or runner-up margin. The current
+  floor is a "did anything match" test (normalised maximum), which does not
+  scale to the 252-leaf corpus (finding B1); the frozen baseline documents the
+  resulting Top-1 ceiling. Tracked in `docs/problems.md`.
+- Making ONNX the default embedding provider. Delivered as an opt-in
+  experimental provider in Phase 6 and forced off by default in Phase 7.1
+  (D29) because it is 14.5x over the latency budget and less accurate than the
+  shipped BM25 configuration; revisit conditions are in `docs/embeddings.md`.
+- Reranker weight retraining. The shipped `data/reranker-weights.json` fit has
+  a negative held-out R² (P6-H-026); the stage is off by default and enabling
+  it is documented as not recommended (`docs/reranker.md`).
+
+Previously listed here as "future phases" but now delivered: semantic /
+vector-based search with a pre-trained model (Phase 6, opt-in ONNX provider)
+and preference learning via a feedback loop (Phase 5, `tune` subcommands).
