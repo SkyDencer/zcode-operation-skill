@@ -4,9 +4,15 @@
  * prompts that unambiguously target generated synthetic skills.
  *
  * Usage:
- *   node tests/scale/run-synthetic-benchmark.mjs <skill-count> [--mode bm25|hybrid] [--rerank on|off]
+ *   node tests/scale/run-synthetic-benchmark.mjs [skill-count] [--mode bm25|hybrid] [--rerank on|off]
+ *
+ * If <skill-count> is omitted, 54 is used — the smallest corpus that still
+ * exercises the retrieval pipeline, so standalone and runner invocations
+ * (which pass no count) generate the cheapest fixture. An explicit positional
+ * count is always honored.
  *
  * Examples:
+ *   node tests/scale/run-synthetic-benchmark.mjs
  *   node tests/scale/run-synthetic-benchmark.mjs 100 --mode bm25
  *   node tests/scale/run-synthetic-benchmark.mjs 200
  *   node tests/scale/run-synthetic-benchmark.mjs 500 --mode bm25 --rerank off
@@ -30,18 +36,17 @@ mkdirSync(REPORT_DIR, { recursive: true });
 
 // ── Parse CLI args ───────────────────────────────────────────────────────────
 const args = process.argv.slice(2);
-const countArg = args.find((a) => /^\d+$/.test(a));
+// No positional <skill-count> → default 54 (cheapest fixture regeneration). The
+// benchmark shapes retrieval against a synthetic corpus, not a pinned size, so
+// a default lets standalone/runner invocations run with no arguments. An
+// explicit positional count is always honored.
+const countArg = args.find((a) => /^\d+$/.test(a)) ?? '54';
 const modeFlag = args.find((a) => a.startsWith('--mode='))?.split('=')[1]
   || (args.find((a) => a === '--mode') !== undefined ? args[args.indexOf('--mode') + 1] : undefined)
   || 'hybrid';
 const rerankFlag = args.find((a) => a.startsWith('--rerank='))?.split('=')[1]
   || (args.find((a) => a === '--rerank') !== undefined ? args[args.indexOf('--rerank') + 1] : undefined);
 const rerankValue = rerankFlag !== undefined ? rerankFlag : 'on';
-
-if (!countArg) {
-  console.error('Usage: node tests/scale/run-synthetic-benchmark.mjs <skill-count> [--mode bm25|hybrid] [--rerank on|off]');
-  process.exit(1);
-}
 
 const skillCount = parseInt(countArg, 10);
 const outDir = resolve(BASE, `data/skills-synthetic-${skillCount}`);
