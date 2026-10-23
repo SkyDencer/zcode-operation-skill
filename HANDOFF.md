@@ -1,229 +1,116 @@
 # HANDOFF — Skill Router
 
 > Repository: zcode-operation-skill
-> Generated: 2026-09-26 (updated for the Phase 6 end state)
-> Current branch: main
+> Branch: main
+> Generated: 2026-10-23 (v1.0.1 stabilization pass complete, awaiting human E2E)
 
-## 1. What Is Done
+## 1. Where Things Stand
 
-Phases 0, 0.5a, 0.5b, 1, 2, 2.5, 3, 4, 5 and 6 are complete. Phase 7
-(Hardening and Corpus Truth) is the next planned work. Phase 6 is 12
-sub-phases and 44 commits (`f799d99`..`6ca4a82`, 155 files, +18,673/-767), plus
-four documentation-only commits after that for 156 files and +19,264/-823 at
-`10c910b`; see `docs/reports/phase-6-final-report.md`.
+- **v1.0.0 is tagged and released** (Phases 0–7 complete). The tag is intact and
+  must not be moved.
+- **The v1.0.1 stabilization pass is complete on `main`**: every known P6-H bug
+  is fixed, all project docs are synced with reality, build artifacts are
+  cleaned, and the **full test suite is green (2898 passed, 0 failed)**.
+- **v1.0.1 is deliberately NOT tagged.** It waits for the human end-to-end run
+  in ZCode. Tagging it is the project manager's decision after that run.
 
-**Test results** (Sub-Phase 6.12 verification run, `package.json` `scripts.test`
-driven step by step with `node <file>`; npm is not on the subprocess PATH on
-this host):
+## 2. What This Stabilization Pass Changed
 
-| Category | Passed | Failed | Total |
-|----------|--------|--------|-------|
-| Test-chain steps | 73 | 0 | 73 |
-| Assertions | 2024 (as summed by a concurrent 6.12 reporting pass; not independently verified) | 0 | 2024 |
+| Block | Subject | What it did |
+|-------|---------|-------------|
+| A.5r | `fix: fail explicitly on remaining silent readdir catches` | Completed P6-H-016: all six data-producing readers classify ENOENT/EISDIR as benign and EACCES/EPERM/EIO as named errors. |
+| A.6 | `fix: implement --help on every CLI subcommand` | P6-H-020: `--help`/`-h` prints usage and stops, before any side effect (incl. `deploy`). |
+| A.7 | `fix: remove reranker from default path` | P6-H-026: reranker is now an experimental opt-in (off by default); `docs/reranker.md`. |
+| A.8 | `fix: redact personal path from tracked files` | P6-H-027: personal home paths removed from tracked files; `release-check` greps for them. |
+| B.1–B.6 | `docs: …` (six commits) | Synced implementation plan, current-state, CHANGELOG, ai-context, security report, architecture/README/decision-dictionary. |
+| C.1 | `chore: remove build artifacts and update gitignore` | Removed the accidental tracked `tmp/` tree and scratch clutter; hardened `.gitignore`. |
+| D.1 | `test: fix ETIMEDOUT failures in analytics and tuning tests` | Hoisted the optimizer's threshold-independent ranking out of the grid (bit-identical, ~45× cheaper); relaxed stale test constants to invariants (D34); capped analyzer log reads; cut routing dead work + samples; re-scoped the perf p95 gate to internal time (D40); bounded the runner's run-coverage pass. |
+| D.2 | `fix: restore run-synthetic-benchmark argument handling` | Bare invocation now defaults to a 54-skill corpus instead of exiting 1. |
+| D.3 | `test: full suite green` | Classified EISDIR as a benign skip in both signals readers; gated the ONNX-vs-FNV-1a test on model availability. Suite now exits 0. |
 
-All tests pass with zero regressions. The chain grew from 43 to 73 steps during
-Phase 6 (30 test files added, none removed).
-
-**Coverage** (not re-measured at 6.12): `logs/coverage-2026-09-25.json`, written
-by the Sub-Phase 6.6 run, reports mean line 87.55%, branch 68.70%, function
-83.23% across 91 modules, 23 of them at 100% line coverage. **That run was not
-green** — the same file records `testFilesRun: 60` and `testFilesFailed: 2`
-(`tests/embeddings/provider.test.mjs`, `tests/hybrid-provider.test.mjs`), so the
-percentages are understated and the 1746-assertion total excludes those two
-files. The 6.6 test audit separately measured 80/86 modules reachable by at
-least one test (93.0%), with 6 unreachable — also a 6.5/6.6 figure: the tree now
-holds 94 modules under `src/ hooks/ bin/`, 75 `.test.mjs` files, and 9 test files
-registered to no chain.
-
-**BM25 real-corpus benchmark** (N=60 index entries, 130 prompts):
+## 3. Frozen Baseline (unchanged by this pass)
 
 | Metric | Value |
 |--------|-------|
-| Top-1 accuracy | 92.31% (120/130) |
-| Top-1 on the 54-leaf corpus the hook searches | 96.92% (126/130) |
-| Recall@3 | 89.23% (116/130) |
-| Set Recall@5 (116 skill prompts) | 100% (116/116) |
-| Median latency | 3 ms |
-| P95 latency | 5 ms |
-| Fallback rate | 8.46% (11/130) |
+| Index size | 258 entries (252 leaf + 6 router) |
+| Frozen BM25 benchmark Top-1 | 0.6462 (84/130) via `tests/run-benchmark.mjs` |
+| Health | 8/8 checks pass |
+| Full test suite | 2898 passed, 0 failed (`node scripts/run-all-tests.mjs`) |
+| Router skills in ZCode mirror | 6 (design, laravel, meta, next, react, test) |
 
-The frozen baseline is unchanged across Phases 4, 5 and 6.
+## 4. What the Human Must Do Now (E2E, then v1.0.1)
 
-**Two-mode routing benchmark** (40 prompts: 15 explicit, 25 implicit):
+The hook only becomes active after a **full ZCode restart**. Follow `docs/zcode-e2e-test.md`
+"Run Sequence" — the same steps, condensed:
 
-| Metric | Value |
-|--------|-------|
-| Mode Detection Accuracy | 100% (15/15) |
-| Router Selection Accuracy | 100% (15/15) |
-| Implicit Top-1 Accuracy | 100% (25/25) |
-| Overall Success Rate | 100% (40/40) |
-| Latency p50 | 2 ms (explicit: 1ms, implicit: 3ms) |
+1. **Pre-flight gate** — `node scripts/verify-e2e-ready.mjs` → must print
+   `READY FOR HUMAN E2E`. If not, fix the listed reason (usually `deploy` or
+   `reindex`) and re-run.
+2. **Sync the mirror** — `node bin/skill-router.mjs deploy`.
+3. **Full ZCode restart** — fully quit and relaunch ZCode (a running session does
+   not load a newly registered hook).
+4. **Confirm the hook** — `node bin/skill-router.mjs verify --deep`; expect
+   `Hook registered` and `Hook invocable` to PASS.
+5. **Send the 6 prompts** in ZCode, one at a time (they cover every routing
+   mode):
+   1. `Fix the N+1 query in the Order model.` (implicit backend)
+   2. `$laravel write a Pest test for the Order model` (explicit router-laravel)
+   3. `$next how do I add middleware` (explicit router-next)
+   4. `Make the checkout component responsive on mobile.` (implicit frontend)
+   5. `What is the weather today?` (negative — must abstain)
+   6. `Refactor the payment module and update the React checkout.` (multi-domain)
+6. **Read the results** — today's decisions land in `logs/routing-<today>.jsonl`;
+   run `node scripts/zcode-e2e-verify.mjs`.
+7. **Record actual vs. expected** — fill in `docs/reports/phase-7.7-e2e-results.md`.
+8. **Tag decision** — the project manager reviews the results and decides whether
+   to tag v1.0.1.
 
-**Adaptive feedback loop** (Phase 5, revalidated in 6.11 against the unchanged default provider):
+Success criteria and the expected-mode/router/tier table are in
+`docs/reports/phase-7.7-e2e-results.md` and `docs/zcode-e2e-test.md`.
 
-| Metric | Value |
-|--------|-------|
-| Attributions available | 127 / 130 |
-| Positive outcomes | 118 |
-| Negative outcomes | 12 |
-| Unknown outcomes | 0 |
-| Dominant field: name | 41 |
-| Dominant field: description | 85 |
-| Dominant field: keywords | 1 |
-| Proposed weight shift | name: 3→2.71, desc: 2→2.71, kw: 1→0.57 |
-| Guardrail result | refused (description delta 0.715 > MAX_DELTA 0.5) |
+## 5. Open Items & Caveats
 
-The refusal is the correct outcome and was not forced through.
-
-**Embedding provider benchmark** (Phase 6, 130-prompt corpus, 60-entry index):
-
-| Mode | Top-1 | Set Recall@5 (116) | Median |
-|---|---|---|---|
-| Flat (BM25), shipped | 92.31% | 1.0000 | 3 ms |
-| Hybrid, FNV-1a, shipped weights | 92.31% | 1.0000 | 3 ms |
-| Hybrid, ONNX, shipped weights | 92.31% | 1.0000 | 3 ms |
-| Hybrid, FNV-1a, semantic 0.6 | 18.46% | 0.8534 | 36 ms |
-| Hybrid, ONNX, semantic 0.6 | 76.15% | 0.9052 | 1445 ms |
-
-**Decision: the default provider stays FNV-1a and the semantic weight stays 0.0.**
-The first three rows are identical because with `semantic = 0.0` the provider is
-never constructed. Read the decision rule with its third comparison in view: the
-rule ("+5 pp Set Recall over FNV-1a, under 100 ms") has two clauses and ONNX
-**passes the accuracy one** at +5.18 pp; what decided against shipping is that
-0.9052 is a regression against the incumbent BM25 configuration's 1.0000. ONNX
-also misses the latency half by 12-14x (1445 ms median in Sub-Phase 6.10, 1212 ms
-when re-measured in the 6.12 reporting pass, against a 100 ms budget). Note that
-`hook.timeoutMs` 200 is the *internal race timer* the hybrid branch is wrapped in
-(`hooks/route.mjs:196-201`, BM25 fallback at `:203-205`); the hook itself is
-registered with 3500 ms at `hooks/hooks.json:12`, so ONNX is latency-safe for
-the hook and accuracy-negative, not availability-negative. ONNX remains
-available as an opt-in, but `@huggingface/transformers` sits in `dependencies`,
-so every consumer pays its 591 MB install whether or not it is selected.
-
-Caveat: synthetic scale benchmarks (N=50..500) show accuracy dropping from 85% to ~39%. This is lexical poverty of randomly generated skill names, not a BM25 scalability wall. The real 60-skill corpus holds at 92.31%.
-
-**Router capabilities today:**
-
-- BM25 flat retrieval with weighted fields (name x3, description x2, keywords x1)
-- Explicit `$mention` detection with 6 router aliases (next, react, laravel, design, test, meta)
-- Implicit routing on the leaf-skill corpus (filters out router-* entries) with a relevance floor, so the hook abstains instead of injecting skills for every prompt
-- **Embedding provider abstraction** (`createProvider`) with two backends: FNV-1a (256-dim, the default, and itself dependency-free) and ONNX / `Xenova/all-MiniLM-L6-v2` (384-dim, opt-in via `SKILL_ROUTER_EMBEDDING_PROVIDER`) — the ONNX backend is not, because its package is a hard `dependencies` entry
-- **Hybrid retrieval on weighted RRF** (k=60) with runtime-configurable `SKILL_ROUTER_RRF_BM25_WEIGHT` / `SKILL_ROUTER_RRF_SEMANTIC_WEIGHT`, fail-open provider fallback, and an `embeddingSimilarity` reranker feature
-- SLM opt-in infrastructure (Qwen2.5-0.5B); disabled by default due to underperformance
-- Hierarchical domain-first routing (available as the `selectRouter()` `experimental` option; deprecated as default — there is no `--experimental` CLI flag)
-- Route selector auto-picks flat by default based on corpus size
-- Context budget manager with paragraph-safe truncation
-- LRU query cache with 5-minute TTL and index-fingerprint keying
-- Synonym expansion (opt-in; curated + co-occurrence + abbreviations sources)
-- Adaptive threshold tuning (grid search over high/medium thresholds)
-- Skill quality validator (6-field check)
-- Sync planner/writer/state for mirroring project skills into ZCode
-- Disable mechanism (mirror-delete or shadow SKILL.md; best-guess -- no native ZCode mechanism found)
-- Two-source index with project-wins collision resolution, one shared default corpus for both index builders
-- Usage analytics (per-day histograms, top-10 skills, prompt hash tracking)
-- Import pipeline with **path-traversal and symlink safety** (both blockers fixed in Phase 6)
-- Deploy subsystem (SHA-256 comparison, safe mirror writes, dry-run support, snapshot rollback)
-- Structured JSONL logging with daily rotation filenames
-- **Adaptive feedback loop**: implicit user-signal collection, outcome correlation, per-field BM25 attribution, gradient-free weight adjustment with MAX_DELTA and accuracy-tolerance guardrails, snapshot rollback, drift-gated fixtures
-- **Coverage tooling** (`node tests/run-coverage.mjs`) keyed by repo-relative path
-- **CLI with 18 subcommands**: list, add, remove, validate, reindex, benchmark, stats, import, sync, sources, verify, doctor, deploy, analytics, feedback, health, tune, help
-- One runtime dependency, `@huggingface/transformers`, used only by the opt-in ONNX provider. It is in `dependencies`, so the install is mandatory even though the default retrieval path never loads a model
-
-## 2. What Is Not Done
-
-- No real-world deployment test in ZCode 3.14.1 since Phase 0.5b (manual E2E testing remains pending)
-- The ZCode skill disable mechanism is a best-guess approach (no native per-skill disable found in ZCode 3.14.1); mirror-delete and shadow methods are unverified against actual ZCode behavior
-- Scale benchmark uses synthetic data; real scalability beyond N=60 is unverified
-- The semantic embedding channel is at weight 0.0 by default, so the ONNX provider is implemented, benchmarked and opt-in but **inert in the shipped configuration**
-- SLM (Qwen2.5-0.5B) underperforms BM25 and exceeds hook timeout; not ready for production
-- No log rotation cleanup (logs accumulate indefinitely; Phase 4 was planned but implementation deferred)
-- Adaptation has never been exercised against real user data — the signals on disk are test-generated and age out past the 10-minute stale window, which is why `feedback --outcomes` legitimately reports 0 negative on live logs
-- 19 High static-audit findings remain open (`P6-H-001`–`P6-H-019`), plus `P6-H-020`–`P6-H-027` — 27 open High/Medium rows in total. `docs/reports/phase-6-finding-triage.md` sorts them into release-blocking, ship-with-caveat and defer
-- Four source files are over the 300-line rule (`src/cli/health.mjs` 463, `hooks/route.mjs` 393, `src/sync/disabler.mjs` 301, `src/deploy/writer.mjs` 502), as is `docs/cli-reference.md` (711) among the documents
-
-## 3. Steps for User (ordered checklist)
-
-1. Review `docs/reports/phase-6-final-report.md` and the three audit reports it links
-2. Review commits: `git log --oneline -40`
-3. Push to GitHub when ready: `git push origin main` (Phase 6 is already pushed — `HEAD` and `origin/main` are both `10c910b`; push again only after new commits land)
-4. Deploy routers to ZCode mirror: `node bin/skill-router.mjs deploy`
-5. Restart ZCode and test these 8 prompts:
-   - "Laravel eager loading optimization"
-   - "$laravel migration for users table"
-   - "React custom hook for animations"
-   - "$react context API patterns"
-   - "Next.js app router data fetching"
-   - "$next middleware rewrite"
-   - "GraphQL schema design best practices"
-   - "Write integration tests with Playwright"
-6. Run health checks:
-   ```
-   node bin/skill-router.mjs health
-   node bin/skill-router.mjs verify --deep
-   node bin/skill-router.mjs doctor
-   node tests/run-benchmark.mjs --mode bm25
-   node tests/two-mode-benchmark/runner.mjs --mode all
-   ```
-7. Use ZCode for 2–4 weeks to accumulate real routing decisions and feedback signals
-8. Run tuning review:
-   ```
-   node bin/skill-router.mjs tune --status
-   node bin/skill-router.mjs tune --analyze
-   node bin/skill-router.mjs feedback --outcomes
-   node bin/skill-router.mjs tune --auto --dry-run
-   ```
-9. Record results and decide whether to proceed to Phase 7
-
-## 4. How to Verify Everything
-
-Run from the repository root. `npm` is not on the subprocess PATH on this host —
-use `node <file>`, never `npm test` / `npm run`.
-
-```
-node bin/skill-router.mjs health
-node bin/skill-router.mjs verify --deep
-node bin/skill-router.mjs doctor
-node bin/skill-router.mjs deploy --dry-run
-node tests/run-benchmark.mjs --mode bm25
-node tests/two-mode-benchmark/runner.mjs
-node tests/slm-benchmark/runner.mjs --mode hybrid
-node tests/run-coverage.mjs
-node bin/skill-router.mjs tune --status
-node bin/skill-router.mjs tune --analyze
-node bin/skill-router.mjs feedback --outcomes
-```
-
-For the whole suite, run each of the 73 steps of the `package.json` `test` script
-individually; that is what produced the 73/73 result in the Phase 6 final report.
-
-## 5. Known Issues Carried Forward
-
-- Best-guess disabler mechanism (no native ZCode per-skill disable)
-- Synthetic scale benchmark caveat (not representative of real performance)
-- Semantic channel at weight 0.0 — the ONNX provider is opt-in and inert by default
-- SLM underperformance vs BM25 (0.5B model too small)
-- Reranker weights do not generalise: held-out R² -4.58 against an in-sample ~0.1 (`P6-H-026`). The fit is a weak training signal, not a result, and `data/reranker-weights.json` was deliberately not regenerated
-- No negative feedback signals from real usage; weight adaptation is untested against real corrective behaviour
-- Three silent destructive failures remain open: deploy rollback against an empty snapshot (`P6-H-014`), mass removal planned on an unreadable tree (`P6-H-015`), and `positive` misclassification of the whole outcome corpus on any non-`ENOENT` read error (`P6-H-016`)
-- No subcommand implements `--help`, so `deploy --help` deploys (`P6-H-020`)
-- Raw prompts are persisted in logs, contradicting the documented privacy invariant (`P6-H-003`)
-- See `docs/problems.md` for the full list of open items
+- **The "a1" v1.0.0 commit message is unrecoverable.** It was pushed with an
+  empty/meaningless subject; the mission forbids rebase/force-push, so it stays.
+- **Mirror leaf drift is pre-existing and non-blocking.** `verify --deep` may
+  report a few stale leaf copies in the ZCode mirror; leaves are disabled for
+  routing (only the 6 routers route), and the hook drives decisions from the
+  in-project index, not the mirror. `deploy` refreshes the mirror.
+- **ONNX is opt-in and SLM is off** — the default path is dependency-light
+  BM25 + FNV-1a; the ONNX backend is available via
+  `SKILL_ROUTER_EMBEDDING_PROVIDER=onnx` when its model is cached.
+- **Reranker is an experimental opt-in** (off by default; held-out R² is
+  negative, so it is not recommended — `docs/reranker.md`).
+- **`logs/pre-existing-failures.json` is a local (gitignored) provenance
+  record**, not a tracked file; its `_note` records which tolerated failures the
+  D.1/D.2/D.3 fixes cleared.
 
 ## 6. Repository Map
 
-| Directory | Description |
-|-----------|-------------|
-| `.zcode-plugin/` | ZCode plugin manifest and installation bundle |
-| `bin/` | CLI entry point (`skill-router.mjs`) with 18 subcommands |
-| `hooks/` | ZCode hook implementations (`route.mjs`, `build-index.mjs`) |
-| `src/` | Source code: core modules, CLI handlers, config, analytics, sync, deploy, SLM |
-| `src/telemetry/` | Feedback decision logger, signal recorder, outcome correlator, session tracker |
-| `src/core/retriever/` | BM25 and hybrid retrievers, weighted RRF (`rrf.mjs`), attribution engine, adaptive weight adjuster |
-| `src/core/embeddings/` | Provider abstraction (`provider.mjs`, `resolve.mjs`) and the `fnv1a` / `onnx` backends |
-| `router-skills/` | 6 router skill manifests (router-next, router-react, etc.) |
-| `data/` | Skill manifests, built index, embeddings, synonyms, thresholds, baseline, weights, domain metadata |
-| `tests/` | 73-step test chain, unit / integration / E2E suites, scale and SLM benchmarks, coverage runner |
-| `docs/` | Architecture, reports (the four Phase 6 audit reports, the final report, its finding triage and its corrections log), CLI reference, getting-started, problem tracker, tuning guide, embeddings guide |
-| `scripts/` | Utility, install and fixture-regeneration scripts |
-| `logs/` | Runtime JSONL logs (rotated by date; no automatic cleanup) |
+| Path | Purpose |
+|------|---------|
+| `.zcode-plugin/` | ZCode plugin manifest and install bundle |
+| `bin/skill-router.mjs` | CLI entry point (19 subcommands; all answer `--help`) |
+| `hooks/` | `route.mjs` (UserPromptSubmit hook, fail-open), `build-index.mjs` |
+| `src/` | Core modules, CLI handlers, config, analytics, sync, deploy, embeddings |
+| `src/telemetry/` | Decision logger, signal recorder, outcome correlator, session tracker |
+| `src/core/retriever/` | BM25 + hybrid retrievers, weighted RRF, attribution, adaptive weights |
+| `router-skills/` | The 6 router skill manifests |
+| `data/` | Skill manifests, built index, embeddings, thresholds, weights, domains |
+| `tests/` | Unit / integration / E2E suites, scale + SLM benchmarks, coverage runner |
+| `docs/` | Architecture, reports, CLI reference, problem tracker, tuning + embeddings guides |
+| `scripts/` | Utility, install, fixture and E2E-prepare/verify/ready scripts |
 
+## 7. Key Commands
+
+```
+node scripts/verify-e2e-ready.mjs                       # E2E readiness gate
+node bin/skill-router.mjs health                          # 8/8 health checks
+node bin/skill-router.mjs verify --deep                   # mirror + index + hook
+node bin/skill-router.mjs deploy                          # sync mirror + register hook
+node scripts/run-all-tests.mjs                            # full suite (2898/0)
+node tests/run-benchmark.mjs --corpus real --router flat  # frozen BM25 baseline
+```
+
+`npm` is not on the subprocess PATH on this host — always invoke `node <file>`
+directly, never `npm test` / `npm run`.

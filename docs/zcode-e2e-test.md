@@ -29,6 +29,51 @@ This will:
 - Register the hook (if not already registered)
 - Run verification
 
+## Run Sequence (do these in order)
+
+The hook only becomes active after a **full ZCode restart** — a running ZCode
+session does not pick up a newly registered hook. Follow this exact order:
+
+1. **Pre-flight gate** — confirm the install is ready before touching ZCode:
+
+   ```bash
+   node scripts/verify-e2e-ready.mjs
+   ```
+
+   Prints `READY FOR HUMAN E2E` (exit 0) or `NOT READY — <reasons>` (exit 1).
+   Fix any blocking reason (typically `deploy` or `reindex`) and re-run.
+
+2. **Deploy / sync the mirror** (idempotent; clears any missing router skill or
+   leaf the mirror needs for discovery):
+
+   ```bash
+   node bin/skill-router.mjs deploy
+   ```
+
+3. **Full ZCode restart** — fully quit ZCode (not just close the window), then
+   start it again. The UserPromptSubmit hook is loaded at startup.
+
+4. **Hook registration check** — confirm the hook survived and is wired up:
+
+   ```bash
+   node bin/skill-router.mjs verify --deep
+   ```
+
+   Expect `Hook registered` and `Hook invocable` to both PASS.
+
+5. **Send the 6 prompts below** to ZCode, one at a time, waiting for each
+   response before the next.
+
+6. **Read the logs** — today's decisions land in `logs/routing-<today>.jsonl`:
+
+   ```bash
+   node scripts/zcode-e2e-verify.mjs
+   ```
+
+7. **Fill in the results** — record actual vs. expected in
+   `docs/reports/phase-7.7-e2e-results.md`.
+
+
 ## Test Prompts
 
 The human must send these **6 prompts** to ZCode, covering every routing mode:
