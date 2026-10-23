@@ -219,6 +219,54 @@ Decisions made during the TedGram Skill Router project. Each entry is immutable 
 - **Date:** 2026-09-26
 - **Status:** Accepted
 
+## D30 — Round-robin, not first-come, first-served, for the 200-skill cap
+
+- **Question:** The 7.3 brief caps the corpus at 200 skills drawn from eleven sources. How are the 200 slots allocated?
+- **Decision:** Round-robin across sources in registry order, fixed before any retrieval runs and never looking at a ranking. Implemented in `scripts/assemble-corpus.mjs:341-360`.
+- **Rationale:** Filling source-by-source (first-come, first-served) would have handed 162 of the 200 slots to `wshobson/agents` and left eight sources at zero contribution — the opposite of a real-world validation corpus.
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
+## D31 — Drop, do not repair, fetched skills that lack a valid description
+
+- **Question:** 967 of 1 559 fetched SKILL.md files fail the four corpus validation rules. Can they be fixed by adding content?
+- **Decision:** No. The brief forbids editing a fetched skill's content to make it pass validation; writing a description would be editing. The rename exception is scoped to the `name:` line only. 458 of the 967 drops were for missing frontmatter alone; a further 442 had descriptions outside the 40-400 character band.
+- **Rationale:** Repairing content in a third-party file would break the provenance guarantee of the corpus (every file byte-identical to its source at the recorded commit).
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
+## D32 — Keep the anthropics/skills source in `corpus-sources.json` with `type: excluded`
+
+- **Question:** One of the twelve candidate sources (`anthropics/skills`) has no open licence — its per-skill `LICENSE.txt` points at the Consumer/Commercial Terms of Service. Is it simply left out?
+- **Decision:** The source is fetched and recorded in `data/corpus-sources.json` with `type: "excluded"` and `skills_imported: 0`, so the provenance is complete and another run-owner can decide differently. No file from it is imported; that would be a licence breach.
+- **Rationale:** Silently omitting the source would make the fetch log non-reproducible; recording the exclusion keeps it auditable.
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
+## D33 — Rename to `{domain}-{specific}` without touching anything else
+
+- **Question:** Some fetched skill names do not match the router's naming convention (double-quoted names like `name: "a11y-audit"`).
+- **Decision:** A mechanical rename only (lowercase, non-alphanumeric runs collapsed to one hyphen); the description and body are never edited. 25 names across one source needed it.
+- **Rationale:** The brief explicitly allows renaming to the naming convention; a mechanical rename preserves meaning. Any other change to the content is D31's territory and forbidden.
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
+## D34 — Adjust nine test constants calibrated for a 54-leaf corpus
+
+- **Question:** After the 7.3 corpus grew from 54 to 252 leaves, nine test files that pin corpus-specific numbers start failing. Weaken them or fix them?
+- **Decision:** Each assertion was relaxed to the *invariant* it was actually testing (e.g. "the builder sees everything on disk" with a `>= 200` floor, derived from an independent filesystem walk) rather than to a number that happens to match one corpus size.
+- **Rationale:** Pinning 54 as a literal would turn a corpus-expansion into a test regression; pinning the invariant keeps the check meaningful at any size. Five assertion weakenings attempted by a concurrent pass were reverted — each relaxed the exact assertion that was a reported regression, which the pre-existing-failures contract forbids.
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
+## D35 — Do not re-run the embedding decision
+
+- **Question:** The corpus just grew 4.7x. Should the D28/D29 provider decision be re-litigated on the new corpus?
+- **Decision:** No. The 7.3 brief says "do not re-litigate the provider choice on the current corpus"; the Phase 6 decision already ruled `semantic = 0.0` by default, and the corpus growth confirms BM25 remains the default. Revisiting happens only under D29's four conditions, not by re-running the Phase 6 benchmark.
+- **Rationale:** Re-measuring a 1.4 s-per-prompt ONNX run would produce a different number for the same conclusion; the decision stands on the Phase 6 numbers plus the D29 revisit conditions.
+- **Date:** 2026-09-26
+- **Status:** Accepted
+
 ## D36 — Keyword gap in the 7.3 corpus is accepted, not repaired
 
 - **Question:** 204 of 258 index entries (198 imported third-party skills + 6 `router-*` dispatchers) have no `keywords:` field. The upstream source format does not include keywords, and writing one would mean editing 198 third-party files, which the brief forbids for fetched skills. What should the project do about the resulting BM25 cost?

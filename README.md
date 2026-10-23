@@ -6,6 +6,18 @@ A local BM25-based skill retrieval plugin for ZCode that surfaces the most relev
 [![Node.js >= 20](https://img.shields.io/badge/Node.js->=_20-brightgreen)](https://nodejs.org)
 [![ZCode >= 3.14.1](https://img.shields.io/badge/ZCode->=_3.14.1-blue)](https://zcode.z.ai)
 
+## Status
+
+**v1.0.0 — released 2026-10-22** (tag `v1.0.0` at `386eb22`). The 252-leaf
+corpus (258-entry index), the frozen BM25 baseline (Top-1 64.62%), the scale
+hardening (1000-skill parsed-index cache), and the post-v1.0.0 stabilization
+fixes are all shipped. The full release record is
+[docs/reports/phase-7-final-summary.md](./docs/reports/phase-7-final-summary.md);
+the stabilization pass is documented in
+[docs/reports/phase-7.13-security-fixes.md](./docs/reports/phase-7.13-security-fixes.md).
+v1.0.1 ships after the human end-to-end run in
+[docs/zcode-e2e-test.md](./docs/zcode-e2e-test.md) is recorded.
+
 ## Quick start
 
 ```bash
