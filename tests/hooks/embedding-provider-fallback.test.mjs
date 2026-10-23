@@ -17,8 +17,13 @@
  *   2. the REAL hook, asked for onnx with a cold model cache (simulated by
  *      redirecting the transformers cache dir via --import), still writes
  *      output.json with skills and logs the fallback.
- *   3. the REAL hook, asked for onnx with a warm cache, uses onnx and ranks
- *      differently from the fnv1a run.
+ *   3. the REAL hook, asked for onnx with a warm cache, uses onnx and — with
+ *      the semantic channel held constant — ranks differently from the fnv1a
+ *      run. This check is gated on in-process model availability
+ *      (createProvider('onnx').isAvailable(), a filesystem probe); when the
+ *      ONNX model is not cached the hook would fall back to fnv1a, so the
+ *      provider-difference assertion is skipped with a documented note
+ *      instead of failing.
  */
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +32,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { resolveProvider } from '../../src/core/embeddings/resolve.mjs';
+import { createProvider } from '../../src/core/embeddings/provider.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, '..', '..');
@@ -172,9 +178,9 @@ const warmDefault = await runHook({});
 assert(warmDefault.output !== null, 'hook writes output.json on the default fnv1a path');
 assert(warmDefault.stderr.trim() === '', 'no provider warning on the default path');
 
-// ── 3. Real hook, onnx requested, model cached ────────────────────────────────
+// ── 3. Real hook, onnx requested ──────────────────────────────────────────────
 
-console.log('\n=== Hook: onnx requested, model cached ===\n');
+console.log('\n=== Hook: onnx requested ===\n');
 
 // The semantic channel ships disabled (bm25=1.0 / semantic=0.0 — the weight
 // sweep in src/config/defaults.mjs shows it costs accuracy with both
@@ -185,23 +191,43 @@ const SEMANTIC_ENV = {
   SKILL_ROUTER_RRF_BM25_WEIGHT: '0.4',
   SKILL_ROUTER_RRF_SEMANTIC_WEIGHT: '0.6',
 };
-const warmSemanticFnv1a = await runHook({ env: SEMANTIC_ENV });
-const warm = await runHook({ env: { ...SEMANTIC_ENV, SKILL_ROUTER_EMBEDDING_PROVIDER: 'onnx' } });
-const onnxNames = selectedNames(warm.output);
 const fnv1aNames = selectedNames(warmDefault.output);
-assert(warm.exitCode === 0, 'hook exits 0 with a warm onnx cache');
-assert(warm.output !== null, 'hook writes output.json with the onnx provider');
-assert(onnxNames.length > 0, 'hook selects skills with the onnx provider');
-assert(!/falling back/.test(warm.stderr), 'no fallback warning when the model is cached');
+
+// fnv1a + semantic-on vs the default pure-BM25 run: model-independent (fnv1a
+// is always available), proves the semantic channel reaches the retriever.
+const warmSemanticFnv1a = await runHook({ env: SEMANTIC_ENV });
 const semanticFnv1aNames = selectedNames(warmSemanticFnv1a.output);
 assert(
   semanticFnv1aNames.length > 0 && semanticFnv1aNames.join(',') !== fnv1aNames.join(','),
-  `turning the semantic channel on changes the fnv1a ranking (fnv1a: ${semanticFnv1aNames.join(', ')})`,
+  `turning the semantic channel on changes the fnv1a ranking (fnv1a+semantic: ${semanticFnv1aNames.join(', ')})`,
 );
-assert(
-  onnxNames.length > 0 && onnxNames.join(',') !== fnv1aNames.join(','),
-  `onnx ranking differs from fnv1a (onnx: ${onnxNames.join(', ')})`,
-);
+
+// The onnx-vs-fnv1a provider check is machine-state dependent: it needs the
+// ONNX model cached locally. Probe in-process with a filesystem check (no
+// model load). When the model is absent the hook falls back to fnv1a, so the
+// comparison would be meaningless — skip it with a documented note instead of
+// failing.
+const onnxAvailable = createProvider('onnx').isAvailable();
+if (onnxAvailable) {
+  const warm = await runHook({ env: { ...SEMANTIC_ENV, SKILL_ROUTER_EMBEDDING_PROVIDER: 'onnx' } });
+  const onnxNames = selectedNames(warm.output);
+  assert(warm.exitCode === 0, 'hook exits 0 with a warm onnx cache');
+  assert(warm.output !== null, 'hook writes output.json with the onnx provider');
+  assert(onnxNames.length > 0, 'hook selects skills with the onnx provider');
+  assert(!/falling back/.test(warm.stderr), 'no fallback warning when the model is cached');
+  // Hold the semantic channel constant (0.4/0.6 in BOTH runs) so the only
+  // difference is the provider: real ONNX embeddings rank this prompt
+  // differently from the FNV-1a hash embeddings. (The previous assertion
+  // compared the onnx run against the default pure-BM25 run, which conflated
+  // provider and channel and coincidentally matched on this corpus — a false
+  // failure.)
+  assert(
+    onnxNames.length > 0 && onnxNames.join(',') !== semanticFnv1aNames.join(','),
+    `onnx ranking differs from fnv1a at the same semantic weight (onnx: ${onnxNames.join(', ')} | fnv1a: ${semanticFnv1aNames.join(', ')})`,
+  );
+} else {
+  console.log('  ~ skipped onnx-vs-fnv1a provider check: ONNX model not cached on this machine (isAvailable() = false; the hook would fall back to fnv1a)');
+}
 
 rmSync(coldCacheDir, { recursive: true, force: true });
 

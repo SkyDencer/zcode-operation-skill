@@ -126,9 +126,11 @@ export function correlate(decisions, signals, opts = {}) {
 /**
  * Read signals from the signals log directory.
  *
- * P6-H-016: only ENOENT on the (optional) directory or a single file is
- * treated as "no data". Any other error (EACCES, EPERM, EIO, ...) means we
- * could not actually read the signals, so it is surfaced as a named error
+ * P6-H-016: only ENOENT on the (optional) directory or a single file, and
+ * EISDIR on a single file (a directory masquerading as a signals-*.jsonl
+ * entry — we never read or recurse into directories, so it holds no data),
+ * are treated as "no data". Any other error (EACCES, EPERM, EIO, ...) means
+ * we could not actually read the signals, so it is surfaced as a named error
  * instead of being silently turned into an empty list.
  *
  * @param {string} logDir
@@ -159,7 +161,13 @@ async function readSignalFiles(logDir, reader = {}) {
     try {
       content = await fsReadFile(join(logDir, file), 'utf-8');
     } catch (err) {
-      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      // ENOENT: the file vanished mid-read. EISDIR: a directory is masquerading
+      // as a signals-*.jsonl entry — readdir() lists directories too, but we
+      // never read or recurse into them, so such an entry holds no signal lines
+      // and skipping it loses no data. Both are benign skips. EACCES/EPERM/EIO
+      // on a real file are NOT skipped: they mean the data could not be read,
+      // so they surface as a named error (P6-H-016).
+      if (err && (err.code === 'ENOENT' || err.code === 'EISDIR')) continue;
       const named = new Error(`failed to read signal file ${join(logDir, file)}: ${err.code ?? err.message}`);
       named.code = err.code;
       throw named;

@@ -1,6 +1,6 @@
 /**
  * Regression tests for the Sub-Phase 6.1 `feedback --outcomes` logDir fix and
- * characterisation tests for the still-open Phase 4-5 adaptation defects.
+ * the per-file error classification of the signals readers.
  *
  * Background (docs/reports/phase-6-test-audit.md section 5):
  *   - Item 7  FIXED: correlateFromLogs() was called with no logDir, so
@@ -8,9 +8,13 @@
  *          was reported "positive". tests/telemetry/outcomes.test.mjs covers the
  *          library default; this file covers the CLI call site itself
  *          (src/cli/feedback.mjs), which no test exercised.
- *   - Item 10 OPEN (P6-H-016): readSignalFiles() wraps the whole readdir/read
- *          loop in one try/catch, so ONE unreadable signals file discards every
- *          other file and the whole corpus is misclassified "positive".
+ *   - Item 10 FIXED (P6-H-016 completion, EISDIR classification): the per-file
+ *          readers (readSignalFiles in outcomes.mjs, readSignals in signals.mjs)
+ *          skip no-data entries — ENOENT, and a directory masquerading as a
+ *          signals-*.jsonl file (EISDIR) — and surface real errors
+ *          (EACCES/EPERM/EIO) as named errors. The section-2 tests below pin the
+ *          FIXED behaviour: a poisoned directory sibling neither crashes the
+ *          read nor misclassifies the corpus.
  *   - Item 11 OPEN: tune --analyze derives attributions from tests/prompts.json
  *          and never reads the live signal logs.
  *   - Item 12 OPEN: tune --analyze prints attributions.length while tune --status
@@ -18,10 +22,9 @@
  *   - Item 13 PARTIAL: the post-benchmark auto-rollback decision function is
  *          tested; the write-back in cmdApply is not.
  *
- * Items 10-13 are OPEN DEFECTS. Their tests below therefore pin the CURRENT
- * behaviour and are named as such — they are not assertions of desired
- * behaviour, and they are expected to be inverted when the defects are fixed.
- * A test that asserted the desired behaviour would fail the suite today.
+ * Item 10 is now fixed and its tests pin the FIXED behaviour. Items 11-13
+ * remain OPEN and are not exercised by this file (they live in the tune-core
+ * tests); they are documented here only for provenance.
  */
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,10 +109,12 @@ assert(noSignalsRun.status === 0, 'a cwd with no signals log still exits 0 (fail
 assert(noSignalsJson.positive === 1 && noSignalsJson.negative === 0,
   'with no signals on disk the decision is "positive" (no corrective action seen)');
 
-// ─── 2. Item 10 (OPEN, P6-H-016): one unreadable file discards the rest ───────
-// CHARACTERISATION: this is the defect. signals-20260101.jsonl is created as a
-// DIRECTORY so readFile() throws; the whole loop is inside a single try/catch,
-// so the valid signals-20260201.jsonl that sorts after it is never read.
+// ─── 2. Item 10 (FIXED, P6-H-016 EISDIR classification) ───────────────────
+// A signals-*.jsonl entry that is actually a DIRECTORY (created via mkdir) now
+// throws EISDIR on readFile(); both per-file readers skip it (we never read or
+// recurse into directories, so it holds no data) and still read the valid
+// sibling that sorts after it. The old whole-loop try/catch that swallowed the
+// valid file is gone.
 
 const swallowDir = fixture('p6-h-016', {
   'signals-20260201.jsonl': [{ ts: minsAgo(1), decisionHash: 'sha256:ccc', type: 'retry', details: {} }],
@@ -118,16 +123,51 @@ mkdirSync(join(swallowDir, 'logs', 'signals-20260101.jsonl'));
 
 const swallowOutcomes = await correlateFromLogs([decision('sha256:ccc', 3)], { logDir: join(swallowDir, 'logs') });
 assert(
-  swallowOutcomes[0].outcome === 'positive',
-  `CHARACTERISATION (P6-H-016, OPEN): one unreadable signals file makes the whole corpus "positive" (got "${swallowOutcomes[0].outcome}"). Invert this assertion when the defect is fixed.`
+  swallowOutcomes[0].outcome === 'negative',
+  `FIXED (P6-H-016, EISDIR skip): the EISDIR sibling is skipped, so the valid retry signal is read and the decision is "negative" (got "${swallowOutcomes[0].outcome}")`
 );
-// readSignals (src/telemetry/signals.mjs) catches per FILE, so it survives the
-// poisoned sibling and still returns the good signal. Only readSignalFiles in
-// src/telemetry/outcomes.mjs wraps the whole loop in one try/catch.
+// readSignals (src/telemetry/signals.mjs) skips the EISDIR entry too — both
+// per-file readers are now symmetric for the no-data case — so it returns the
+// good signal from the valid sibling.
 const swallowSignals = await readSignals({ logDir: join(swallowDir, 'logs') });
 assert(
   swallowSignals.length === 1,
-  `CONTRAST: readSignals catches per file and survives the unreadable sibling (got ${swallowSignals.length} signals) — the defect is specific to readSignalFiles`
+  `readSignals skips the EISDIR sibling and still returns the good signal (got ${swallowSignals.length})`
+);
+
+// CONTRAST (post-fix): the EISDIR skip must NOT be a blanket "swallow every
+// error". A real read error (EACCES/EIO) still throws a named error in BOTH
+// readers. The injectable reader seam makes this portable across platforms
+// instead of relying on chmod semantics.
+function eaccessReader() {
+  return {
+    readdir: async () => ['signals-20260101.jsonl'],
+    readFile: async () => {
+      const e = new Error('EACCES: permission denied (seam injection)');
+      e.code = 'EACCES';
+      throw e;
+    },
+  };
+}
+let outcomesThrew = false;
+try {
+  await correlateFromLogs([decision('sha256:eee', 3)], { logDir: join(swallowDir, 'logs'), reader: eaccessReader() });
+} catch (err) {
+  outcomesThrew = err && err.code === 'EACCES';
+}
+assert(
+  outcomesThrew,
+  'CONTRAST: readSignalFiles still throws a named EACCES error (seam injection) — the EISDIR skip is specific to no-data directories, not a blanket swallow'
+);
+let signalsThrew = false;
+try {
+  await readSignals({ logDir: join(swallowDir, 'logs'), reader: eaccessReader() });
+} catch (err) {
+  signalsThrew = err && err.code === 'EACCES';
+}
+assert(
+  signalsThrew,
+  'CONTRAST: readSignals still throws a named EACCES error (seam injection) — symmetric with readSignalFiles'
 );
 
 // The healthy path is unaffected: without the poisoned file, the same layout

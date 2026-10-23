@@ -99,9 +99,11 @@ export async function recordSignal(signal) {
 /**
  * Read signals from logs with optional filters.
  *
- * P6-H-016: only ENOENT on the (optional) log directory or a single file is
- * treated as "no data". Any other read error (EACCES, EPERM, EIO, ...) is
- * surfaced as a named error, because a permission failure must never be
+ * P6-H-016: only ENOENT on the (optional) log directory or a single file, and
+ * EISDIR on a single file (a directory masquerading as a signals-*.jsonl
+ * entry — we never read or recurse into directories, so it holds no data),
+ * are treated as "no data". Any other read error (EACCES, EPERM, EIO, ...)
+ * is surfaced as a named error, because a permission failure must never be
  * mistaken for "no signals".
  *
  * @param {object} [opts]
@@ -139,7 +141,13 @@ export async function readSignals(opts = {}) {
     try {
       content = await fsReadFile(filePath, 'utf-8');
     } catch (err) {
-      if (err && err.code === 'ENOENT') continue; // file vanished mid-read
+      // ENOENT: the file vanished mid-read. EISDIR: a directory is
+      // masquerading as a signals-*.jsonl entry — we never read or recurse
+      // into directories, so it holds no signal lines and skipping it loses
+      // no data. Both are benign skips. EACCES/EPERM/EIO on a real file are
+      // NOT skipped: they mean the data could not be read, so they surface as
+      // a named error (P6-H-016).
+      if (err && (err.code === 'ENOENT' || err.code === 'EISDIR')) continue;
       const named = new Error(`failed to read ${filePath}: ${err.code ?? err.message}`);
       named.code = err.code;
       throw named;
