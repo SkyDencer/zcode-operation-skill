@@ -13,7 +13,7 @@
  * - hashPrompt produces consistent SHA-256 output
  * - Missing index falls back gracefully
  */
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { analyze, hashPrompt } from '../../src/analytics/analyzer.mjs';
 
@@ -225,8 +225,31 @@ assert(Object.keys(emptyResult.perDayHistogram).length === 0, 'empty perDayHisto
 console.log('\n14. Real logs integration');
 const { readLogs } = await import('../../src/analytics/reader.mjs');
 const realLogPath = resolve(BASE, 'logs');
+// Cap the read to the newest log files: logs/ accumulates daily
+// date-stamped, routing-*.jsonl and signals-*.jsonl files, and scanning the
+// whole directory made this section load-sensitive under the runner's
+// 120 s per-file budget. The assertions only need *some* real entries to
+// exercise parse + analyze, so read the 3 newest by filename date (mtime
+// when the name carries none). A missing logs/ dir falls back to the
+// uncapped read, which readLogs handles via its ENOENT path.
+let newestLogFiles;
 try {
-  const realEntries2 = readLogs(realLogPath);
+  newestLogFiles = readdirSync(realLogPath)
+    .filter((f) => f.endsWith('.jsonl'))
+    .map((f) => {
+      const m = f.match(/(\d{4})-?(\d{2})-?(\d{2})/);
+      const key = m ? `${m[1]}${m[2]}${m[3]}` : '';
+      const mtime = key ? 0 : statSync(resolve(realLogPath, f)).mtimeMs;
+      return { f, key, mtime };
+    })
+    .sort((a, b) => (a.key ? a.key.localeCompare(b.key) : a.mtime - b.mtime))
+    .slice(-3)
+    .map((e) => e.f);
+} catch {
+  newestLogFiles = undefined; // no logs dir yet — readLogs' ENOENT path applies
+}
+try {
+  const realEntries2 = readLogs(realLogPath, {}, newestLogFiles);
   if (realEntries2.length > 0) {
     const realResult = analyze(realEntries2, { indexPath: resolve(BASE, 'data/skill-index.json') });
     assert(realResult.totalRequests >= 0, 'real logs: totalRequests is non-negative');

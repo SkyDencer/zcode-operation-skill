@@ -27,58 +27,50 @@ for (let v = 0.40; v <= 0.75 + 1e-9; v += 0.05) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Evaluate a (high, medium) threshold pair on a set of prompts.
+ * Rank every prompt against the index exactly once.
+ *
+ * The ranking is threshold-independent: a grid cell only re-scores the
+ * confidence band, never the ordering. Running the grid with the ranking
+ * inside the cell loop re-ranked every prompt once per cell (45 redundant
+ * full-index rankSkills calls per prompt) and a single optimizer run took
+ * ~164 s on the 252-skill corpus. Hoisting the ranking out keeps the result
+ * bit-identical (cells read only ranked[0].skill.name and ranked[0].score)
+ * and drops the dominant cost to one rankSkills call per prompt.
  *
  * @param {Array<{prompt:string}>} prompts
  * @param {Array} index
- * @param {number} high
- * @param {number} medium
- * @returns {{top1:number, fallbackRate:number, total:number, hits:number, fallbacks:number}}
+ * @returns {Array<{topSkill:string|null, topScore:number}>}
  */
-function evaluate(prompts, index, high, medium) {
-  let hits = 0;
-  let fallbacks = 0;
-  const total = prompts.length;
-
-  for (const p of prompts) {
+function rankPromptsOnce(prompts, index) {
+  return prompts.map((p) => {
     const ranked = rankSkills(p.prompt, index);
-    const topSkill = ranked.length > 0 ? ranked[0].skill.name : null;
-    const topScore = ranked.length > 0 ? ranked[0].score : 0;
-
-    // Top-1: correct skill is returned as #1 (regardless of confidence band)
-    // We need the expected map — caller provides it
-    if (topSkill !== null) {
-      // Check confidence band for fallback classification
-      if (topScore < medium) {
-        fallbacks++;
-      }
-    } else {
-      fallbacks++;
-    }
-  }
-
-  return { hits, fallbacks, total };
+    return {
+      topSkill: ranked.length > 0 ? ranked[0].skill.name : null,
+      topScore: ranked.length > 0 ? ranked[0].score : 0,
+    };
+  });
 }
 
 /**
- * Full evaluation with expected results for Top-1 counting.
+ * Evaluate one medium threshold against pre-ranked prompts.
  *
- * @param {Array<{prompt:string}>} prompts
- * @param {Array} index
+ * `high` is deliberately not a parameter: it constrains the grid and
+ * tie-breaks the winner, but a cell's per-prompt result depends on
+ * `medium` only (fallback = no top skill, or top score below medium).
+ *
+ * @param {Array<{topSkill:string|null, topScore:number}>} preRanked
  * @param {Array<{id:number, expected:string|null}>} expected
- * @param {number} high
  * @param {number} medium
  * @returns {{top1:number, fallbackRate:number, total:number, hits:number, fallbacks:number}}
  */
-function evaluateFull(prompts, index, expected, high, medium) {
+function evaluateCell(preRanked, expected, medium) {
   let hits = 0;
   let fallbacks = 0;
-  const total = prompts.length;
+  const total = preRanked.length;
 
-  for (let i = 0; i < prompts.length; i++) {
-    const ranked = rankSkills(prompts[i].prompt, index);
-    const topSkill = ranked.length > 0 ? ranked[0].skill.name : null;
-    const topScore = ranked.length > 0 ? ranked[0].score : 0;
+  for (let i = 0; i < total; i++) {
+    const topSkill = preRanked[i].topSkill;
+    const topScore = preRanked[i].topScore;
     const exp = expected[i]?.expected;
     const expName = exp === null ? null : String(exp);
 
@@ -122,6 +114,10 @@ export function optimizeThresholds(prompts, index, expected, options = {}) {
   const highDefault = options.highDefault ?? 0.85;
   const mediumDefault = options.mediumDefault ?? 0.60;
 
+  // Rank every prompt once; the 45-cell grid then only re-scores the
+  // confidence band on those fixed rankings (see rankPromptsOnce).
+  const preRanked = rankPromptsOnce(prompts, index);
+
   let best = null;
   let gridEvaluated = 0;
 
@@ -131,7 +127,7 @@ export function optimizeThresholds(prompts, index, expected, options = {}) {
       if (medium >= high) continue;
 
       gridEvaluated++;
-      const result = evaluateFull(prompts, index, expected, high, medium);
+      const result = evaluateCell(preRanked, expected, medium);
 
       if (result.fallbackRate >= 0.15) continue; // constraint violated
 
@@ -165,11 +161,12 @@ export function optimizeThresholds(prompts, index, expected, options = {}) {
 
   if (best === null) {
     // Fallback to defaults if no valid combination found
+    const atDefaults = evaluateCell(preRanked, expected, mediumDefault);
     best = {
       high: highDefault,
       medium: mediumDefault,
-      top1: evaluateFull(prompts, index, expected, highDefault, mediumDefault).top1,
-      fallbackRate: evaluateFull(prompts, index, expected, highDefault, mediumDefault).fallbackRate,
+      top1: atDefaults.top1,
+      fallbackRate: atDefaults.fallbackRate,
       total: prompts.length,
       hits: 0,
       fallbacks: 0,

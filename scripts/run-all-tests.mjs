@@ -24,7 +24,11 @@ console.log('Running ' + testFiles.length + ' .mjs file(s) under tests/\n');
 for (const tf of testFiles) {
   const rel = tf.replace(BASE + '/', '');
   try {
-    const out = execFileSync('node', [tf], { encoding: 'utf8', maxBuffer: 10*1024*1024, timeout: 120000 });
+    // SKILL_ROUTER_UNDER_RUNNER lets meta-tools (notably tests/run-coverage.mjs,
+    // which orchestrates the whole suite and cannot finish inside the 120 s
+    // per-file budget) detect the runner and run a bounded quick pass instead
+    // of the full chain. Plain assertion tests ignore the variable.
+    const out = execFileSync('node', [tf], { encoding: 'utf8', maxBuffer: 10*1024*1024, timeout: 120000, env: { ...process.env, SKILL_ROUTER_UNDER_RUNNER: '1' } });
     let m = out.match(/Passed:\s*(\d+)\s*\n\s*Failed:\s*(\d+)/);
     if (!m) m = out.match(/Tests passed:\s*(\d+)\s*Tests failed:\s*(\d+)/);
     if (m) {

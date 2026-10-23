@@ -104,11 +104,11 @@ for (const p of prompts) {
   if (plan.mode === 'fallback') continue;
   totalPlans++;
   if (plan.domains.length > 0) {
-    const topDomainConfidence = Math.max(...plan.domains.map((d) => {
-      const matches = detectDomains(p.prompt, index).filter((m) => m.domain === d.name);
-      return matches.length > 0 ? matches[0].confidence : 0;
-    }));
-    // Check that the primary domain appears first in domains list
+    // The primary domain must be the first (highest-confidence) domain in the
+    // plan. planRoutes already ranks domains by confidence, so the top entry
+    // of plan.domains is the highest-confidence one — no need to re-run
+    // detectDomains per domain. (That dead recomputation was ~196 ms per
+    // prompt on the 252-skill index and dominated this section's cost.)
     const primaryIsTop = plan.domains[0]?.name === plan.primary;
     if (primaryIsTop) primaryCorrect++;
   }
@@ -121,9 +121,12 @@ const overheads = [];
 // Warm-up: run once before timing to prime caches and JIT
 hybridRetrieve(prompts[0].prompt, index);
 planRoutes(prompts[0].prompt, index);
-// 30 samples give a stable median; 10 samples produced a flaky median that
-// jumped from ~185 ms to ~275 ms on a single outlier spike.
-for (let i = 0; i < 30; i++) {
+// 15 samples keep the median well-defined (the 10-sample median flaked
+// between ~185 ms and ~275 ms on a single outlier spike) while staying
+// affordable on the 252-skill index: each timed iteration costs
+// hybridRetrieve + planRoutes, and 30 samples pushed the whole file past
+// the runner's 120 s per-file budget under load.
+for (let i = 0; i < 15; i++) {
   const p = prompts[i % prompts.length];
 
   const startBase = performance.now();

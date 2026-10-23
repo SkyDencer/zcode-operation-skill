@@ -38,25 +38,32 @@ function parseLine(line) {
  *
  * @param {string} [logDir] - Path to logs directory (default: ./logs)
  * @param {{readdirSync?:Function, readFileSync?:Function}} [reader] - injectable fs (test seam)
+ * @param {string[]} [files] - optional whitelist of file names to read; when
+ *   given, only those names are scanned so a caller can bound the read to a
+ *   subset of the directory (e.g. the newest files) instead of everything
  * @returns {LogEntry[]} Array of parsed log entries, sorted by timestamp
  */
-export function readLogs(logDir = LOG_DIR, reader = {}) {
+export function readLogs(logDir = LOG_DIR, reader = {}, files) {
   const fsReaddirSync = reader.readdirSync ?? readdirSync;
   const fsReadFileSync = reader.readFileSync ?? readFileSync;
   const entries = [];
   const resolvedDir = resolve(logDir);
 
-  let files;
+  let names;
   try {
-    files = fsReaddirSync(resolvedDir).filter((f) => f.endsWith('.jsonl'));
+    names = fsReaddirSync(resolvedDir).filter((f) => f.endsWith('.jsonl'));
   } catch (err) {
     if (err && err.code === 'ENOENT') return []; // Directory doesn't exist — empty
     const named = new Error(`failed to read log directory ${resolvedDir}: ${err.code ?? err.message}`);
     named.code = err.code;
     throw named;
   }
+  if (Array.isArray(files)) {
+    const allow = new Set(files);
+    names = names.filter((f) => allow.has(f));
+  }
 
-  for (const file of files.sort()) {
+  for (const file of names.sort()) {
     const filePath = resolve(resolvedDir, file);
     let content;
     try {
