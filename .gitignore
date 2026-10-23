@@ -60,3 +60,9 @@ data/skill-index.prebuilt.json.*
 
 # Archived runtime telemetry kept locally out of the release tree
 logs/.archive-pre-v1/
+
+# Build artifacts and transient scratch trees
+tmp/
+tmpgitrepobackendcaching-headers/
+*.tgz
+tests/deploy/tmp
